@@ -162,7 +162,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Navigation — scrolls independently */}
         <nav className={cn(
           "flex-1 py-4 overflow-y-auto min-h-0",
-          collapsed ? "px-2 space-y-1 overflow-x-hidden" : "px-3 space-y-5"
+          collapsed ? "px-2 space-y-1" : "px-3 space-y-5"
         )}>
           {NAV_GROUPS.map((group) => (
             <div key={group.label}>
@@ -189,7 +189,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                         className={cn(
                           "flex items-center justify-center w-full h-9 rounded-xl transition-all duration-150",
                           isActive
-                            ? "bg-sidebar-active shadow-md shadow-sidebar-active/30"
+                            ? "nav-active-tab-sm bg-sidebar-active shadow-md shadow-sidebar-active/30"
                             : "hover:bg-white/10"
                         )}
                       >
