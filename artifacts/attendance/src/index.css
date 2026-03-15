@@ -57,6 +57,7 @@
 /* ── Active sidebar tab shape — expanded ──────────────────────────────── */
 .nav-active-tab {
   position: relative;
+  z-index: 1;
   border-radius: 14px 0 0 14px !important;
   margin-right: -12px; /* extend to sidebar right wall (nav has px-3 = 12px) */
 }
@@ -70,6 +71,7 @@
   height: 14px;
   background: hsl(var(--sidebar));
   pointer-events: none;
+  z-index: 2;
 }
 
 .nav-active-tab::before {
@@ -85,6 +87,7 @@
 /* ── Active sidebar tab shape — collapsed ─────────────────────────────── */
 .nav-active-tab-sm {
   position: relative;
+  z-index: 1;
   border-radius: 10px 0 0 10px !important;
   margin-right: -8px; /* extend to sidebar right wall (nav has px-2 = 8px) */
 }
@@ -98,6 +101,7 @@
   height: 10px;
   background: hsl(var(--sidebar));
   pointer-events: none;
+  z-index: 2;
 }
 
 .nav-active-tab-sm::before {
