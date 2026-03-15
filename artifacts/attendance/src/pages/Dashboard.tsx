@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   Users, UserCheck, UserMinus, Clock, CalendarDays, Building2,
-  TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Activity,
-  Timer, RefreshCw, ArrowUp, ArrowDown, Minus, Coffee
+  AlertTriangle, CheckCircle2, ArrowUp, ArrowDown, Minus,
+  Coffee, Timer, RefreshCw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,19 +19,7 @@ type Summary = {
   attendancePercentageToday: number;
   monthlyAttendancePercentage: number;
   totalOvertimeThisMonth: number;
-  recentAttendance: RecentRecord[];
   branchWiseSummary: BranchStat[];
-};
-
-type RecentRecord = {
-  id: number;
-  employeeName: string;
-  employeeCode: string;
-  branchName: string;
-  status: string;
-  inTime1: string | null;
-  outTime1: string | null;
-  date: string;
 };
 
 type BranchStat = {
@@ -42,13 +30,7 @@ type BranchStat = {
   total: number;
 };
 
-const STATUS_META: Record<string, { label: string; color: string; bg: string; dot: string }> = {
-  present:  { label: "Present",  color: "text-emerald-700", bg: "bg-emerald-100", dot: "bg-emerald-500" },
-  late:     { label: "Late",     color: "text-amber-700",   bg: "bg-amber-100",   dot: "bg-amber-500" },
-  absent:   { label: "Absent",   color: "text-red-700",     bg: "bg-red-100",     dot: "bg-red-500" },
-  leave:    { label: "Leave",    color: "text-blue-700",    bg: "bg-blue-100",    dot: "bg-blue-500" },
-  half_day: { label: "Half Day", color: "text-violet-700",  bg: "bg-violet-100",  dot: "bg-violet-500" },
-};
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function AttendanceRing({ pct }: { pct: number }) {
   const r = 54;
@@ -56,7 +38,7 @@ function AttendanceRing({ pct }: { pct: number }) {
   const dash = (pct / 100) * circ;
   const color = pct >= 80 ? "#10b981" : pct >= 60 ? "#f59e0b" : "#ef4444";
   return (
-    <div className="flex flex-col items-center justify-center">
+    <div className="relative w-[140px] h-[140px] shrink-0">
       <svg width="140" height="140" className="-rotate-90">
         <circle cx="70" cy="70" r={r} fill="none" stroke="#e2e8f0" strokeWidth="10" />
         <circle
@@ -67,11 +49,10 @@ function AttendanceRing({ pct }: { pct: number }) {
           style={{ transition: "stroke-dasharray 0.8s ease" }}
         />
       </svg>
-      <div className="mt-[-108px] flex flex-col items-center">
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-3xl font-bold text-foreground">{pct}%</span>
-        <span className="text-xs text-muted-foreground mt-0.5">Today</span>
+        <span className="text-xs text-muted-foreground">Today</span>
       </div>
-      <div className="mt-[72px]" />
     </div>
   );
 }
@@ -90,38 +71,31 @@ function StatPill({ label, val, color }: { label: string; val: number; color: st
 
 function BranchBar({ branch }: { branch: BranchStat }) {
   const pct = branch.total > 0 ? Math.round((branch.present / branch.total) * 100) : 0;
-  const color = pct >= 80 ? "bg-emerald-500" : pct >= 60 ? "bg-amber-500" : "bg-red-500";
+  const barColor = pct >= 80 ? "bg-emerald-500" : pct >= 60 ? "bg-amber-500" : "bg-red-500";
   const textColor = pct >= 80 ? "text-emerald-700" : pct >= 60 ? "text-amber-700" : "text-red-700";
   const bgColor = pct >= 80 ? "bg-emerald-50" : pct >= 60 ? "bg-amber-50" : "bg-red-50";
   return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-border/40 last:border-0">
-      <div className="w-2 h-8 rounded-full shrink-0 flex flex-col overflow-hidden bg-muted">
-        <div className={cn("rounded-full transition-all duration-700", color)} style={{ height: `${pct}%`, marginTop: "auto" }} />
+    <div className="py-3 border-b border-border/40 last:border-0">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-sm font-medium text-foreground truncate pr-2">{branch.branchName}</span>
+        <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded shrink-0", bgColor, textColor)}>{pct}%</span>
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-sm font-medium text-foreground truncate">{branch.branchName}</span>
-          <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded", bgColor, textColor)}>{pct}%</span>
-        </div>
-        <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-          <div className={cn("h-full rounded-full transition-all duration-700", color)} style={{ width: `${pct}%` }} />
-        </div>
-        <div className="flex justify-between text-[10px] text-muted-foreground mt-0.5">
-          <span>{branch.present} present</span>
-          <span>{branch.absent} absent</span>
-          <span>{branch.total} total</span>
-        </div>
+      <div className="w-full h-2 bg-muted rounded-full overflow-hidden mb-1">
+        <div className={cn("h-full rounded-full transition-all duration-700", barColor)} style={{ width: `${pct}%` }} />
+      </div>
+      <div className="flex justify-between text-[10px] text-muted-foreground">
+        <span>{branch.present} present</span>
+        <span>{branch.absent} absent</span>
+        <span>{branch.total} total</span>
       </div>
     </div>
   );
 }
 
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
 export default function Dashboard() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [lastUpdated, setLastUpdated] = useState(new Date());
 
   const today = new Date();
   const dayName = DAYS[today.getDay()];
@@ -149,13 +123,16 @@ export default function Dashboard() {
 
   const s = summary;
   const attPct = s?.attendancePercentageToday ?? 0;
-  const notMarked = (s?.totalEmployees ?? 0) - (s?.presentToday ?? 0) - (s?.absentToday ?? 0) - (s?.lateToday ?? 0) - (s?.onLeaveToday ?? 0);
+  const notMarked = Math.max(0,
+    (s?.totalEmployees ?? 0) - (s?.presentToday ?? 0) - (s?.absentToday ?? 0) -
+    (s?.lateToday ?? 0) - (s?.onLeaveToday ?? 0)
+  );
 
   const kpiCards = [
     {
       title: "Total Staff",
       value: s?.totalEmployees ?? 0,
-      sub: `${s?.totalBranches ?? 0} branches`,
+      sub: `${s?.totalBranches ?? 0} active branches`,
       icon: Users,
       color: "text-blue-600",
       bg: "bg-blue-50",
@@ -210,7 +187,9 @@ export default function Dashboard() {
     },
   ];
 
-  const lowBranches = (s?.branchWiseSummary ?? []).filter(b => b.total > 0 && Math.round((b.present / b.total) * 100) < 70);
+  const lowBranches = (s?.branchWiseSummary ?? []).filter(
+    b => b.total > 0 && Math.round((b.present / b.total) * 100) < 70
+  );
 
   return (
     <div className="space-y-6">
@@ -264,7 +243,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Alerts */}
+      {/* Low Attendance Alert */}
       {!loading && lowBranches.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
           <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
@@ -277,135 +256,75 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      {/* Attendance Ring + Monthly Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-        {/* Recent Punches */}
-        <div className="xl:col-span-2 bg-card rounded-xl border border-border overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-            <div>
-              <h2 className="font-semibold text-base text-foreground">Recent Punches</h2>
-              <p className="text-xs text-muted-foreground">Latest attendance entries today</p>
-            </div>
-            <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
-              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-              Live
-            </span>
-          </div>
+        {/* Attendance Ring */}
+        <div className="bg-card rounded-xl border border-border p-5">
+          <h2 className="font-semibold text-base text-foreground mb-1">Today's Attendance</h2>
+          <p className="text-xs text-muted-foreground mb-5">Workforce presence rate</p>
           {loading ? (
-            <div className="flex items-center justify-center py-16 text-muted-foreground">
-              <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading…
-            </div>
-          ) : !s?.recentAttendance?.length ? (
-            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
-              <Activity className="w-8 h-8 opacity-30" />
-              <p className="text-sm">No attendance records yet today</p>
+            <div className="flex items-center justify-center h-36 text-muted-foreground">
+              <RefreshCw className="w-4 h-4 animate-spin" />
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-muted/40 border-b border-border">
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Employee</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Branch</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">In Time</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Out Time</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {s.recentAttendance.map((rec, i) => {
-                    const meta = STATUS_META[rec.status] ?? STATUS_META.absent;
-                    return (
-                      <tr key={rec.id} className={cn(
-                        "border-b border-border/50 hover:bg-muted/30 transition-colors",
-                        i % 2 === 0 ? "bg-background" : "bg-muted/10"
-                      )}>
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
-                              {rec.employeeName.charAt(0)}
-                            </div>
-                            <div>
-                              <p className="font-medium text-foreground text-sm">{rec.employeeName}</p>
-                              <p className="text-[10px] text-muted-foreground">{rec.employeeCode}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">{rec.branchName || "—"}</td>
-                        <td className="px-4 py-3">
-                          <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium", meta.bg, meta.color)}>
-                            <span className={cn("w-1.5 h-1.5 rounded-full", meta.dot)} />
-                            {meta.label}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 font-mono text-xs text-foreground">{rec.inTime1 || "—"}</td>
-                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{rec.outTime1 || "—"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="flex items-center gap-8">
+              <AttendanceRing pct={attPct} />
+              <div className="flex-1">
+                <StatPill label="Present" val={s?.presentToday ?? 0} color="bg-emerald-500" />
+                <StatPill label="Late" val={s?.lateToday ?? 0} color="bg-amber-500" />
+                <StatPill label="On Leave" val={s?.onLeaveToday ?? 0} color="bg-blue-500" />
+                <StatPill label="Absent" val={s?.absentToday ?? 0} color="bg-red-500" />
+                {notMarked > 0 && <StatPill label="Not Marked" val={notMarked} color="bg-slate-400" />}
+              </div>
             </div>
           )}
         </div>
 
-        {/* Right column — ring + breakdown */}
-        <div className="flex flex-col gap-4">
-          {/* Attendance Ring */}
-          <div className="bg-card rounded-xl border border-border p-5">
-            <h2 className="font-semibold text-base text-foreground mb-1">Today's Attendance</h2>
-            <p className="text-xs text-muted-foreground mb-4">Workforce presence rate</p>
-            {loading ? (
-              <div className="flex items-center justify-center h-36 text-muted-foreground">
-                <RefreshCw className="w-4 h-4 animate-spin" />
+        {/* Monthly Stats */}
+        <div className="bg-card rounded-xl border border-border p-5">
+          <h2 className="font-semibold text-base text-foreground mb-1">This Month</h2>
+          <p className="text-xs text-muted-foreground mb-5">Monthly performance overview</p>
+          <div className="space-y-4">
+            <div>
+              <div className="flex justify-between text-xs mb-1.5">
+                <span className="text-muted-foreground">Monthly Attendance Rate</span>
+                <span className="font-semibold text-foreground">{s?.monthlyAttendancePercentage ?? 0}%</span>
               </div>
-            ) : (
-              <div className="flex flex-col items-center">
-                <AttendanceRing pct={attPct} />
-                <div className="w-full mt-4 space-y-0">
-                  <StatPill label="Present" val={s?.presentToday ?? 0} color="bg-emerald-500" />
-                  <StatPill label="Late" val={s?.lateToday ?? 0} color="bg-amber-500" />
-                  <StatPill label="On Leave" val={s?.onLeaveToday ?? 0} color="bg-blue-500" />
-                  <StatPill label="Absent" val={s?.absentToday ?? 0} color="bg-red-500" />
-                  {notMarked > 0 && <StatPill label="Not Marked" val={notMarked} color="bg-slate-400" />}
-                </div>
+              <div className="w-full h-2.5 bg-muted rounded-full overflow-hidden">
+                <div
+                  className={cn("h-full rounded-full transition-all duration-700",
+                    (s?.monthlyAttendancePercentage ?? 0) >= 80 ? "bg-emerald-500"
+                    : (s?.monthlyAttendancePercentage ?? 0) >= 60 ? "bg-amber-500" : "bg-red-500"
+                  )}
+                  style={{ width: `${s?.monthlyAttendancePercentage ?? 0}%` }}
+                />
               </div>
-            )}
-          </div>
+              <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+                <span>0%</span>
+                <span>Target: 85%</span>
+                <span>100%</span>
+              </div>
+            </div>
 
-          {/* Monthly & OT */}
-          <div className="bg-card rounded-xl border border-border p-5 space-y-4">
-            <h2 className="font-semibold text-base text-foreground">This Month</h2>
-            <div className="space-y-3">
-              <div>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-muted-foreground">Monthly Attendance</span>
-                  <span className="font-semibold text-foreground">{s?.monthlyAttendancePercentage ?? 0}%</span>
-                </div>
-                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className={cn("h-full rounded-full transition-all duration-700",
-                      (s?.monthlyAttendancePercentage ?? 0) >= 80 ? "bg-emerald-500"
-                      : (s?.monthlyAttendancePercentage ?? 0) >= 60 ? "bg-amber-500" : "bg-red-500"
-                    )}
-                    style={{ width: `${s?.monthlyAttendancePercentage ?? 0}%` }}
-                  />
-                </div>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-muted/40 rounded-lg">
-                <div className="flex items-center gap-2">
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <div className="flex items-center gap-3 p-3 bg-muted/40 rounded-xl">
+                <div className="p-2 bg-violet-50 rounded-lg">
                   <Timer className="w-4 h-4 text-violet-600" />
-                  <span className="text-sm text-muted-foreground">Overtime Hours</span>
                 </div>
-                <span className="font-bold text-violet-600">{s?.totalOvertimeThisMonth ?? 0}h</span>
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Overtime Hours</p>
+                  <p className="font-bold text-violet-600 text-lg">{s?.totalOvertimeThisMonth ?? 0}h</p>
+                </div>
               </div>
-              <div className="flex items-center justify-between p-3 bg-muted/40 rounded-lg">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3 p-3 bg-muted/40 rounded-xl">
+                <div className="p-2 bg-blue-50 rounded-lg">
                   <Building2 className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm text-muted-foreground">Active Branches</span>
                 </div>
-                <span className="font-bold text-blue-600">{s?.totalBranches ?? 0}</span>
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Active Branches</p>
+                  <p className="font-bold text-blue-600 text-lg">{s?.totalBranches ?? 0}</p>
+                </div>
               </div>
             </div>
           </div>
@@ -420,11 +339,18 @@ export default function Dashboard() {
             <p className="text-xs text-muted-foreground">Today's attendance by branch</p>
           </div>
           <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" />≥80%</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" />60–79%</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" />&lt;60%</span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />≥80%
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-amber-500" />60–79%
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-red-500" />&lt;60%
+            </span>
           </div>
         </div>
+
         {loading ? (
           <div className="flex items-center justify-center py-10 text-muted-foreground">
             <RefreshCw className="w-4 h-4 animate-spin mr-2" />Loading…
@@ -434,7 +360,7 @@ export default function Dashboard() {
             No branch data available
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-0 divide-y md:divide-y-0 md:divide-x divide-border">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-border">
             {s.branchWiseSummary.map(branch => (
               <div key={branch.branchId} className="px-5">
                 <BranchBar branch={branch} />
@@ -442,23 +368,27 @@ export default function Dashboard() {
             ))}
           </div>
         )}
+
         {!loading && s?.branchWiseSummary && (
           <div className="px-5 py-3 border-t border-border bg-muted/20 flex items-center justify-between">
-            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
               <span>
                 <strong className="text-emerald-700">
                   {s.branchWiseSummary.filter(b => b.total > 0 && Math.round((b.present / b.total) * 100) >= 80).length}
-                </strong> branches at ≥80%
+                </strong> branches ≥80%
               </span>
               <span>
                 <strong className="text-amber-700">
-                  {s.branchWiseSummary.filter(b => b.total > 0 && Math.round((b.present / b.total) * 100) >= 60 && Math.round((b.present / b.total) * 100) < 80).length}
-                </strong> branches at 60–79%
+                  {s.branchWiseSummary.filter(b => {
+                    const p = b.total > 0 ? Math.round((b.present / b.total) * 100) : 0;
+                    return p >= 60 && p < 80;
+                  }).length}
+                </strong> branches 60–79%
               </span>
               <span>
                 <strong className="text-red-700">
                   {s.branchWiseSummary.filter(b => b.total > 0 && Math.round((b.present / b.total) * 100) < 60).length}
-                </strong> branches below 60%
+                </strong> branches &lt;60%
               </span>
             </div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
