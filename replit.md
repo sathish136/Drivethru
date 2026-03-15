@@ -1,8 +1,9 @@
-# Workspace
+# Post Office Attendance Management System
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+A full-stack HR Attendance Management System for Sri Lanka Post with 50+ branches.
+Green-themed professional HRMS application similar to OrangeHRMS.
 
 ## Stack
 
@@ -10,87 +11,98 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Node.js version**: 24
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
-- **API framework**: Express 5
+- **Frontend**: React + Vite + Tailwind CSS (artifacts/attendance)
+- **API framework**: Express 5 (artifacts/api-server)
 - **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
+- **Validation**: Zod (zod/v4), drizzle-zod
 - **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+- **State management**: TanStack React Query (auto-generated hooks)
+- **Icons**: Lucide React
+- **Charts**: Recharts
+
+## Theme
+
+Primary color: Green (#5db75c / HSL 119 41% 54%)
+Small compact font (text-xs, text-sm)
+Dark sidebar, clean white content area
+
+## Features
+
+### Modules
+1. **Dashboard** - Real-time stats, branch-wise summary, recent attendance
+2. **Today's Attendance** - Live attendance status, punch in/out per employee
+3. **Monthly Sheet** - Excel-like grid (employees × days) with color-coded status
+4. **Shift Management** - Normal shift and split shift support
+   - Normal: In1→Out1=Total
+   - Split: In1→Out1=H1 | In2→Out2=H2 | Total=H1+H2
+5. **Employee Management** - Full CRUD, biometric ID, branch assignment
+6. **Branch Management** - 3-level hierarchy (Head Office → Regional → Sub-branch)
+7. **Reports**
+   - Attendance Report (date range, branch, status filters)
+   - Monthly Report (employee-wise summary with attendance %)
+   - Overtime Report (OT hours by employee)
+8. **Biometric Devices** - ZKTeco ZK Push ADMS setup, device management, push logs
+9. **User Management** - Role-based access (super_admin, regional_admin, branch_admin, viewer)
+   - Branch-allocated access (users only see their assigned branches)
+10. **Settings** - Organization config, ZK Push setup, holiday management
+
+### Attendance Status Colors
+- Present (P): green
+- Absent (A): red
+- Late (L): amber/orange
+- Half Day (HD): yellow
+- Leave (LV): purple
+- Holiday (H): gray
+
+## Branch Hierarchy
+
+- 1 Head Office (Head Office - Colombo)
+- 14 Regional Offices
+- Sub-branches under each regional
+
+## Demo Logins
+
+| Username | Password | Role |
+|----------|----------|------|
+| admin | admin123 | Super Admin (all access) |
+| western | western123 | Regional Admin (Western region) |
+| viewer | viewer123 | Viewer (Head Office only) |
+
+## Seeded Data
+
+- 124 active employees across 24 branches
+- 2000 attendance records (30 days history)
+- 3 shifts (Morning, Day, Split Shift A)
+- 5 national/religious holidays
 
 ## Structure
 
 ```text
-artifacts-monorepo/
-├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
-├── lib/                    # Shared libraries
-│   ├── api-spec/           # OpenAPI spec + Orval codegen config
-│   ├── api-client-react/   # Generated React Query hooks
-│   ├── api-zod/            # Generated Zod schemas from OpenAPI
-│   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
+artifacts/
+├── attendance/          # React+Vite frontend (port 18763, preview path /)
+│   └── src/
+│       ├── pages/       # Dashboard, attendance, employees, branches, reports, biometric, users, settings
+│       ├── components/  # Layout sidebar, UI components
+│       └── hooks/       # API hooks (use-attendance, use-employees, use-core)
+└── api-server/          # Express 5 backend (port 8080, path /api)
+    └── src/
+        ├── routes/      # auth, branches, employees, shifts, attendance, reports, biometric, users, settings, holidays
+        └── lib/         # auth (session-based), helpers
+
+lib/
+├── db/src/schema/       # branches, employees, shifts, attendance, biometric, users, settings
+├── api-spec/            # OpenAPI 3.1 spec (openapi.yaml)
+├── api-client-react/    # Generated React Query hooks
+└── api-zod/             # Generated Zod schemas
+
+scripts/src/seed.ts      # Database seeder
 ```
 
-## TypeScript & Composite Projects
+## ZK Biometric Push Setup
 
-Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references. This means:
-
-- **Always typecheck from the root** — run `pnpm run typecheck` (which runs `tsc --build --emitDeclarationOnly`). This builds the full dependency graph so that cross-package imports resolve correctly. Running `tsc` inside a single package will fail if its dependencies haven't been built yet.
-- **`emitDeclarationOnly`** — we only emit `.d.ts` files during typecheck; actual JS bundling is handled by esbuild/tsx/vite...etc, not `tsc`.
-- **Project references** — when package A depends on package B, A's `tsconfig.json` must list B in its `references` array. `tsc --build` uses this to determine build order and skip up-to-date packages.
-
-## Root Scripts
-
-- `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
-- `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
-
-## Packages
-
-### `artifacts/api-server` (`@workspace/api-server`)
-
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
-
-- Entry: `src/index.ts` — reads `PORT`, starts Express
-- App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
-- `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
-
-### `lib/db` (`@workspace/db`)
-
-Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
-
-- `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
-- `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
-- Exports: `.` (pool, db, schema), `./schema` (schema only)
-
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
-
-### `lib/api-spec` (`@workspace/api-spec`)
-
-Owns the OpenAPI 3.1 spec (`openapi.yaml`) and the Orval config (`orval.config.ts`). Running codegen produces output into two sibling packages:
-
-1. `lib/api-client-react/src/generated/` — React Query hooks + fetch client
-2. `lib/api-zod/src/generated/` — Zod schemas
-
-Run codegen: `pnpm --filter @workspace/api-spec run codegen`
-
-### `lib/api-zod` (`@workspace/api-zod`)
-
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
-
-### `lib/api-client-react` (`@workspace/api-client-react`)
-
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
-
-### `scripts` (`@workspace/scripts`)
-
-Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+ZKTeco ADMS Configuration in device:
+- Server: your-domain.com
+- Port: 80
+- Endpoint: /api/biometric/push
+- Push method: ZK Push (ADMS)
+- Supported models: F18, F19, F21, K40, MA300, UA300, FR1200

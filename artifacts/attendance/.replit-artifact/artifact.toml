@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Post Office Attendance Management"
+version = "1.0.0"
+id = "artifacts/attendance"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+localPort = 18763
+name = "web"
+paths = ["/"]
+
+[services.development]
+run = "pnpm --filter @workspace/attendance run dev"
+
+[services.env]
+PORT = "18763"
+BASE_PATH = "/"
+
+[services.production]
+build = ["pnpm", "--filter", "@workspace/attendance", "run", "build"]
+publicDir = "artifacts/attendance/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"

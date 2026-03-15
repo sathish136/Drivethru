@@ -1,0 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: 'Inter', sans-serif;
+
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-active: hsl(var(--sidebar-active));
+}
+
+:root {
+  /* Green Theme base on #5db75c -> HSL 119 41% 54% */
+  --background: 120 20% 98%;
+  --foreground: 220 20% 15%;
+  
+  --primary: 119 41% 54%;
+  --primary-foreground: 0 0% 100%;
+  
+  --muted: 120 10% 92%;
+  --muted-foreground: 220 15% 45%;
+  
+  --border: 220 15% 90%;
+  --input: 220 15% 92%;
+  --ring: 119 41% 54%;
+  
+  --card: 0 0% 100%;
+  --card-foreground: 220 20% 15%;
+
+  --sidebar: 220 30% 12%;
+  --sidebar-foreground: 220 20% 80%;
+  --sidebar-active: 119 41% 54%;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+}
+
+/* Custom Scrollbar for dense tables */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 rounded-full;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400;
+}

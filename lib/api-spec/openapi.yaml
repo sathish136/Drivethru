@@ -1,22 +1,39 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Post Office Attendance Management System API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: employees
+    description: Employee management
+  - name: branches
+    description: Branch management
+  - name: shifts
+    description: Shift management
+  - name: attendance
+    description: Attendance records
+  - name: reports
+    description: Reports
+  - name: biometric
+    description: Biometric device management
+  - name: users
+    description: User management
+  - name: settings
+    description: System settings
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +41,904 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentUser"
+
+  /branches:
+    get:
+      operationId: listBranches
+      tags: [branches]
+      summary: List all branches
+      parameters:
+        - name: parentId
+          in: query
+          schema:
+            type: integer
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [head_office, regional, sub_branch]
+      responses:
+        "200":
+          description: List of branches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Branch"
+    post:
+      operationId: createBranch
+      tags: [branches]
+      summary: Create branch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBranchRequest"
+      responses:
+        "201":
+          description: Branch created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Branch"
+
+  /branches/{id}:
+    get:
+      operationId: getBranch
+      tags: [branches]
+      summary: Get branch by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Branch details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Branch"
+    put:
+      operationId: updateBranch
+      tags: [branches]
+      summary: Update branch
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBranchRequest"
+      responses:
+        "200":
+          description: Updated branch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Branch"
+    delete:
+      operationId: deleteBranch
+      tags: [branches]
+      summary: Delete branch
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /employees:
+    get:
+      operationId: listEmployees
+      tags: [employees]
+      summary: List employees
+      parameters:
+        - name: branchId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive]
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Employee list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeListResponse"
+    post:
+      operationId: createEmployee
+      tags: [employees]
+      summary: Create employee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEmployeeRequest"
+      responses:
+        "201":
+          description: Created employee
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+
+  /employees/{id}:
+    get:
+      operationId: getEmployee
+      tags: [employees]
+      summary: Get employee
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Employee details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+    put:
+      operationId: updateEmployee
+      tags: [employees]
+      summary: Update employee
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEmployeeRequest"
+      responses:
+        "200":
+          description: Updated employee
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+    delete:
+      operationId: deleteEmployee
+      tags: [employees]
+      summary: Delete employee
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /shifts:
+    get:
+      operationId: listShifts
+      tags: [shifts]
+      summary: List shifts
+      responses:
+        "200":
+          description: Shift list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Shift"
+    post:
+      operationId: createShift
+      tags: [shifts]
+      summary: Create shift
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateShiftRequest"
+      responses:
+        "201":
+          description: Created shift
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shift"
+
+  /shifts/{id}:
+    put:
+      operationId: updateShift
+      tags: [shifts]
+      summary: Update shift
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateShiftRequest"
+      responses:
+        "200":
+          description: Updated shift
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shift"
+    delete:
+      operationId: deleteShift
+      tags: [shifts]
+      summary: Delete shift
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /employee-shifts:
+    post:
+      operationId: assignShift
+      tags: [shifts]
+      summary: Assign shift to employee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignShiftRequest"
+      responses:
+        "201":
+          description: Shift assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeShift"
+
+  /attendance:
+    get:
+      operationId: listAttendance
+      tags: [attendance]
+      summary: List attendance records
+      parameters:
+        - name: branchId
+          in: query
+          schema:
+            type: integer
+        - name: employeeId
+          in: query
+          schema:
+            type: integer
+        - name: date
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [present, absent, late, half_day, holiday, leave]
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Attendance records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceListResponse"
+    post:
+      operationId: createAttendance
+      tags: [attendance]
+      summary: Create/update attendance record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAttendanceRequest"
+      responses:
+        "201":
+          description: Attendance saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRecord"
+
+  /attendance/{id}:
+    put:
+      operationId: updateAttendance
+      tags: [attendance]
+      summary: Update attendance record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAttendanceRequest"
+      responses:
+        "200":
+          description: Updated attendance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRecord"
+
+  /attendance/today:
+    get:
+      operationId: getTodayAttendance
+      tags: [attendance]
+      summary: Get today's attendance summary
+      parameters:
+        - name: branchId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Today attendance summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodayAttendanceSummary"
+
+  /attendance/monthly-sheet:
+    get:
+      operationId: getMonthlySheet
+      tags: [attendance]
+      summary: Get monthly attendance sheet
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: branchId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Monthly attendance sheet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonthlySheetResponse"
+
+  /attendance/punch:
+    post:
+      operationId: punchAttendance
+      tags: [attendance]
+      summary: Manual punch in/out
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PunchRequest"
+      responses:
+        "200":
+          description: Punch recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRecord"
+
+  /reports/attendance:
+    get:
+      operationId: getAttendanceReport
+      tags: [reports]
+      summary: Attendance report
+      parameters:
+        - name: startDate
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: branchId
+          in: query
+          schema:
+            type: integer
+        - name: employeeId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Attendance report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceReport"
+
+  /reports/monthly:
+    get:
+      operationId: getMonthlyReport
+      tags: [reports]
+      summary: Monthly attendance report
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: branchId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Monthly report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonthlyReport"
+
+  /reports/overtime:
+    get:
+      operationId: getOvertimeReport
+      tags: [reports]
+      summary: Overtime report
+      parameters:
+        - name: startDate
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: branchId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Overtime report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OvertimeReport"
+
+  /reports/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [reports]
+      summary: Dashboard summary stats
+      parameters:
+        - name: branchId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Summary stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /biometric/devices:
+    get:
+      operationId: listBiometricDevices
+      tags: [biometric]
+      summary: List biometric devices
+      responses:
+        "200":
+          description: Device list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BiometricDevice"
+    post:
+      operationId: createBiometricDevice
+      tags: [biometric]
+      summary: Add biometric device
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBiometricDeviceRequest"
+      responses:
+        "201":
+          description: Device added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BiometricDevice"
+
+  /biometric/devices/{id}:
+    put:
+      operationId: updateBiometricDevice
+      tags: [biometric]
+      summary: Update biometric device
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBiometricDeviceRequest"
+      responses:
+        "200":
+          description: Updated device
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BiometricDevice"
+    delete:
+      operationId: deleteBiometricDevice
+      tags: [biometric]
+      summary: Delete biometric device
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /biometric/devices/{id}/test:
+    post:
+      operationId: testBiometricDevice
+      tags: [biometric]
+      summary: Test biometric device connection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Test result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceTestResult"
+
+  /biometric/logs:
+    get:
+      operationId: listBiometricLogs
+      tags: [biometric]
+      summary: List biometric push logs
+      parameters:
+        - name: deviceId
+          in: query
+          schema:
+            type: integer
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Biometric logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BiometricLogListResponse"
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List system users
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SystemUser"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create system user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: Created user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemUser"
+
+  /users/{id}:
+    put:
+      operationId: updateUser
+      tags: [users]
+      summary: Update user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemUser"
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Delete user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get system settings
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemSettings"
+    put:
+      operationId: updateSettings
+      tags: [settings]
+      summary: Update system settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SystemSettings"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemSettings"
+
+  /holidays:
+    get:
+      operationId: listHolidays
+      tags: [settings]
+      summary: List holidays
+      parameters:
+        - name: year
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Holidays
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Holiday"
+    post:
+      operationId: createHoliday
+      tags: [settings]
+      summary: Create holiday
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateHolidayRequest"
+      responses:
+        "201":
+          description: Created holiday
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Holiday"
+
+  /holidays/{id}:
+    delete:
+      operationId: deleteHoliday
+      tags: [settings]
+      summary: Delete holiday
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +946,910 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        success:
+          type: boolean
+      required: [message, success]
+
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      required: [username, password]
+
+    LoginResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/CurrentUser"
+        token:
+          type: string
+      required: [user, token]
+
+    CurrentUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        fullName:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [super_admin, regional_admin, branch_admin, viewer]
+        branchIds:
+          type: array
+          items:
+            type: integer
+        branchNames:
+          type: array
+          items:
+            type: string
+        isActive:
+          type: boolean
+      required: [id, username, fullName, email, role, branchIds, branchNames, isActive]
+
+    Branch:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        code:
+          type: string
+        type:
+          type: string
+          enum: [head_office, regional, sub_branch]
+        parentId:
+          type: integer
+          nullable: true
+        parentName:
+          type: string
+          nullable: true
+        address:
+          type: string
+        phone:
+          type: string
+        managerName:
+          type: string
+        employeeCount:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+      required: [id, name, code, type, isActive, createdAt, employeeCount]
+
+    CreateBranchRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        code:
+          type: string
+        type:
+          type: string
+          enum: [head_office, regional, sub_branch]
+        parentId:
+          type: integer
+          nullable: true
+        address:
+          type: string
+        phone:
+          type: string
+        managerName:
+          type: string
+        isActive:
+          type: boolean
+      required: [name, code, type, isActive]
+
+    Employee:
+      type: object
+      properties:
+        id:
+          type: integer
+        employeeId:
+          type: string
+        fullName:
+          type: string
+        designation:
+          type: string
+        department:
+          type: string
+        branchId:
+          type: integer
+        branchName:
+          type: string
+        shiftId:
+          type: integer
+          nullable: true
+        shiftName:
+          type: string
+          nullable: true
+        joiningDate:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        biometricId:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, inactive]
+        createdAt:
+          type: string
+      required: [id, employeeId, fullName, designation, department, branchId, branchName, joiningDate, email, phone, status, createdAt]
+
+    EmployeeListResponse:
+      type: object
+      properties:
+        employees:
+          type: array
+          items:
+            $ref: "#/components/schemas/Employee"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required: [employees, total, page, limit]
+
+    CreateEmployeeRequest:
+      type: object
+      properties:
+        employeeId:
+          type: string
+        fullName:
+          type: string
+        designation:
+          type: string
+        department:
+          type: string
+        branchId:
+          type: integer
+        shiftId:
+          type: integer
+          nullable: true
+        joiningDate:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        biometricId:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, inactive]
+      required: [employeeId, fullName, designation, department, branchId, joiningDate, email, phone, status]
+
+    Shift:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+          enum: [normal, split]
+        startTime1:
+          type: string
+        endTime1:
+          type: string
+        startTime2:
+          type: string
+          nullable: true
+        endTime2:
+          type: string
+          nullable: true
+        totalHours:
+          type: number
+        graceMinutes:
+          type: integer
+        overtimeThreshold:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+      required: [id, name, type, startTime1, endTime1, totalHours, graceMinutes, overtimeThreshold, isActive, createdAt]
+
+    CreateShiftRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [normal, split]
+        startTime1:
+          type: string
+        endTime1:
+          type: string
+        startTime2:
+          type: string
+          nullable: true
+        endTime2:
+          type: string
+          nullable: true
+        graceMinutes:
+          type: integer
+        overtimeThreshold:
+          type: integer
+        isActive:
+          type: boolean
+      required: [name, type, startTime1, endTime1, graceMinutes, overtimeThreshold, isActive]
+
+    AssignShiftRequest:
+      type: object
+      properties:
+        employeeId:
+          type: integer
+        shiftId:
+          type: integer
+        effectiveFrom:
+          type: string
+      required: [employeeId, shiftId, effectiveFrom]
+
+    EmployeeShift:
+      type: object
+      properties:
+        id:
+          type: integer
+        employeeId:
+          type: integer
+        shiftId:
+          type: integer
+        effectiveFrom:
+          type: string
+      required: [id, employeeId, shiftId, effectiveFrom]
+
+    AttendanceRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        employeeId:
+          type: integer
+        employeeName:
+          type: string
+        employeeCode:
+          type: string
+        branchId:
+          type: integer
+        branchName:
+          type: string
+        date:
+          type: string
+        status:
+          type: string
+          enum: [present, absent, late, half_day, holiday, leave]
+        inTime1:
+          type: string
+          nullable: true
+        outTime1:
+          type: string
+          nullable: true
+        workHours1:
+          type: number
+          nullable: true
+        inTime2:
+          type: string
+          nullable: true
+        outTime2:
+          type: string
+          nullable: true
+        workHours2:
+          type: number
+          nullable: true
+        totalHours:
+          type: number
+          nullable: true
+        overtimeHours:
+          type: number
+          nullable: true
+        shiftName:
+          type: string
+          nullable: true
+        source:
+          type: string
+          enum: [biometric, manual, system]
+        remarks:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required: [id, employeeId, employeeName, employeeCode, branchId, branchName, date, status, source, createdAt]
+
+    AttendanceListResponse:
+      type: object
+      properties:
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceRecord"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required: [records, total, page, limit]
+
+    CreateAttendanceRequest:
+      type: object
+      properties:
+        employeeId:
+          type: integer
+        date:
+          type: string
+        status:
+          type: string
+          enum: [present, absent, late, half_day, holiday, leave]
+        inTime1:
+          type: string
+          nullable: true
+        outTime1:
+          type: string
+          nullable: true
+        inTime2:
+          type: string
+          nullable: true
+        outTime2:
+          type: string
+          nullable: true
+        overtimeHours:
+          type: number
+          nullable: true
+        source:
+          type: string
+          enum: [biometric, manual, system]
+        remarks:
+          type: string
+          nullable: true
+      required: [employeeId, date, status, source]
+
+    PunchRequest:
+      type: object
+      properties:
+        employeeId:
+          type: integer
+        type:
+          type: string
+          enum: [in, out]
+        time:
+          type: string
+          nullable: true
+        remarks:
+          type: string
+          nullable: true
+      required: [employeeId, type]
+
+    TodayAttendanceSummary:
+      type: object
+      properties:
+        date:
+          type: string
+        totalEmployees:
+          type: integer
+        present:
+          type: integer
+        absent:
+          type: integer
+        late:
+          type: integer
+        halfDay:
+          type: integer
+        onLeave:
+          type: integer
+        notMarked:
+          type: integer
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceRecord"
+      required: [date, totalEmployees, present, absent, late, halfDay, onLeave, notMarked, records]
+
+    MonthlySheetRow:
+      type: object
+      properties:
+        employeeId:
+          type: integer
+        employeeName:
+          type: string
+        employeeCode:
+          type: string
+        designation:
+          type: string
+        dailyStatus:
+          type: array
+          items:
+            type: object
+            properties:
+              day:
+                type: integer
+              status:
+                type: string
+              inTime:
+                type: string
+                nullable: true
+              outTime:
+                type: string
+                nullable: true
+              hours:
+                type: number
+                nullable: true
+            required: [day, status]
+        presentDays:
+          type: integer
+        absentDays:
+          type: integer
+        lateDays:
+          type: integer
+        halfDays:
+          type: integer
+        leaveDays:
+          type: integer
+        holidayDays:
+          type: integer
+        totalWorkHours:
+          type: number
+        overtimeHours:
+          type: number
+      required: [employeeId, employeeName, employeeCode, designation, dailyStatus, presentDays, absentDays, lateDays, halfDays, leaveDays, holidayDays, totalWorkHours, overtimeHours]
+
+    MonthlySheetResponse:
+      type: object
+      properties:
+        month:
+          type: integer
+        year:
+          type: integer
+        daysInMonth:
+          type: integer
+        branchName:
+          type: string
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlySheetRow"
+      required: [month, year, daysInMonth, branchName, rows]
+
+    AttendanceReport:
+      type: object
+      properties:
+        startDate:
+          type: string
+        endDate:
+          type: string
+        totalRecords:
+          type: integer
+        summary:
+          type: object
+          properties:
+            present:
+              type: integer
+            absent:
+              type: integer
+            late:
+              type: integer
+            halfDay:
+              type: integer
+            leave:
+              type: integer
+            holiday:
+              type: integer
+          required: [present, absent, late, halfDay, leave, holiday]
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceRecord"
+      required: [startDate, endDate, totalRecords, summary, records]
+
+    MonthlyReportEmployee:
+      type: object
+      properties:
+        employeeId:
+          type: integer
+        employeeName:
+          type: string
+        employeeCode:
+          type: string
+        branchName:
+          type: string
+        designation:
+          type: string
+        presentDays:
+          type: integer
+        absentDays:
+          type: integer
+        lateDays:
+          type: integer
+        halfDays:
+          type: integer
+        leaveDays:
+          type: integer
+        holidayDays:
+          type: integer
+        totalWorkHours:
+          type: number
+        overtimeHours:
+          type: number
+        attendancePercentage:
+          type: number
+      required: [employeeId, employeeName, employeeCode, branchName, designation, presentDays, absentDays, lateDays, halfDays, leaveDays, holidayDays, totalWorkHours, overtimeHours, attendancePercentage]
+
+    MonthlyReport:
+      type: object
+      properties:
+        month:
+          type: integer
+        year:
+          type: integer
+        totalEmployees:
+          type: integer
+        workingDays:
+          type: integer
+        employees:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyReportEmployee"
+      required: [month, year, totalEmployees, workingDays, employees]
+
+    OvertimeReportEmployee:
+      type: object
+      properties:
+        employeeId:
+          type: integer
+        employeeName:
+          type: string
+        employeeCode:
+          type: string
+        branchName:
+          type: string
+        designation:
+          type: string
+        totalOvertimeHours:
+          type: number
+        overtimeDays:
+          type: integer
+        records:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+              overtimeHours:
+                type: number
+            required: [date, overtimeHours]
+      required: [employeeId, employeeName, employeeCode, branchName, designation, totalOvertimeHours, overtimeDays, records]
+
+    OvertimeReport:
+      type: object
+      properties:
+        startDate:
+          type: string
+        endDate:
+          type: string
+        totalOvertimeHours:
+          type: number
+        employees:
+          type: array
+          items:
+            $ref: "#/components/schemas/OvertimeReportEmployee"
+      required: [startDate, endDate, totalOvertimeHours, employees]
+
+    DashboardSummary:
+      type: object
+      properties:
+        totalEmployees:
+          type: integer
+        totalBranches:
+          type: integer
+        presentToday:
+          type: integer
+        absentToday:
+          type: integer
+        lateToday:
+          type: integer
+        onLeaveToday:
+          type: integer
+        attendancePercentageToday:
+          type: number
+        monthlyAttendancePercentage:
+          type: number
+        totalOvertimeThisMonth:
+          type: number
+        recentAttendance:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceRecord"
+        branchWiseSummary:
+          type: array
+          items:
+            type: object
+            properties:
+              branchId:
+                type: integer
+              branchName:
+                type: string
+              present:
+                type: integer
+              absent:
+                type: integer
+              total:
+                type: integer
+            required: [branchId, branchName, present, absent, total]
+      required: [totalEmployees, totalBranches, presentToday, absentToday, lateToday, onLeaveToday, attendancePercentageToday, monthlyAttendancePercentage, totalOvertimeThisMonth, recentAttendance, branchWiseSummary]
+
+    BiometricDevice:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        serialNumber:
+          type: string
+        model:
+          type: string
+        ipAddress:
+          type: string
+        port:
+          type: integer
+        branchId:
+          type: integer
+        branchName:
+          type: string
+        pushMethod:
+          type: string
+          enum: [zkpush, sdk]
+        apiKey:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [online, offline, error]
+        lastSync:
+          type: string
+          nullable: true
+        totalPushLogs:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+      required: [id, name, serialNumber, model, ipAddress, port, branchId, branchName, pushMethod, status, totalPushLogs, isActive, createdAt]
+
+    CreateBiometricDeviceRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        serialNumber:
+          type: string
+        model:
+          type: string
+        ipAddress:
+          type: string
+        port:
+          type: integer
+        branchId:
+          type: integer
+        pushMethod:
+          type: string
+          enum: [zkpush, sdk]
+        apiKey:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+      required: [name, serialNumber, model, ipAddress, port, branchId, pushMethod, isActive]
+
+    DeviceTestResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        latencyMs:
+          type: integer
+          nullable: true
+      required: [success, message]
+
+    BiometricLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        deviceId:
+          type: integer
+        deviceName:
+          type: string
+        employeeId:
+          type: integer
+        employeeName:
+          type: string
+        biometricId:
+          type: string
+        punchTime:
+          type: string
+        punchType:
+          type: string
+          enum: [in, out, unknown]
+        processed:
+          type: boolean
+        createdAt:
+          type: string
+      required: [id, deviceId, deviceName, employeeId, employeeName, biometricId, punchTime, punchType, processed, createdAt]
+
+    BiometricLogListResponse:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/BiometricLog"
+        total:
+          type: integer
+        page:
+          type: integer
+      required: [logs, total, page]
+
+    SystemUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        fullName:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [super_admin, regional_admin, branch_admin, viewer]
+        branchIds:
+          type: array
+          items:
+            type: integer
+        branchNames:
+          type: array
+          items:
+            type: string
+        isActive:
+          type: boolean
+        lastLogin:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required: [id, username, fullName, email, role, branchIds, branchNames, isActive, createdAt]
+
+    CreateUserRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        fullName:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+          enum: [super_admin, regional_admin, branch_admin, viewer]
+        branchIds:
+          type: array
+          items:
+            type: integer
+        isActive:
+          type: boolean
+      required: [username, fullName, email, password, role, branchIds, isActive]
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        fullName:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [super_admin, regional_admin, branch_admin, viewer]
+        branchIds:
+          type: array
+          items:
+            type: integer
+        isActive:
+          type: boolean
+      required: [fullName, email, role, branchIds, isActive]
+
+    SystemSettings:
+      type: object
+      properties:
+        organizationName:
+          type: string
+        organizationCode:
+          type: string
+        workingDays:
+          type: array
+          items:
+            type: string
+            enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]
+        timezone:
+          type: string
+        lateThresholdMinutes:
+          type: integer
+        halfDayThresholdHours:
+          type: number
+        overtimeThresholdHours:
+          type: number
+        autoMarkAbsent:
+          type: boolean
+        biometricSyncInterval:
+          type: integer
+        zkPushServerUrl:
+          type: string
+          nullable: true
+        zkPushApiKey:
+          type: string
+          nullable: true
+      required: [organizationName, organizationCode, workingDays, timezone, lateThresholdMinutes, halfDayThresholdHours, overtimeThresholdHours, autoMarkAbsent, biometricSyncInterval]
+
+    Holiday:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        date:
+          type: string
+        type:
+          type: string
+          enum: [national, religious, optional]
+        description:
+          type: string
+          nullable: true
+      required: [id, name, date, type]
+
+    CreateHolidayRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        date:
+          type: string
+        type:
+          type: string
+          enum: [national, religious, optional]
+        description:
+          type: string
+          nullable: true
+      required: [name, date, type]
