@@ -92,7 +92,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Brand */}
         <div className="px-4 pt-5 pb-4 flex items-center gap-3 border-b border-white/8">
-          <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center shadow overflow-hidden shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-sidebar-active flex items-center justify-center shadow overflow-hidden shrink-0">
             {logoUrl
               ? <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-0.5" />
               : <span className="font-extrabold text-base text-white">P</span>}
@@ -123,19 +123,19 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                       className={cn(
                         "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-150",
                         isActive
-                          ? "bg-white/15 text-white shadow-sm"
-                          : "text-white/60 hover:bg-white/8 hover:text-white"
+                          ? "bg-sidebar-active text-white shadow-lg shadow-sidebar-active/30"
+                          : "text-white/55 hover:bg-white/8 hover:text-white"
                       )}
                     >
                       <item.icon
                         className={cn(
                           "w-[15px] h-[15px] shrink-0 transition-colors",
-                          isActive ? "text-white" : "text-white/50 group-hover:text-white"
+                          isActive ? "text-white" : "text-white/45 group-hover:text-white"
                         )}
                       />
                       <span className="flex-1 truncate">{item.label}</span>
                       {isActive && (
-                        <ChevronRight className="w-3 h-3 text-white/40 shrink-0" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-white/70 shrink-0" />
                       )}
                     </Link>
                   );
