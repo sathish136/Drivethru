@@ -161,8 +161,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Navigation — scrolls independently */}
         <nav className={cn(
-          "flex-1 py-4 overflow-y-auto overflow-x-hidden min-h-0",
-          collapsed ? "px-2 space-y-1" : "px-3 space-y-5"
+          "flex-1 py-4 overflow-y-auto min-h-0",
+          collapsed ? "px-2 space-y-1 overflow-x-hidden" : "px-3 space-y-5"
         )}>
           {NAV_GROUPS.map((group) => (
             <div key={group.label}>
@@ -214,7 +214,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                       className={cn(
                         "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-150",
                         isActive
-                          ? "bg-sidebar-active text-white shadow-lg shadow-sidebar-active/25"
+                          ? "nav-active-tab bg-sidebar-active text-white shadow-lg shadow-sidebar-active/25"
                           : "text-white/55 hover:bg-white/8 hover:text-white"
                       )}
                     >
