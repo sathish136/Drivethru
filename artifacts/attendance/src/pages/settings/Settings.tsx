@@ -167,45 +167,45 @@ export default function Settings() {
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div>
                 <Label className="text-xs">Organization Name</Label>
-                <Input defaultValue="India Post" />
+                <Input defaultValue="Sri Lanka Post" />
               </div>
               <div>
                 <Label className="text-xs">Short Name</Label>
-                <Input defaultValue="IND POST" />
+                <Input defaultValue="SLP" />
               </div>
               <div>
                 <Label className="text-xs">Country</Label>
-                <Input defaultValue="India" readOnly className="bg-muted" />
+                <Input defaultValue="Sri Lanka" readOnly className="bg-muted" />
               </div>
               <div>
                 <Label className="text-xs">Timezone</Label>
-                <Select defaultValue="IST">
-                  <option value="IST">India Standard Time (GMT+5:30)</option>
+                <Select defaultValue="SLST">
+                  <option value="SLST">Sri Lanka Standard Time (GMT+5:30)</option>
                   <option value="UTC">UTC (GMT+0)</option>
                 </Select>
               </div>
               <div>
                 <Label className="text-xs">Financial Year Start</Label>
-                <Select defaultValue="apr">
+                <Select defaultValue="jan">
                   <option value="jan">January</option>
                   <option value="apr">April</option>
                 </Select>
               </div>
               <div>
                 <Label className="text-xs">Currency</Label>
-                <Input defaultValue="INR (₹)" readOnly className="bg-muted" />
+                <Input defaultValue="LKR (Rs.)" readOnly className="bg-muted" />
               </div>
               <div className="col-span-2 md:col-span-3">
                 <Label className="text-xs">Head Office Address</Label>
-                <Input placeholder="Building, Street, City, State, PIN" />
+                <Input defaultValue="310 D.R. Wijewardena Mawatha, Colombo 10, Sri Lanka" />
               </div>
               <div>
                 <Label className="text-xs">Contact Email</Label>
-                <Input type="email" placeholder="hr@indiapost.gov.in" />
+                <Input type="email" defaultValue="hr@slpost.lk" />
               </div>
               <div>
                 <Label className="text-xs">Contact Phone</Label>
-                <Input placeholder="+91-XXXXXXXXXX" />
+                <Input defaultValue="+94-11-2326601" />
               </div>
             </div>
             <div className="flex justify-end mt-5">
