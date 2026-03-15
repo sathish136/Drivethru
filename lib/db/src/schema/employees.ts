@@ -49,6 +49,7 @@ export const employees = pgTable("employees", {
   etfNumber: text("etf_number"),
   aadharNumber: text("aadhar_number"),
   panNumber: text("pan_number"),
+  photoUrl: text("photo_url"),
   aadharDocUrl: text("aadhar_doc_url"),
   panDocUrl: text("pan_doc_url"),
   certificatesDocUrl: text("certificates_doc_url"),

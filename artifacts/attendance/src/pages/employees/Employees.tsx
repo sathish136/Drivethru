@@ -10,8 +10,8 @@ import {
   Search, Plus, Edit2, Trash2, Download, Mail,
   MapPin, X, Building2, Users, Layers,
   FileText, Upload, CheckCircle2, AlertCircle, UserCircle,
-  TrendingUp, Briefcase, Phone, Hash, CreditCard, Calendar,
-  IdCard, Home, Shield
+  Briefcase, Phone, Hash, CreditCard, Calendar,
+  IdCard, Home, Shield, Camera
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -71,12 +71,6 @@ function EmployeeMiniDashboard({ allEmployees, onFilter }: { allEmployees: any[]
   allEmployees.forEach(e => { if (e.department) deptMap[e.department] = (deptMap[e.department] || 0) + 1; });
   const topDepts = Object.entries(deptMap).sort((a, b) => b[1] - a[1]).slice(0, 4);
 
-  const now = new Date();
-  const thisMonthJoined = allEmployees.filter(e => {
-    const d = e.joiningDate ? new Date(e.joiningDate) : null;
-    return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  }).length;
-
   return (
     <div className="grid grid-cols-12 gap-3 mb-1">
       {/* Left: Status breakdown */}
@@ -108,31 +102,29 @@ function EmployeeMiniDashboard({ allEmployees, onFilter }: { allEmployees: any[]
         </div>
       </div>
 
-      {/* Middle: Type + New joins */}
-      <div className="col-span-12 md:col-span-3 flex flex-col gap-3">
-        <div className="bg-card border border-border rounded-xl p-4 flex-1">
+      {/* Middle: Employment Type */}
+      <div className="col-span-12 md:col-span-3">
+        <div className="bg-card border border-border rounded-xl p-4 h-full">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
             <Briefcase className="w-3.5 h-3.5" /> Employment Type
           </p>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {[
-              { label: "Permanent", val: permanent, cls: "text-blue-600 bg-blue-50" },
-              { label: "Contract",  val: contract,  cls: "text-purple-600 bg-purple-50" },
-              { label: "Casual",    val: casual,    cls: "text-gray-600 bg-gray-50" },
+              { label: "Permanent", val: permanent, cls: "text-blue-600 bg-blue-50", bar: "bg-blue-400" },
+              { label: "Contract",  val: contract,  cls: "text-purple-600 bg-purple-50", bar: "bg-purple-400" },
+              { label: "Casual",    val: casual,    cls: "text-gray-600 bg-gray-50", bar: "bg-gray-400" },
             ].map(t => (
-              <div key={t.label} className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">{t.label}</span>
-                <span className={cn("text-xs font-bold px-2 py-0.5 rounded", t.cls)}>{t.val}</span>
+              <div key={t.label}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-muted-foreground">{t.label}</span>
+                  <span className={cn("text-xs font-bold px-2 py-0.5 rounded", t.cls)}>{t.val}</span>
+                </div>
+                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div className={cn("h-full rounded-full", t.bar)} style={{ width: total ? `${(t.val / total) * 100}%` : "0%" }} />
+                </div>
               </div>
             ))}
           </div>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-4">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 flex items-center gap-1.5">
-            <TrendingUp className="w-3.5 h-3.5" /> Joined This Month
-          </p>
-          <p className="text-3xl font-bold text-primary">{thisMonthJoined}</p>
-          <p className="text-xs text-muted-foreground">new employee{thisMonthJoined !== 1 ? "s" : ""}</p>
         </div>
       </div>
 
@@ -252,6 +244,27 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
     aadharNumber: emp.aadharNumber || "",
     panNumber: emp.panNumber || "",
   } : { ...EMPTY_EMP });
+  const [photoPreview, setPhotoPreview] = useState<string>(emp?.photoUrl || "");
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const photoRef = useRef<HTMLInputElement>(null);
+
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !emp?.id) return;
+    setPhotoUploading(true);
+    try {
+      const reader = new FileReader();
+      reader.onloadend = () => setPhotoPreview(reader.result as string);
+      reader.readAsDataURL(file);
+      const fd = new FormData();
+      fd.append("photo", file);
+      const resp = await fetch(apiUrl(`/employees/${emp.id}/documents`), { method: "POST", body: fd });
+      if (resp.ok) { const d = await resp.json(); setPhotoPreview(d.employee?.photoUrl || photoPreview); onSaved(); }
+    } finally {
+      setPhotoUploading(false);
+      if (photoRef.current) photoRef.current.value = "";
+    }
+  }
   const createEmp = useCreateEmployee();
   const updateEmp = useUpdateEmployee();
 
@@ -294,8 +307,11 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
         <div className="px-5 pt-5 pb-4 border-b border-border bg-gradient-to-r from-primary/5 to-background">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-primary/15 border border-primary/20 flex items-center justify-center shrink-0">
-                <span className="text-base font-bold text-primary">{initials}</span>
+              <div className="w-12 h-12 rounded-2xl bg-primary/15 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden">
+                {photoPreview
+                  ? <img src={photoPreview} alt="avatar" className="w-full h-full object-cover" />
+                  : <span className="text-base font-bold text-primary">{initials}</span>
+                }
               </div>
               <div>
                 <h2 className="font-bold text-base leading-tight">{emp ? "Edit Employee Profile" : "New Employee"}</h2>
@@ -334,6 +350,39 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
         <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
           {tab === "personal" && (
             <>
+              {/* Photo Upload */}
+              <div className="flex flex-col items-center gap-2 py-3">
+                <div className="relative group">
+                  <div className="w-20 h-20 rounded-full border-2 border-border bg-muted/40 overflow-hidden flex items-center justify-center shadow-sm">
+                    {photoPreview
+                      ? <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
+                      : <UserCircle className="w-10 h-10 text-muted-foreground/50" />
+                    }
+                  </div>
+                  <button type="button"
+                    disabled={!emp?.id || photoUploading}
+                    onClick={() => photoRef.current?.click()}
+                    className={cn(
+                      "absolute bottom-0 right-0 w-7 h-7 rounded-full border-2 border-background flex items-center justify-center shadow transition-all",
+                      emp?.id
+                        ? "bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
+                        : "bg-muted text-muted-foreground cursor-not-allowed"
+                    )}>
+                    {photoUploading
+                      ? <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                      : <Camera className="w-3.5 h-3.5" />
+                    }
+                  </button>
+                  <input ref={photoRef} type="file" className="hidden" accept="image/jpeg,image/png,image/webp" onChange={handlePhotoUpload} />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {emp?.id
+                    ? (photoPreview ? "Click camera to change photo" : "Click camera icon to upload photo")
+                    : "Save employee first to upload photo"
+                  }
+                </p>
+              </div>
+
               {/* Basic Info Section */}
               <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
@@ -890,8 +939,20 @@ export default function Employees() {
                       <tr key={emp.id} className="hover:bg-muted/30 transition-colors group">
                         <td className="px-3 py-2.5 font-mono text-xs text-primary font-medium">{emp.employeeId}</td>
                         <td className="px-3 py-2.5">
-                          <div className="font-medium">{empDisplayName(emp)}</div>
-                          <div className="text-muted-foreground flex items-center gap-1"><Mail className="w-2.5 h-2.5" /> {emp.email}</div>
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-muted/60 border border-border overflow-hidden shrink-0 flex items-center justify-center">
+                              {emp.photoUrl
+                                ? <img src={emp.photoUrl} alt={empDisplayName(emp)} className="w-full h-full object-cover" />
+                                : <span className="text-[10px] font-bold text-muted-foreground">
+                                    {(emp.firstName?.[0] || emp.fullName?.[0] || "E").toUpperCase()}
+                                  </span>
+                              }
+                            </div>
+                            <div>
+                              <div className="font-medium">{empDisplayName(emp)}</div>
+                              <div className="text-muted-foreground flex items-center gap-1"><Mail className="w-2.5 h-2.5" /> {emp.email}</div>
+                            </div>
+                          </div>
                         </td>
                         <td className="px-3 py-2.5">
                           <div className="font-medium">{emp.designation}</div>

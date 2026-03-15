@@ -124,6 +124,7 @@ router.delete("/:id", async (req, res) => {
 });
 
 router.post("/:id/documents", upload.fields([
+  { name: "photo", maxCount: 1 },
   { name: "aadharDoc", maxCount: 1 },
   { name: "panDoc", maxCount: 1 },
   { name: "certificatesDoc", maxCount: 1 },
@@ -135,6 +136,7 @@ router.post("/:id/documents", upload.fields([
     const BASE = process.env.BASE_URL || "";
 
     const update: Record<string, string> = {};
+    if (files?.photo?.[0])           update.photoUrl           = `${BASE}/api/employees/uploads/${files.photo[0].filename}`;
     if (files?.aadharDoc?.[0])       update.aadharDocUrl       = `${BASE}/api/employees/uploads/${files.aadharDoc[0].filename}`;
     if (files?.panDoc?.[0])          update.panDocUrl          = `${BASE}/api/employees/uploads/${files.panDoc[0].filename}`;
     if (files?.certificatesDoc?.[0]) update.certificatesDocUrl = `${BASE}/api/employees/uploads/${files.certificatesDoc[0].filename}`;
