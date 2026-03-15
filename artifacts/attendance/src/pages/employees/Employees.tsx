@@ -10,7 +10,8 @@ import {
   Search, Plus, Edit2, Trash2, Download, Mail,
   MapPin, X, Building2, Users, Layers,
   FileText, Upload, CheckCircle2, AlertCircle, UserCircle,
-  TrendingUp, UserCheck, UserX, Clock, Briefcase
+  TrendingUp, Briefcase, Phone, Hash, CreditCard, Calendar,
+  IdCard, Home, Shield
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -274,81 +275,155 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
   const isPending = createEmp.isPending || updateEmp.isPending;
   const isSaved = !!emp?.id;
 
+  const initials = form.firstName && form.lastName
+    ? `${form.firstName[0]}${form.lastName[0]}`.toUpperCase()
+    : form.firstName?.[0]?.toUpperCase() || "E";
+
+  const DRAWER_TABS = [
+    { key: "personal", label: "Personal", icon: UserCircle, step: 1 },
+    { key: "professional", label: "Professional", icon: Briefcase, step: 2 },
+    { key: "documents", label: "Documents", icon: FileText, step: 3 },
+  ] as const;
+
   return (
     <div className="fixed inset-0 z-50 flex">
-      <div className="flex-1 bg-black/40" onClick={onClose} />
+      <div className="flex-1 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <div className="w-full max-w-2xl bg-background border-l border-border shadow-2xl flex flex-col h-full overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-muted/30">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
-              <UserCircle className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <h2 className="font-bold text-base">{emp ? "Edit Employee Profile" : "Add New Employee"}</h2>
-              {emp && <p className="text-xs text-muted-foreground">{emp.employeeId} · {empDisplayName(emp)}</p>}
-            </div>
-          </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-muted rounded-lg"><X className="w-4 h-4" /></button>
-        </div>
 
-        <div className="flex border-b border-border px-5 bg-card">
-          {(["personal","professional","documents"] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={cn("px-4 py-2.5 text-xs font-medium capitalize border-b-2 -mb-px transition-colors whitespace-nowrap",
-                tab === t ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
-              )}>
-              {t === "personal" ? "👤 Personal" : t === "professional" ? "💼 Professional" : "📄 Documents"}
+        {/* Drawer Header */}
+        <div className="px-5 pt-5 pb-4 border-b border-border bg-gradient-to-r from-primary/5 to-background">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-primary/15 border border-primary/20 flex items-center justify-center shrink-0">
+                <span className="text-base font-bold text-primary">{initials}</span>
+              </div>
+              <div>
+                <h2 className="font-bold text-base leading-tight">{emp ? "Edit Employee Profile" : "New Employee"}</h2>
+                {emp
+                  ? <p className="text-xs text-muted-foreground mt-0.5">{emp.employeeId} · {empDisplayName(emp)}</p>
+                  : <p className="text-xs text-muted-foreground mt-0.5">Fill in the details below</p>
+                }
+              </div>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-muted rounded-xl transition-colors mt-0.5">
+              <X className="w-4 h-4" />
             </button>
-          ))}
+          </div>
+
+          {/* Step Tabs */}
+          <div className="flex gap-2 mt-4">
+            {DRAWER_TABS.map(({ key, label, icon: Icon, step }) => (
+              <button key={key} onClick={() => setTab(key)}
+                className={cn(
+                  "flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all duration-200 flex-1 justify-center",
+                  tab === key
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}>
+                <span className={cn(
+                  "w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0",
+                  tab === key ? "bg-white/20" : "bg-background"
+                )}>{step}</span>
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
           {tab === "personal" && (
             <>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs">First Name *</Label>
-                  <Input placeholder="e.g. Rahul" value={form.firstName} onChange={e => set("firstName", e.target.value)} />
+              {/* Basic Info Section */}
+              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
+                  <UserCircle className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Basic Information</span>
                 </div>
-                <div>
-                  <Label className="text-xs">Last Name *</Label>
-                  <Input placeholder="e.g. Sharma" value={form.lastName} onChange={e => set("lastName", e.target.value)} />
-                </div>
-                <div>
-                  <Label className="text-xs">Gender</Label>
-                  <Select value={form.gender} onChange={e => set("gender", e.target.value)}>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="other">Other</option>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs">Date of Birth</Label>
-                  <Input type="date" value={form.dateOfBirth} onChange={e => set("dateOfBirth", e.target.value)} />
-                </div>
-                <div>
-                  <Label className="text-xs">Phone *</Label>
-                  <Input placeholder="9XXXXXXXXX" value={form.phone} onChange={e => set("phone", e.target.value)} />
-                </div>
-                <div>
-                  <Label className="text-xs">Email *</Label>
-                  <Input type="email" placeholder="name@company.com" value={form.email} onChange={e => set("email", e.target.value)} />
-                </div>
-                <div className="col-span-2">
-                  <Label className="text-xs">Address</Label>
-                  <Input placeholder="House No., Street, City, State, PIN" value={form.address} onChange={e => set("address", e.target.value)} />
-                </div>
-              </div>
-              <div className="border-t border-border pt-4">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Identity Documents</p>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4 p-4">
                   <div>
-                    <Label className="text-xs">Aadhar Number</Label>
-                    <Input placeholder="XXXX XXXX XXXX" value={form.aadharNumber} onChange={e => set("aadharNumber", e.target.value)} maxLength={14} />
+                    <Label className="text-xs font-semibold mb-1.5 block">First Name <span className="text-red-500">*</span></Label>
+                    <div className="relative">
+                      <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input className="pl-8" placeholder="e.g. Rahul" value={form.firstName} onChange={e => set("firstName", e.target.value)} />
+                    </div>
                   </div>
                   <div>
-                    <Label className="text-xs">PAN Number</Label>
-                    <Input placeholder="ABCDE1234F" value={form.panNumber} onChange={e => set("panNumber", e.target.value.toUpperCase())} maxLength={10} />
+                    <Label className="text-xs font-semibold mb-1.5 block">Last Name <span className="text-red-500">*</span></Label>
+                    <div className="relative">
+                      <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input className="pl-8" placeholder="e.g. Sharma" value={form.lastName} onChange={e => set("lastName", e.target.value)} />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold mb-1.5 block">Gender</Label>
+                    <Select value={form.gender} onChange={e => set("gender", e.target.value)}>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold mb-1.5 block">Date of Birth</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                      <Input type="date" className="pl-8" value={form.dateOfBirth} onChange={e => set("dateOfBirth", e.target.value)} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Contact Section */}
+              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
+                  <Phone className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Contact Details</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4 p-4">
+                  <div>
+                    <Label className="text-xs font-semibold mb-1.5 block">Phone <span className="text-red-500">*</span></Label>
+                    <div className="relative">
+                      <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input className="pl-8" placeholder="9XXXXXXXXX" value={form.phone} onChange={e => set("phone", e.target.value)} />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold mb-1.5 block">Email <span className="text-red-500">*</span></Label>
+                    <div className="relative">
+                      <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input type="email" className="pl-8" placeholder="name@company.com" value={form.email} onChange={e => set("email", e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="col-span-2">
+                    <Label className="text-xs font-semibold mb-1.5 block">Address</Label>
+                    <div className="relative">
+                      <Home className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input className="pl-8" placeholder="House No., Street, City, State, PIN" value={form.address} onChange={e => set("address", e.target.value)} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Identity Section */}
+              <div className="rounded-xl border border-primary/20 bg-primary/5 overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-primary/10 border-b border-primary/20">
+                  <Shield className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-[11px] font-bold text-primary uppercase tracking-widest">Government Identity</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4 p-4">
+                  <div>
+                    <Label className="text-xs font-semibold mb-1.5 block">Aadhar Number</Label>
+                    <div className="relative">
+                      <IdCard className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input className="pl-8 font-mono tracking-wider" placeholder="XXXX XXXX XXXX" value={form.aadharNumber} onChange={e => set("aadharNumber", e.target.value)} maxLength={14} />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold mb-1.5 block">PAN Number</Label>
+                    <div className="relative">
+                      <CreditCard className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input className="pl-8 font-mono tracking-wider uppercase" placeholder="ABCDE1234F" value={form.panNumber} onChange={e => set("panNumber", e.target.value.toUpperCase())} maxLength={10} />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -356,55 +431,83 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
           )}
 
           {tab === "professional" && (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="text-xs">Employee ID *</Label>
-                <Input placeholder="EMP-0001" value={form.employeeId} onChange={e => set("employeeId", e.target.value)} disabled={!!emp} />
+            <div className="space-y-5">
+              {/* Employment Info */}
+              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
+                  <Briefcase className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Employment Information</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4 p-4">
+                  <div>
+                    <Label className="text-xs font-semibold mb-1.5 block">Employee ID <span className="text-red-500">*</span></Label>
+                    <div className="relative">
+                      <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input className="pl-8 font-mono" placeholder="EMP-0001" value={form.employeeId} onChange={e => set("employeeId", e.target.value)} disabled={!!emp} />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold mb-1.5 block">Status</Label>
+                    <Select value={form.status} onChange={e => set("status", e.target.value)}>
+                      <option value="active">✅ Active</option>
+                      <option value="on_leave">🟡 On Leave</option>
+                      <option value="resigned">🟠 Resigned</option>
+                      <option value="terminated">🔴 Terminated</option>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold mb-1.5 block">Employee Type</Label>
+                    <Select value={form.employeeType} onChange={e => set("employeeType", e.target.value)}>
+                      <option value="permanent">Permanent</option>
+                      <option value="contract">Contract</option>
+                      <option value="casual">Casual</option>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold mb-1.5 block">Joining Date <span className="text-red-500">*</span></Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                      <Input type="date" className="pl-8" value={form.joiningDate} onChange={e => set("joiningDate", e.target.value)} />
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div>
-                <Label className="text-xs">Employee Status</Label>
-                <Select value={form.status} onChange={e => set("status", e.target.value)}>
-                  <option value="active">Active</option>
-                  <option value="on_leave">On Leave</option>
-                  <option value="resigned">Resigned</option>
-                  <option value="terminated">Terminated</option>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs">Department *</Label>
-                <Select value={form.department} onChange={e => set("department", e.target.value)}>
-                  <option value="">— Select Department —</option>
-                  {DEPT_LIST.map(d => <option key={d} value={d}>{d}</option>)}
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs">Designation *</Label>
-                <Select value={form.designation} onChange={e => set("designation", e.target.value)}>
-                  <option value="">— Select Designation —</option>
-                  {DESIGNATION_LIST.map(d => <option key={d} value={d}>{d}</option>)}
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs">Branch *</Label>
-                <Select value={form.branchId} onChange={e => set("branchId", Number(e.target.value))}>
-                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs">Employee Type</Label>
-                <Select value={form.employeeType} onChange={e => set("employeeType", e.target.value)}>
-                  <option value="permanent">Permanent</option>
-                  <option value="contract">Contract</option>
-                  <option value="casual">Casual</option>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs">Joining Date *</Label>
-                <Input type="date" value={form.joiningDate} onChange={e => set("joiningDate", e.target.value)} />
-              </div>
-              <div>
-                <Label className="text-xs">Biometric Device ID</Label>
-                <Input placeholder="e.g. 101" value={form.biometricId} onChange={e => set("biometricId", e.target.value)} />
+
+              {/* Role & Placement */}
+              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
+                  <Building2 className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Role & Placement</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4 p-4">
+                  <div>
+                    <Label className="text-xs font-semibold mb-1.5 block">Department <span className="text-red-500">*</span></Label>
+                    <Select value={form.department} onChange={e => set("department", e.target.value)}>
+                      <option value="">— Select Department —</option>
+                      {DEPT_LIST.map(d => <option key={d} value={d}>{d}</option>)}
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold mb-1.5 block">Designation <span className="text-red-500">*</span></Label>
+                    <Select value={form.designation} onChange={e => set("designation", e.target.value)}>
+                      <option value="">— Select Designation —</option>
+                      {DESIGNATION_LIST.map(d => <option key={d} value={d}>{d}</option>)}
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold mb-1.5 block">Branch <span className="text-red-500">*</span></Label>
+                    <Select value={form.branchId} onChange={e => set("branchId", Number(e.target.value))}>
+                      {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold mb-1.5 block">Biometric Device ID</Label>
+                    <div className="relative">
+                      <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input className="pl-8" placeholder="e.g. 101" value={form.biometricId} onChange={e => set("biometricId", e.target.value)} />
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -699,19 +802,30 @@ export default function Employees() {
       />
 
       {/* Tab Bar */}
-      <div className="flex items-center gap-1 border-b border-border">
-        {TABS.map(t => (
-          <button key={t} onClick={() => setActiveTab(t)}
-            className={cn("px-4 py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors flex items-center gap-1.5",
-              activeTab === t ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
-            )}>
-            {t === "Employee List" && <Users className="w-3.5 h-3.5" />}
-            {t === "Departments" && <Building2 className="w-3.5 h-3.5" />}
-            {t === "Designations" && <Layers className="w-3.5 h-3.5" />}
-            {t}
-          </button>
-        ))}
-        <div className="ml-auto flex gap-2 mb-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1 p-1 bg-muted/60 rounded-xl border border-border">
+          {TABS.map(t => (
+            <button key={t} onClick={() => setActiveTab(t)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-200",
+                activeTab === t
+                  ? "bg-background text-primary shadow-sm border border-border"
+                  : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+              )}>
+              {t === "Employee List" && <Users className="w-3.5 h-3.5" />}
+              {t === "Departments" && <Building2 className="w-3.5 h-3.5" />}
+              {t === "Designations" && <Layers className="w-3.5 h-3.5" />}
+              {t}
+              {t === "Employee List" && (
+                <span className={cn(
+                  "ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold tabular-nums",
+                  activeTab === t ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                )}>{allEmployees.length}</span>
+              )}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2">
           {activeTab === "Employee List" && (
             <>
               <Button variant="outline" onClick={exportCSV} className="text-xs h-8 px-3 flex items-center gap-1.5">
