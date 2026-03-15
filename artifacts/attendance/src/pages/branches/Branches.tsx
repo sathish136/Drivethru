@@ -28,7 +28,7 @@ export default function Branches() {
     queryKey: ["branches"],
     queryFn: () => fetch(apiUrl("/branches")).then(r => r.json()),
   });
-  const branches = data || [];
+  const branches = Array.isArray(data) ? data : [];
 
   const createB = useMutation({
     mutationFn: (body: any) => fetch(apiUrl("/branches"), {

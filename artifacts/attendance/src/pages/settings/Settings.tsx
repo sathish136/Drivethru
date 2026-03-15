@@ -4,8 +4,12 @@ import { PageHeader, Card, Button, Input, Label, Select } from "@/components/ui"
 import { cn } from "@/lib/utils";
 import {
   Calendar, Plus, Trash2, Copy, Check, Building, Clock,
-  Fingerprint, Users, ShieldCheck, FileText, Briefcase, ChevronRight
+  Fingerprint, Users, ShieldCheck, FileText, Briefcase, ChevronRight,
+  Database, Download, AlertTriangle, CheckCircle2
 } from "lucide-react";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+function apiUrl(path: string) { return `${BASE}/api${path}`; }
 
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
@@ -18,7 +22,7 @@ const TYPE_STYLE: Record<string, string> = {
 const POYA_ICON = "🌕";
 function isPoya(name: string) { return name.toLowerCase().includes("poya"); }
 
-type SettingsTab = "organisation" | "attendance" | "hr" | "holidays" | "biometric";
+type SettingsTab = "organisation" | "attendance" | "hr" | "holidays" | "biometric" | "mockdata";
 
 const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ElementType; description: string; color: string }[] = [
   { key: "organisation", label: "Organisation",       icon: Building,     description: "Name, country, timezone",       color: "text-emerald-600" },
@@ -26,6 +30,7 @@ const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ElementType;
   { key: "hr",           label: "HR Settings",        icon: Users,        description: "Leave, payroll, employment",     color: "text-violet-600"  },
   { key: "holidays",     label: "Holiday Settings",   icon: Calendar,     description: "Public & gazetted holidays",     color: "text-amber-600"   },
   { key: "biometric",   label: "Biometric / ADMS",   icon: Fingerprint,  description: "ZKTeco ZK Push configuration",   color: "text-sky-600"     },
+  { key: "mockdata",     label: "Mock Data",          icon: Database,     description: "Import & clear sample data",     color: "text-rose-600"    },
 ];
 
 export default function Settings() {
@@ -44,6 +49,32 @@ export default function Settings() {
   const [attSaved,  setAttSaved]  = useState(false);
   const [hrSaved,   setHrSaved]   = useState(false);
   const [zkSaved,   setZkSaved]   = useState(false);
+
+  const [mockImporting, setMockImporting] = useState(false);
+  const [mockClearing,  setMockClearing]  = useState(false);
+  const [mockMsg, setMockMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  async function handleImportMock() {
+    if (!confirm("This will import Sri Lanka Post sample data (branches, departments, designations, employees, holidays). Continue?")) return;
+    setMockImporting(true); setMockMsg(null);
+    try {
+      const r = await fetch(apiUrl("/mock-data/import"), { method: "POST" });
+      const d = await r.json();
+      setMockMsg({ type: d.success ? "success" : "error", text: d.message });
+    } catch { setMockMsg({ type: "error", text: "Request failed. Check server connection." }); }
+    setMockImporting(false);
+  }
+
+  async function handleClearMock() {
+    if (!confirm("WARNING: This will permanently delete ALL employees, departments, branches, shifts, and holidays. Are you sure?")) return;
+    setMockClearing(true); setMockMsg(null);
+    try {
+      const r = await fetch(apiUrl("/mock-data/clear"), { method: "DELETE" });
+      const d = await r.json();
+      setMockMsg({ type: d.success ? "success" : "error", text: d.message });
+    } catch { setMockMsg({ type: "error", text: "Request failed. Check server connection." }); }
+    setMockClearing(false);
+  }
 
   const [hrSettings, setHrSettings] = useState({
     annualLeave: "21", sickLeave: "12", casualLeave: "7",
@@ -540,6 +571,89 @@ export default function Settings() {
                 {zkSaved ? <><Check className="w-3.5 h-3.5" />Saved!</> : "Save ZK Settings"}
               </Button>
             </div>
+          </div>
+        )}
+
+        {/* ── Mock Data ─────────────────────────────────────── */}
+        {activeTab === "mockdata" && (
+          <div className="space-y-4">
+            {/* Status message */}
+            {mockMsg && (
+              <div className={cn(
+                "flex items-center gap-3 px-4 py-3 rounded-xl border text-sm",
+                mockMsg.type === "success"
+                  ? "bg-green-50 border-green-200 text-green-800"
+                  : "bg-red-50 border-red-200 text-red-800"
+              )}>
+                {mockMsg.type === "success"
+                  ? <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                  : <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />}
+                <span>{mockMsg.text}</span>
+                <button className="ml-auto text-xs opacity-60 hover:opacity-100" onClick={() => setMockMsg(null)}>✕</button>
+              </div>
+            )}
+
+            {/* About card */}
+            <Card className="p-5 border-rose-200 bg-rose-50/30">
+              <div className="flex items-center gap-2 mb-3 pb-3 border-b border-rose-100">
+                <Database className="w-4 h-4 text-rose-600" />
+                <span className="text-sm font-bold">Sri Lanka Post — Sample Data</span>
+                <span className="ml-auto text-xs bg-rose-100 text-rose-700 px-2 py-0.5 rounded font-mono">LK / SLP</span>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Instantly populate the system with realistic Sri Lanka Post data for testing and demonstration.
+                Includes branches across Sri Lanka, all departments, designations, 50 sample employees, and 2026 public holidays.
+              </p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+                {[
+                  { label: "Branches", value: "8", note: "Colombo, Kandy, Galle, Jaffna & more" },
+                  { label: "Departments", value: "8", note: "OPS, FIN, HR, IT, PSB & more" },
+                  { label: "Designations", value: "18", note: "PMG to Delivery Agent" },
+                  { label: "Employees", value: "50", note: "Sri Lankan names & NIC numbers" },
+                  { label: "Holidays", value: "26", note: "National, Poya & religious — 2026" },
+                  { label: "Shifts", value: "4", note: "General, Morning, Evening, Split" },
+                  { label: "Country", value: "LK", note: "Sri Lanka" },
+                  { label: "Currency", value: "LKR", note: "Sri Lankan Rupee" },
+                ].map(({ label, value, note }) => (
+                  <div key={label} className="bg-white rounded-lg border border-rose-100 p-3">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</p>
+                    <p className="text-xl font-bold text-rose-700 leading-tight">{value}</p>
+                    <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{note}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button
+                  className="flex items-center gap-2 text-xs bg-rose-600 hover:bg-rose-700 text-white"
+                  onClick={handleImportMock}
+                  disabled={mockImporting || mockClearing}
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  {mockImporting ? "Importing..." : "Import Sri Lanka Post Data"}
+                </Button>
+              </div>
+            </Card>
+
+            {/* Danger zone */}
+            <Card className="p-5 border-red-200 bg-red-50/20">
+              <div className="flex items-center gap-2 mb-3 pb-3 border-b border-red-100">
+                <AlertTriangle className="w-4 h-4 text-red-600" />
+                <span className="text-sm font-bold text-red-700">Danger Zone</span>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Permanently deletes all employees, departments, designations, branches, shifts, and holidays from the database.
+                This action cannot be undone. Use with caution.
+              </p>
+              <Button
+                variant="outline"
+                className="flex items-center gap-2 text-xs border-red-300 text-red-600 hover:bg-red-50"
+                onClick={handleClearMock}
+                disabled={mockImporting || mockClearing}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {mockClearing ? "Clearing..." : "Clear All Data"}
+              </Button>
+            </Card>
           </div>
         )}
       </div>

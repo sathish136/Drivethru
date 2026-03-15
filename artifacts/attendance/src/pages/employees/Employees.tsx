@@ -668,7 +668,7 @@ function DepartmentsTab() {
               <tr>{["Code","Department Name","Description","Status","Actions"].map(h => <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground">{h}</th>)}</tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {(depts || []).map((d: any) => (
+              {(Array.isArray(depts) ? depts : []).map((d: any) => (
                 <tr key={d.id} className="hover:bg-muted/30">
                   <td className="px-3 py-2.5 font-mono font-medium text-primary">{d.code}</td>
                   <td className="px-3 py-2.5 font-medium">{d.name}</td>
@@ -686,7 +686,7 @@ function DepartmentsTab() {
                   </td>
                 </tr>
               ))}
-              {!(depts || []).length && <tr><td colSpan={5} className="text-center py-8 text-muted-foreground">No departments found.</td></tr>}
+              {!(Array.isArray(depts) ? depts : []).length && <tr><td colSpan={5} className="text-center py-8 text-muted-foreground">No departments found.</td></tr>}
             </tbody>
           </table>
         )}
@@ -740,7 +740,7 @@ function DesignationsTab() {
               <Label className="text-xs">Department</Label>
               <Select value={form.departmentId} onChange={e => setForm(f => ({...f, departmentId: e.target.value}))}>
                 <option value="">— Any —</option>
-                {(depts || []).map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                {(Array.isArray(depts) ? depts : []).map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </Select>
             </div>
             <div>
@@ -764,7 +764,7 @@ function DesignationsTab() {
               <tr>{["Code","Designation","Department","Level","Status","Actions"].map(h => <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground">{h}</th>)}</tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {(desigs || []).map((d: any) => (
+              {(Array.isArray(desigs) ? desigs : []).map((d: any) => (
                 <tr key={d.id} className="hover:bg-muted/30">
                   <td className="px-3 py-2.5 font-mono text-primary font-medium">{d.code}</td>
                   <td className="px-3 py-2.5 font-medium">{d.name}</td>
@@ -783,7 +783,7 @@ function DesignationsTab() {
                   </td>
                 </tr>
               ))}
-              {!(desigs || []).length && <tr><td colSpan={6} className="text-center py-8 text-muted-foreground">No designations found.</td></tr>}
+              {!(Array.isArray(desigs) ? desigs : []).length && <tr><td colSpan={6} className="text-center py-8 text-muted-foreground">No designations found.</td></tr>}
             </tbody>
           </table>
         )}
