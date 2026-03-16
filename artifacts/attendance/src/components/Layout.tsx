@@ -89,7 +89,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [notifOpen, setNotifOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const storedUser = (() => {
@@ -116,6 +118,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     const handler = (e: MouseEvent) => {
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
         setNotifOpen(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -447,15 +452,51 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             {/* Divider */}
             <div className="w-px h-6 bg-border" />
 
-            {/* User chip */}
-            <div className="flex items-center gap-2 pl-1">
-              <div className="w-7 h-7 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-bold border border-primary/30 shrink-0">
-                {getInitials(userName)}
-              </div>
-              <div className="hidden md:block leading-tight">
-                <p className="text-[12px] font-semibold text-foreground">{userName}</p>
-                <p className="text-[10px] text-muted-foreground capitalize">{userRole}</p>
-              </div>
+            {/* User chip + dropdown */}
+            <div ref={userMenuRef} className="relative">
+              <button
+                onClick={() => setUserMenuOpen(o => !o)}
+                className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-lg hover:bg-muted transition-colors"
+              >
+                <div className="w-7 h-7 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-bold border border-primary/30 shrink-0">
+                  {getInitials(userName)}
+                </div>
+                <div className="hidden md:block leading-tight text-left">
+                  <p className="text-[12px] font-semibold text-foreground">{userName}</p>
+                  <p className="text-[10px] text-muted-foreground capitalize">{userRole}</p>
+                </div>
+              </button>
+
+              {/* User dropdown */}
+              {userMenuOpen && (
+                <div className="absolute right-0 top-full mt-2 w-52 bg-card border border-border rounded-xl shadow-xl z-50 overflow-hidden">
+                  {/* User info header */}
+                  <div className="px-4 py-3 border-b border-border bg-muted/40">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[11px] font-bold border border-primary/30 shrink-0">
+                        {getInitials(userName)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-semibold text-foreground truncate">{userName}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{userEmail}</p>
+                      </div>
+                    </div>
+                    <span className="mt-2 inline-block text-[10px] bg-primary/10 text-primary border border-primary/20 rounded-full px-2 py-0.5 font-medium capitalize">
+                      {userRole}
+                    </span>
+                  </div>
+                  {/* Logout */}
+                  <div className="p-1.5">
+                    <button
+                      onClick={() => { setUserMenuOpen(false); handleLogout(); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium text-red-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+                    >
+                      <LogOut className="w-3.5 h-3.5 shrink-0" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>
