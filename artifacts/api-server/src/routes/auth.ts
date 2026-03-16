@@ -60,6 +60,7 @@ router.post("/login", async (req, res) => {
     const branchIds: number[] = JSON.parse(user.branchIds || "[]");
     res.cookie("auth_token", token, { httpOnly: true, maxAge: 24 * 60 * 60 * 1000, sameSite: "lax" });
     res.json({
+      success: true,
       token,
       user: {
         id: user.id,
