@@ -855,13 +855,20 @@ export default function Employees() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterDept, setFilterDept] = useState("");
   const [filterType, setFilterType] = useState("");
+  const [filterRegionalId, setFilterRegionalId] = useState("");
+  const [filterBranchId, setFilterBranchId] = useState("");
   const [drawerEmp, setDrawerEmp] = useState<any | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const { data: branchRes } = useListBranches();
-  const branches = branchRes || [];
+  const branches: any[] = branchRes || [];
 
-  const params: any = { limit: 200 };
+  const regionalBranches = branches.filter((b: any) => b.type === "regional");
+  const subBranchesOfSelected = branches.filter(
+    (b: any) => b.type === "sub_branch" && String(b.parentId) === filterRegionalId
+  );
+
+  const params: any = { limit: 500 };
   if (filterStatus) params.status = filterStatus;
   if (filterDept) params.department = filterDept;
   if (filterType) params.employeeType = filterType;
@@ -871,17 +878,33 @@ export default function Employees() {
 
   const allEmployees = data?.employees || [];
 
+  // Collect all branch IDs that belong to the selected regional (regional itself + its sub-branches)
+  const regionalBranchIds = useMemo(() => {
+    if (!filterRegionalId) return null;
+    const id = Number(filterRegionalId);
+    const subIds = branches
+      .filter((b: any) => b.type === "sub_branch" && b.parentId === id)
+      .map((b: any) => b.id);
+    return new Set([id, ...subIds]);
+  }, [filterRegionalId, branches]);
+
   const employees = useMemo(() => {
-    if (!search) return allEmployees;
+    let list = allEmployees;
+    if (filterBranchId) {
+      list = list.filter((e: any) => e.branchId === Number(filterBranchId));
+    } else if (regionalBranchIds) {
+      list = list.filter((e: any) => regionalBranchIds.has(e.branchId));
+    }
+    if (!search) return list;
     const s = search.toLowerCase();
-    return allEmployees.filter((e: any) =>
+    return list.filter((e: any) =>
       empDisplayName(e).toLowerCase().includes(s) ||
       e.employeeId.toLowerCase().includes(s) ||
       (e.aadharNumber || "").replace(/\s/g,"").includes(s.replace(/\s/g,"")) ||
       (e.panNumber || "").toLowerCase().includes(s) ||
       (e.email || "").toLowerCase().includes(s)
     );
-  }, [allEmployees, search]);
+  }, [allEmployees, search, filterBranchId, regionalBranchIds]);
 
   function exportCSV() {
     const headers = ["Employee ID","First Name","Last Name","Gender","Designation","Department","Branch","Type","Status","Phone","Email","Aadhar","PAN","Joining Date"];
@@ -946,35 +969,67 @@ export default function Employees() {
 
       {activeTab === "Employee List" && (
         <>
-          <Card className="p-3 flex flex-wrap gap-2 items-center">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-              <Input placeholder="Search name, ID, Aadhar, PAN, email..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-8 text-xs" />
+          <Card className="p-3 space-y-2">
+            {/* Row 1: Search + Status + Type */}
+            <div className="flex flex-wrap gap-2 items-center">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Input placeholder="Search name, ID, Aadhar, PAN, email..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-8 text-xs" />
+              </div>
+              <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="h-8 text-xs w-36">
+                <option value="">All Status</option>
+                <option value="active">Active</option>
+                <option value="on_leave">On Leave</option>
+                <option value="resigned">Resigned</option>
+                <option value="terminated">Terminated</option>
+              </Select>
+              <Select value={filterDept} onChange={e => setFilterDept(e.target.value)} className="h-8 text-xs w-44">
+                <option value="">All Departments</option>
+                {DEPT_LIST.map(d => <option key={d} value={d}>{d}</option>)}
+              </Select>
+              <Select value={filterType} onChange={e => setFilterType(e.target.value)} className="h-8 text-xs w-32">
+                <option value="">All Types</option>
+                <option value="permanent">Permanent</option>
+                <option value="contract">Contract</option>
+                <option value="casual">Casual</option>
+              </Select>
             </div>
-            <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="h-8 text-xs w-36">
-              <option value="">All Status</option>
-              <option value="active">Active</option>
-              <option value="on_leave">On Leave</option>
-              <option value="resigned">Resigned</option>
-              <option value="terminated">Terminated</option>
-            </Select>
-            <Select value={filterDept} onChange={e => setFilterDept(e.target.value)} className="h-8 text-xs w-44">
-              <option value="">All Departments</option>
-              {DEPT_LIST.map(d => <option key={d} value={d}>{d}</option>)}
-            </Select>
-            <Select value={filterType} onChange={e => setFilterType(e.target.value)} className="h-8 text-xs w-32">
-              <option value="">All Types</option>
-              <option value="permanent">Permanent</option>
-              <option value="contract">Contract</option>
-              <option value="casual">Casual</option>
-            </Select>
-            {(search || filterStatus || filterDept || filterType) && (
-              <button onClick={() => { setSearch(""); setFilterStatus(""); setFilterDept(""); setFilterType(""); }}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-                <X className="w-3.5 h-3.5" /> Clear
-              </button>
-            )}
-            <span className="ml-auto text-xs text-muted-foreground">{employees.length} employee{employees.length !== 1 ? "s" : ""}</span>
+            {/* Row 2: Branch Filters */}
+            <div className="flex flex-wrap gap-2 items-center">
+              <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              <Select
+                value={filterRegionalId}
+                onChange={e => { setFilterRegionalId(e.target.value); setFilterBranchId(""); }}
+                className="h-8 text-xs w-56"
+              >
+                <option value="">All Regional Offices</option>
+                {regionalBranches.map((b: any) => (
+                  <option key={b.id} value={b.id}>[{b.code}] {b.name}</option>
+                ))}
+              </Select>
+              {filterRegionalId && (
+                <Select
+                  value={filterBranchId}
+                  onChange={e => setFilterBranchId(e.target.value)}
+                  className="h-8 text-xs w-52"
+                >
+                  <option value="">All Sub-branches</option>
+                  <option value={filterRegionalId}>— Regional Office itself —</option>
+                  {subBranchesOfSelected.map((b: any) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </Select>
+              )}
+              {(search || filterStatus || filterDept || filterType || filterRegionalId || filterBranchId) && (
+                <button
+                  onClick={() => { setSearch(""); setFilterStatus(""); setFilterDept(""); setFilterType(""); setFilterRegionalId(""); setFilterBranchId(""); }}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground ml-1"
+                >
+                  <X className="w-3.5 h-3.5" /> Clear all
+                </button>
+              )}
+              <span className="ml-auto text-xs text-muted-foreground">{employees.length} employee{employees.length !== 1 ? "s" : ""}</span>
+            </div>
           </Card>
 
           <Card className="overflow-hidden">

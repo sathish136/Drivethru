@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PageHeader, Card, Button, Input, Label, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { Plus, Edit2, Trash2, X, Network, MapPin, User, Building2 } from "lucide-react";
+import { Plus, Edit2, Trash2, X, Network, MapPin, User, Building2, Search } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 function apiUrl(path: string) { return `${BASE}/api${path}`; }
@@ -51,6 +51,10 @@ export default function Branches() {
   const [editBranch, setEditBranch] = useState<any | null>(null);
   const [form, setForm] = useState({ ...EMPTY_BRANCH });
 
+  const [searchText, setSearchText] = useState("");
+  const [filterType, setFilterType] = useState("");
+  const [filterParentId, setFilterParentId] = useState("");
+
   function openAdd() { setForm({ ...EMPTY_BRANCH }); setEditBranch(null); setDrawerOpen(true); }
   function openEdit(b: any) {
     setForm({
@@ -76,6 +80,24 @@ export default function Branches() {
   const regionals   = branches.filter((b: any) => b.type === "regional");
   const subBranches = branches.filter((b: any) => b.type === "sub_branch");
   const parentOptions = branches.filter((b: any) => b.id !== editBranch?.id);
+
+  const filteredBranches = useMemo(() => {
+    let list = branches;
+    if (filterType) list = list.filter((b: any) => b.type === filterType);
+    if (filterParentId) list = list.filter((b: any) => String(b.parentId) === filterParentId);
+    if (searchText) {
+      const s = searchText.toLowerCase();
+      list = list.filter((b: any) =>
+        b.name.toLowerCase().includes(s) ||
+        b.code.toLowerCase().includes(s) ||
+        (b.address || "").toLowerCase().includes(s) ||
+        (b.managerName || "").toLowerCase().includes(s)
+      );
+    }
+    return list;
+  }, [branches, filterType, filterParentId, searchText]);
+
+  const hasFilter = !!(searchText || filterType || filterParentId);
 
   return (
     <div className="space-y-4">
@@ -103,6 +125,44 @@ export default function Branches() {
         ))}
       </div>
 
+      {/* Filter Bar */}
+      <Card className="p-3 flex flex-wrap gap-2 items-center">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search name, code, address, manager..."
+            value={searchText}
+            onChange={e => setSearchText(e.target.value)}
+            className="pl-8 h-8 text-xs"
+          />
+        </div>
+        <Select value={filterType} onChange={e => { setFilterType(e.target.value); setFilterParentId(""); }} className="h-8 text-xs w-40">
+          <option value="">All Types</option>
+          <option value="head_office">Head Office</option>
+          <option value="regional">Regional Office</option>
+          <option value="sub_branch">Sub Branch</option>
+        </Select>
+        {(filterType === "sub_branch" || filterType === "") && (
+          <Select value={filterParentId} onChange={e => setFilterParentId(e.target.value)} className="h-8 text-xs w-56">
+            <option value="">All Regional Offices</option>
+            {regionals.map((b: any) => (
+              <option key={b.id} value={b.id}>[{b.code}] {b.name}</option>
+            ))}
+          </Select>
+        )}
+        {hasFilter && (
+          <button
+            onClick={() => { setSearchText(""); setFilterType(""); setFilterParentId(""); }}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <X className="w-3.5 h-3.5" /> Clear
+          </button>
+        )}
+        <span className="ml-auto text-xs text-muted-foreground">
+          {filteredBranches.length} of {branches.length} branch{branches.length !== 1 ? "es" : ""}
+        </span>
+      </Card>
+
       {/* Table */}
       <Card className="overflow-hidden">
         {isLoading ? (
@@ -118,7 +178,7 @@ export default function Branches() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {branches.map((b: any) => (
+                {filteredBranches.map((b: any) => (
                   <tr key={b.id} className="hover:bg-muted/30 transition-colors group">
                     <td className="px-3 py-2.5 font-mono font-medium text-primary">{b.code}</td>
                     <td className="px-3 py-2.5">
@@ -151,8 +211,10 @@ export default function Branches() {
                     </td>
                   </tr>
                 ))}
-                {!branches.length && (
-                  <tr><td colSpan={9} className="text-center py-12 text-muted-foreground">No branches yet. Click "Add Branch" to get started.</td></tr>
+                {!filteredBranches.length && (
+                  <tr><td colSpan={9} className="text-center py-12 text-muted-foreground">
+                    {hasFilter ? "No branches match the current filters." : "No branches yet. Click \"Add Branch\" to get started."}
+                  </td></tr>
                 )}
               </tbody>
             </table>
