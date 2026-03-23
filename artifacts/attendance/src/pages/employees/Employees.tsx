@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   useListEmployees, useCreateEmployee, useUpdateEmployee, useDeleteEmployee,
@@ -247,6 +247,26 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
   const [photoPreview, setPhotoPreview] = useState<string>(emp?.photoUrl || "");
   const [photoUploading, setPhotoUploading] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
+  const [regionalInfo, setRegionalInfo] = useState<{ prefix: string; nextId: string; regionalName: string } | null>(null);
+  const [empIdError, setEmpIdError] = useState<string>("");
+
+  useEffect(() => {
+    if (emp) return;
+    const branchId = Number(form.branchId);
+    if (!branchId) return;
+    fetch(apiUrl(`/employees/next-id?branchId=${branchId}`))
+      .then(r => r.json())
+      .then(data => {
+        if (!data.noRegional) {
+          setRegionalInfo({ prefix: data.prefix, nextId: data.nextId, regionalName: data.regionalName });
+          setForm(f => ({ ...f, employeeId: data.nextId }));
+          setEmpIdError("");
+        } else {
+          setRegionalInfo(null);
+        }
+      })
+      .catch(() => {});
+  }, [form.branchId, emp]);
 
   async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -271,6 +291,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
   function set(k: string, v: any) { setForm(f => ({ ...f, [k]: v })); }
 
   function handleSave() {
+    setEmpIdError("");
     const payload = {
       ...form,
       fullName: `${form.firstName} ${form.lastName}`.trim() || form.firstName || "Employee",
@@ -278,10 +299,20 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
       shiftId: form.shiftId ? Number(form.shiftId) : null,
       reportingManagerId: form.reportingManagerId ? Number(form.reportingManagerId) : null,
     };
+    const onError = (data: any) => {
+      if (data?.code === "INVALID_EMPLOYEE_ID") {
+        setEmpIdError(data.message || "Invalid Employee ID");
+        setTab("professional");
+      }
+    };
     if (emp?.id) {
-      updateEmp.mutate({ id: emp.id, data: payload }, { onSuccess: onSaved });
+      updateEmp.mutate({ id: emp.id, data: payload }, {
+        onSuccess: (data) => { if (data?.code === "INVALID_EMPLOYEE_ID") { onError(data); } else { onSaved(); } }
+      });
     } else {
-      createEmp.mutate({ data: payload }, { onSuccess: onSaved });
+      createEmp.mutate({ data: payload }, {
+        onSuccess: (data) => { if (data?.code === "INVALID_EMPLOYEE_ID") { onError(data); } else { onSaved(); } }
+      });
     }
   }
 
@@ -488,12 +519,37 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                   <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Employment Information</span>
                 </div>
                 <div className="grid grid-cols-2 gap-4 p-4">
-                  <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">Employee ID <span className="text-red-500">*</span></Label>
+                  <div className="col-span-2">
+                    <Label className="text-xs font-semibold mb-1.5 block">
+                      Employee ID <span className="text-red-500">*</span>
+                      {regionalInfo && !emp && (
+                        <span className="ml-2 inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                          <Building2 className="w-2.5 h-2.5" />
+                          {regionalInfo.regionalName} Regional · prefix: <span className="font-mono font-bold">{regionalInfo.prefix}</span>
+                        </span>
+                      )}
+                    </Label>
                     <div className="relative">
                       <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <Input className="pl-8 font-mono" placeholder="EMP-0001" value={form.employeeId} onChange={e => set("employeeId", e.target.value)} disabled={!!emp} />
+                      <Input
+                        className={cn("pl-8 font-mono uppercase", empIdError ? "border-red-400 focus:border-red-500" : "")}
+                        placeholder={regionalInfo ? `${regionalInfo.prefix}001` : "EMP-0001"}
+                        value={form.employeeId}
+                        onChange={e => { set("employeeId", e.target.value.toUpperCase()); setEmpIdError(""); }}
+                        disabled={!!emp}
+                      />
                     </div>
+                    {empIdError ? (
+                      <p className="text-xs text-red-500 flex items-start gap-1 mt-1.5">
+                        <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />{empIdError}
+                      </p>
+                    ) : regionalInfo && !emp ? (
+                      <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
+                        Suggested next ID: <span className="font-mono font-semibold text-foreground">{regionalInfo.nextId}</span>
+                        — must be unique across all {regionalInfo.regionalName} branches
+                      </p>
+                    ) : null}
                   </div>
                   <div>
                     <Label className="text-xs font-semibold mb-1.5 block">Status</Label>
