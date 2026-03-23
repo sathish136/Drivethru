@@ -969,67 +969,60 @@ export default function Employees() {
 
       {activeTab === "Employee List" && (
         <>
-          <Card className="p-3 space-y-2">
-            {/* Row 1: Search + Status + Type */}
-            <div className="flex flex-wrap gap-2 items-center">
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                <Input placeholder="Search name, ID, Aadhar, PAN, email..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-8 text-xs" />
-              </div>
-              <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="h-8 text-xs w-36">
-                <option value="">All Status</option>
-                <option value="active">Active</option>
-                <option value="on_leave">On Leave</option>
-                <option value="resigned">Resigned</option>
-                <option value="terminated">Terminated</option>
-              </Select>
-              <Select value={filterDept} onChange={e => setFilterDept(e.target.value)} className="h-8 text-xs w-44">
-                <option value="">All Departments</option>
-                {DEPT_LIST.map(d => <option key={d} value={d}>{d}</option>)}
-              </Select>
-              <Select value={filterType} onChange={e => setFilterType(e.target.value)} className="h-8 text-xs w-32">
-                <option value="">All Types</option>
-                <option value="permanent">Permanent</option>
-                <option value="contract">Contract</option>
-                <option value="casual">Casual</option>
-              </Select>
+          <Card className="p-3 flex flex-wrap gap-2 items-center">
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input placeholder="Search name, ID, Aadhar, PAN, email..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-8 text-xs" />
             </div>
-            {/* Row 2: Branch Filters */}
-            <div className="flex flex-wrap gap-2 items-center">
-              <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <Select
+              value={filterRegionalId}
+              onChange={e => { setFilterRegionalId(e.target.value); setFilterBranchId(""); }}
+              className="h-8 text-xs w-48"
+            >
+              <option value="">All Regional Offices</option>
+              {regionalBranches.map((b: any) => (
+                <option key={b.id} value={b.id}>[{b.code}] {b.name}</option>
+              ))}
+            </Select>
+            {filterRegionalId && (
               <Select
-                value={filterRegionalId}
-                onChange={e => { setFilterRegionalId(e.target.value); setFilterBranchId(""); }}
-                className="h-8 text-xs w-56"
+                value={filterBranchId}
+                onChange={e => setFilterBranchId(e.target.value)}
+                className="h-8 text-xs w-44"
               >
-                <option value="">All Regional Offices</option>
-                {regionalBranches.map((b: any) => (
-                  <option key={b.id} value={b.id}>[{b.code}] {b.name}</option>
+                <option value="">All Sub-branches</option>
+                <option value={filterRegionalId}>— Regional Office itself —</option>
+                {subBranchesOfSelected.map((b: any) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </Select>
-              {filterRegionalId && (
-                <Select
-                  value={filterBranchId}
-                  onChange={e => setFilterBranchId(e.target.value)}
-                  className="h-8 text-xs w-52"
-                >
-                  <option value="">All Sub-branches</option>
-                  <option value={filterRegionalId}>— Regional Office itself —</option>
-                  {subBranchesOfSelected.map((b: any) => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </Select>
-              )}
-              {(search || filterStatus || filterDept || filterType || filterRegionalId || filterBranchId) && (
-                <button
-                  onClick={() => { setSearch(""); setFilterStatus(""); setFilterDept(""); setFilterType(""); setFilterRegionalId(""); setFilterBranchId(""); }}
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground ml-1"
-                >
-                  <X className="w-3.5 h-3.5" /> Clear all
-                </button>
-              )}
-              <span className="ml-auto text-xs text-muted-foreground">{employees.length} employee{employees.length !== 1 ? "s" : ""}</span>
-            </div>
+            )}
+            <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="h-8 text-xs w-32">
+              <option value="">All Status</option>
+              <option value="active">Active</option>
+              <option value="on_leave">On Leave</option>
+              <option value="resigned">Resigned</option>
+              <option value="terminated">Terminated</option>
+            </Select>
+            <Select value={filterDept} onChange={e => setFilterDept(e.target.value)} className="h-8 text-xs w-40">
+              <option value="">All Departments</option>
+              {DEPT_LIST.map(d => <option key={d} value={d}>{d}</option>)}
+            </Select>
+            <Select value={filterType} onChange={e => setFilterType(e.target.value)} className="h-8 text-xs w-28">
+              <option value="">All Types</option>
+              <option value="permanent">Permanent</option>
+              <option value="contract">Contract</option>
+              <option value="casual">Casual</option>
+            </Select>
+            {(search || filterStatus || filterDept || filterType || filterRegionalId || filterBranchId) && (
+              <button
+                onClick={() => { setSearch(""); setFilterStatus(""); setFilterDept(""); setFilterType(""); setFilterRegionalId(""); setFilterBranchId(""); }}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-3.5 h-3.5" /> Clear
+              </button>
+            )}
+            <span className="ml-auto text-xs text-muted-foreground">{employees.length} employee{employees.length !== 1 ? "s" : ""}</span>
           </Card>
 
           <Card className="overflow-hidden">
