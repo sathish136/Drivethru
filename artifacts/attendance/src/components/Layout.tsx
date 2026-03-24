@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import liveuLogo from "@/assets/liveu-logo.png";
-import drivethruLogo from "@/assets/postoffice-logo.png";
+import drivethruLogo from "@/assets/drivethru-brand.svg";
 import {
   LayoutDashboard,
   Users,
