@@ -275,7 +275,7 @@ export default function Login() {
 
               <div className="mt-6 pt-5 border-t border-gray-100 flex items-center justify-center gap-2">
                 <img src={liveuLogo} alt="Liveu" className="w-5 h-5 rounded-full object-cover" />
-                <p className="text-[11px] text-gray-400">Powered by <span className="font-semibold text-gray-500">Liveu</span></p>
+                <p className="text-[11px] text-gray-400">Powered by <span className="font-semibold text-gray-500">Liveu Pvr Ltd</span></p>
               </div>
             </div>
 
