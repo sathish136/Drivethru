@@ -203,6 +203,11 @@ router.put("/:id", async (req, res) => {
   try {
     const dbId = Number(req.params.id);
     const body = { ...req.body };
+    // Strip read-only / computed fields that must never be passed to Drizzle
+    delete body.id;
+    delete body.createdAt;
+    delete body.branchName;
+    delete body.shiftName;
     if (body.firstName && body.lastName) {
       body.fullName = `${body.firstName} ${body.lastName}`;
     }
