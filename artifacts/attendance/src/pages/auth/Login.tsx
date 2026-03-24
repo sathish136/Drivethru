@@ -1,41 +1,43 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Mail, Lock, AlertCircle, Shield, Clock, Users, BarChart3, Eye, EyeOff } from "lucide-react";
+import { Lock, AlertCircle, Eye, EyeOff, ArrowRight, CheckCircle2 } from "lucide-react";
 import drivethruLogo from "@/assets/drivethru-brand.svg";
 import liveuLogo from "@/assets/liveu-logo.png";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-const features = [
-  { icon: Clock,    title: "Real-time Attendance",  desc: "Live biometric tracking across all branches" },
-  { icon: Users,    title: "Employee Management",    desc: "Manage staff records, shifts and payroll"    },
-  { icon: BarChart3,title: "Smart Analytics",         desc: "Reports and insights at your fingertips"     },
+const FEATURES = [
+  "Shift & overtime management",
+  "EPF / ETF automated payroll",
+  "Leave & approval workflows",
+  "Cloud-based, anywhere access",
 ];
 
-/* Brand blue */
-const B = "200 60% 48%";
-const primary     = `hsl(${B})`;
-const primaryDim  = `hsl(${B} / .15)`;
-const primaryBorder = `hsl(${B} / .25)`;
-const primaryGlow = `hsl(${B} / .45)`;
+const STATS = [
+  { value: "99.9%", label: "Uptime" },
+  { value: "Real-time", label: "Sync" },
+  { value: "AES-256", label: "Secured" },
+];
 
 export default function Login() {
   const [, setLocation] = useLocation();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [username, setUsername]         = useState("");
+  const [password, setPassword]         = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [mounted, setMounted] = useState(false);
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState("");
+  const [mounted, setMounted]           = useState(false);
+  const [userFocused, setUserFocused]   = useState(false);
+  const [passFocused, setPassFocused]   = useState(false);
 
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => { setTimeout(() => setMounted(true), 60); }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const res = await fetch(`${BASE}/api/auth/login`, {
+      const res  = await fetch(`${BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -58,234 +60,343 @@ export default function Login() {
   return (
     <>
       <style>{`
-        @keyframes float1 { 0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-28px) scale(1.04)} }
-        @keyframes float2 { 0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(22px) scale(0.96)} }
-        @keyframes float3 { 0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(-16px) rotate(6deg)} }
-        @keyframes pulse-ring { 0%{transform:scale(0.9);opacity:.6}70%{transform:scale(1.15);opacity:0}100%{transform:scale(0.9);opacity:0} }
-        @keyframes slide-up  { from{opacity:0;transform:translateY(32px)}to{opacity:1;transform:translateY(0)} }
-        @keyframes slide-right{ from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)} }
-        @keyframes spin-slow { from{transform:rotate(0deg)}to{transform:rotate(360deg)} }
-        @keyframes blob { 0%,100%{border-radius:60% 40% 70% 30%/50% 60% 40% 60%}33%{border-radius:30% 70% 40% 60%/60% 30% 70% 40%}66%{border-radius:70% 30% 60% 40%/30% 70% 30% 70%} }
-        @keyframes shimmer { 0%{opacity:.4}50%{opacity:.8}100%{opacity:.4} }
-        @keyframes count-in { from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)} }
-        .anim-float1 { animation: float1 6s ease-in-out infinite; }
-        .anim-float2 { animation: float2 8s ease-in-out infinite; }
-        .anim-float3 { animation: float3 5s ease-in-out infinite; }
-        .anim-pulse-ring { animation: pulse-ring 2.5s ease-out infinite; }
-        .anim-spin { animation: spin-slow 18s linear infinite; }
-        .anim-blob { animation: blob 8s ease-in-out infinite; }
-        .anim-shimmer { animation: shimmer 3s ease-in-out infinite; }
-        .panel-left  { animation: slide-up 0.7s cubic-bezier(.22,1,.36,1) both; }
-        .panel-right { animation: slide-right 0.7s 0.15s cubic-bezier(.22,1,.36,1) both; }
-        .feature-row:nth-child(1){ animation: count-in .5s .4s both }
-        .feature-row:nth-child(2){ animation: count-in .5s .55s both }
-        .feature-row:nth-child(3){ animation: count-in .5s .7s both }
-        .form-row:nth-child(1){ animation: count-in .45s .3s both }
-        .form-row:nth-child(2){ animation: count-in .45s .42s both }
-        .form-row:nth-child(3){ animation: count-in .45s .54s both }
-        .input-mod {
-          width:100%; padding:.625rem .875rem .625rem 2.6rem;
-          background:#f4f9fc; border:1.5px solid #cce4ef;
-          border-radius:.75rem; font-size:.875rem; color:#0f2d3a;
-          outline:none; transition: border-color .2s, box-shadow .2s, background .2s;
+        @keyframes fadeUp    { from{opacity:0;transform:translateY(22px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes fadeIn    { from{opacity:0} to{opacity:1} }
+        @keyframes slideLeft { from{opacity:0;transform:translateX(-28px)} to{opacity:1;transform:translateX(0)} }
+        @keyframes slideRight{ from{opacity:0;transform:translateX(28px)} to{opacity:1;transform:translateX(0)} }
+        @keyframes floatY    { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-14px)} }
+        @keyframes rotateSlow{ from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        @keyframes pulseDot  { 0%,100%{opacity:1} 50%{opacity:.4} }
+        @keyframes shimmerBtn{
+          0%  {background-position:-200% center}
+          100%{background-position: 200% center}
         }
-        .input-mod:focus {
-          border-color:${primary}; background:#fff;
-          box-shadow:0 0 0 3px ${primaryGlow}33;
+
+        .sl { animation: slideLeft  .7s cubic-bezier(.22,1,.36,1) both; }
+        .sr { animation: slideRight .7s .08s cubic-bezier(.22,1,.36,1) both; }
+        .fu { animation: fadeUp  .55s cubic-bezier(.22,1,.36,1) both; }
+        .fi { animation: fadeIn  .5s ease both; }
+        .d1 { animation-delay:.08s }  .d2 { animation-delay:.18s }
+        .d3 { animation-delay:.28s }  .d4 { animation-delay:.38s }
+        .d5 { animation-delay:.50s }  .d6 { animation-delay:.65s }
+        .d7 { animation-delay:.80s }
+
+        .float-shape { animation: floatY 6s ease-in-out infinite; }
+        .float-shape2{ animation: floatY 8s ease-in-out infinite; animation-delay:-3s; }
+        .rotate-ring { animation: rotateSlow 28s linear infinite; }
+        .rotate-ring2{ animation: rotateSlow 20s linear infinite reverse; }
+        .pulse-dot   { animation: pulseDot 2s ease-in-out infinite; }
+
+        /* Inputs */
+        .lf-input {
+          width: 100%;
+          padding: .78rem 1rem .78rem 2.75rem;
+          border-radius: 12px;
+          font-size: .9rem;
+          font-family: inherit;
+          outline: none;
+          transition: border-color .18s, box-shadow .18s, background .18s;
+          background: #F0F6FB;
+          border: 1.5px solid #D6E6F2;
+          color: #0c2d45;
         }
-        .btn-primary {
-          width:100%; padding:.75rem; border-radius:.875rem; font-size:.9375rem;
-          font-weight:600; color:#fff; border:none; cursor:pointer;
-          background: linear-gradient(135deg, hsl(200 60% 46%), hsl(205 65% 38%));
-          box-shadow: 0 4px 18px ${primaryGlow};
-          transition: opacity .2s, transform .15s, box-shadow .2s;
-          position:relative; overflow:hidden;
+        .lf-input::placeholder { color: #9BB5C8; }
+        .lf-input.focused {
+          background: #fff;
+          border-color: #2980B9;
+          box-shadow: 0 0 0 4px rgba(41,128,185,.12);
         }
-        .btn-primary:hover:not(:disabled){ opacity:.92; transform:translateY(-1px); box-shadow:0 6px 24px ${primaryGlow}; }
-        .btn-primary:active:not(:disabled){ transform:translateY(0); }
-        .btn-primary:disabled{ opacity:.7; cursor:not-allowed; }
-        .btn-primary::after { content:''; position:absolute; inset:0;
-          background:linear-gradient(135deg,rgba(255,255,255,.15),transparent);
-          border-radius:inherit; }
+        .lf-icon {
+          position: absolute;
+          left: .85rem;
+          top: 50%;
+          transform: translateY(-50%);
+          pointer-events: none;
+          transition: color .18s;
+          color: #9BB5C8;
+        }
+        .lf-icon.active { color: #2980B9; }
+
+        /* Button */
+        .lf-btn {
+          width: 100%;
+          padding: .85rem;
+          border-radius: 12px;
+          font-size: .9375rem;
+          font-weight: 700;
+          letter-spacing: .015em;
+          color: #fff;
+          border: none;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: .45rem;
+          position: relative;
+          overflow: hidden;
+          background: linear-gradient(135deg, #1a7bbf 0%, #1565a8 60%, #0e4f8a 100%);
+          box-shadow: 0 8px 28px rgba(21,101,168,.35), 0 1px 0 rgba(255,255,255,.18) inset;
+          transition: transform .15s, box-shadow .15s, opacity .15s;
+        }
+        .lf-btn::before {
+          content:'';
+          position:absolute; inset:0;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,.14), transparent);
+          background-size: 200% 100%;
+          animation: shimmerBtn 2.6s ease-in-out infinite;
+        }
+        .lf-btn:hover:not(:disabled){ transform:translateY(-1.5px); box-shadow:0 12px 36px rgba(21,101,168,.42); }
+        .lf-btn:active:not(:disabled){ transform:translateY(0); }
+        .lf-btn:disabled{ opacity:.65; cursor:not-allowed; }
       `}</style>
 
-      <div className="min-h-screen flex overflow-hidden" style={{ background: "hsl(210 35% 10%)" }}>
+      <div className="min-h-screen flex overflow-hidden" style={{ background: "#EBF3FA" }}>
 
-        {/* ── LEFT PANEL — branding & animations ── */}
-        <div className={`hidden lg:flex lg:w-[55%] flex-col relative overflow-hidden ${mounted ? "panel-left" : "opacity-0"}`}
-          style={{ background: "linear-gradient(145deg, hsl(210 35% 11%) 0%, hsl(210 40% 8%) 100%)" }}>
+        {/* ══ LEFT — Branding ══ */}
+        <div
+          className={`hidden lg:flex lg:w-[48%] flex-col relative overflow-hidden ${mounted ? "sl" : "opacity-0"}`}
+          style={{
+            background: "linear-gradient(148deg, #1565a8 0%, #1a7bbf 45%, #1090d4 100%)",
+          }}
+        >
+          {/* Geometric decoration */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            {/* Dot grid */}
+            <div className="absolute inset-0 opacity-[.07]"
+              style={{ backgroundImage:"radial-gradient(rgba(255,255,255,.9) 1.2px, transparent 1.2px)", backgroundSize:"30px 30px" }} />
 
-          {/* Animated blobs */}
-          <div className="anim-blob absolute w-[480px] h-[480px] -top-24 -left-24 opacity-[.08]"
-            style={{ background: primary, filter: "blur(2px)" }} />
-          <div className="anim-blob absolute w-[360px] h-[360px] bottom-0 right-0 opacity-[.06]"
-            style={{ background: "hsl(190 70% 55%)", animationDelay: "-4s", filter: "blur(2px)" }} />
+            {/* Rings */}
+            <div className="rotate-ring absolute rounded-full"
+              style={{ width:380, height:380, top:"42%", left:"50%", transform:"translate(-50%,-50%)",
+                border:"1.5px dashed rgba(255,255,255,.14)" }} />
+            <div className="rotate-ring2 absolute rounded-full"
+              style={{ width:560, height:560, top:"42%", left:"50%", transform:"translate(-50%,-50%)",
+                border:"1px solid rgba(255,255,255,.07)" }} />
 
-          {/* Floating circles */}
-          <div className="anim-float1 absolute top-[15%] right-[12%] w-28 h-28 rounded-full border border-white/8"
-            style={{ background: "radial-gradient(circle at 30% 30%, rgba(255,255,255,.06), transparent)" }} />
-          <div className="anim-float2 absolute bottom-[20%] left-[8%] w-20 h-20 rounded-full border border-white/6"
-            style={{ background: `radial-gradient(circle at 30% 30%, ${primaryDim}, transparent)` }} />
-          <div className="anim-float3 absolute top-[55%] right-[22%] w-12 h-12 rounded-full"
-            style={{ background: primaryDim, border: `1px solid ${primaryBorder}` }} />
+            {/* Floating shapes */}
+            <div className="float-shape absolute right-[14%] top-[18%] rounded-2xl"
+              style={{ width:80, height:80,
+                background:"rgba(255,255,255,.10)", backdropFilter:"blur(4px)",
+                border:"1px solid rgba(255,255,255,.2)", transform:"rotate(12deg)" }} />
+            <div className="float-shape2 absolute left-[10%] bottom-[22%] rounded-2xl"
+              style={{ width:56, height:56,
+                background:"rgba(255,255,255,.08)",
+                border:"1px solid rgba(255,255,255,.15)", transform:"rotate(-8deg)" }} />
+            <div className="float-shape absolute right-[8%] bottom-[30%] rounded-full"
+              style={{ width:36, height:36, background:"rgba(255,255,255,.12)" }} />
 
-          {/* Spinning ring */}
-          <div className="anim-spin absolute top-[30%] left-[5%] w-40 h-40 rounded-full opacity-10"
-            style={{ border: `1.5px dashed ${primary}` }} />
-
-          {/* Grid dots pattern */}
-          <div className="absolute inset-0 opacity-[.03]"
-            style={{backgroundImage:"radial-gradient(circle, rgba(255,255,255,.8) 1px, transparent 1px)", backgroundSize:"32px 32px"}} />
+            {/* Large soft circle */}
+            <div className="absolute rounded-full"
+              style={{ width:500, height:500, bottom:-180, right:-120,
+                background:"radial-gradient(circle, rgba(255,255,255,.08), transparent 70%)" }} />
+            <div className="absolute rounded-full"
+              style={{ width:300, height:300, top:-80, left:-80,
+                background:"radial-gradient(circle, rgba(255,255,255,.10), transparent 70%)" }} />
+          </div>
 
           {/* Content */}
           <div className="relative z-10 flex flex-col h-full px-12 py-10">
+
             {/* Brand */}
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <div className="anim-pulse-ring absolute inset-0 rounded-full"
-                  style={{ background: primaryGlow }} />
-                <div className="w-12 h-12 rounded-full relative flex items-center justify-center text-white font-bold text-xl"
-                  style={{ background: primary, boxShadow: `0 0 20px ${primaryGlow}` }}>P</div>
+            <div className={`flex items-center gap-3 ${mounted ? "fu" : "opacity-0"}`}>
+              <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm"
+                style={{ border:"1px solid rgba(255,255,255,.3)" }}>
+                <img src={drivethruLogo} alt="Drivethru" className="w-7 h-7 object-contain" />
               </div>
               <div>
-                <p className="font-bold text-white text-base tracking-tight leading-none">Drivethru</p>
-                <p className="text-white/40 text-[11px] mt-0.5">Attendance Management System</p>
+                <p className="text-white font-bold text-[15px] tracking-tight leading-none">Drivethru</p>
+                <p className="text-white/55 text-[10px] mt-0.5 tracking-widest uppercase">Attendance Management</p>
               </div>
             </div>
 
-            {/* Hero text */}
-            <div className="mt-auto mb-10">
-              <div className="anim-shimmer inline-flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-3 py-1 mb-5">
-                <span className="w-1.5 h-1.5 rounded-full bg-sky-400 inline-block" style={{ boxShadow: "0 0 6px #38bdf8" }} />
-                <span className="text-white/60 text-[11px] font-medium">System Operational</span>
+            {/* Hero */}
+            <div className="mt-auto mb-16">
+
+              {/* Status badge */}
+              <div className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full mb-8 ${mounted ? "fu d1" : "opacity-0"}`}
+                style={{ background:"rgba(255,255,255,.15)", border:"1px solid rgba(255,255,255,.25)" }}>
+                <span className="pulse-dot w-1.5 h-1.5 rounded-full inline-block bg-green-300" />
+                <span className="text-white/85 text-[11px] font-semibold tracking-wide">All Systems Operational</span>
               </div>
-              <h1 className="text-4xl font-bold text-white leading-tight tracking-tight">
-                Workforce<br />
-                <span style={{ color: primary }}>Intelligence</span><br />
-                Platform
+
+              {/* Headline */}
+              <h1 className={`text-[44px] font-black text-white leading-[1.08] tracking-tight mb-5 ${mounted ? "fu d2" : "opacity-0"}`}>
+                Smart<br />
+                <span style={{ color:"rgba(255,255,255,.75)" }}>Workforce</span><br />
+                Management
               </h1>
-              <p className="mt-4 text-white/45 text-[14px] leading-relaxed max-w-xs">
-                Unified attendance, HR, and payroll management for Drivethru — cloud-based and accessible anywhere.
+
+              <p className={`text-white/60 text-[14px] leading-relaxed max-w-[290px] mb-10 ${mounted ? "fu d3" : "opacity-0"}`}>
+                Attendance, payroll, and HR — unified in one platform built for the Drivethru team.
               </p>
 
-              {/* Feature list */}
-              <div className="mt-8 space-y-4">
-                {features.map((f, i) => (
-                  <div key={i} className="feature-row flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-                      style={{ background: primaryDim, border: `1px solid ${primaryBorder}` }}>
-                      <f.icon className="w-4 h-4" style={{ color: `hsl(200 65% 70%)` }} />
+              {/* Features */}
+              <div className={`space-y-3.5 mb-12 ${mounted ? "fu d4" : "opacity-0"}`}>
+                {FEATURES.map((f, i) => (
+                  <div key={i} className="flex items-center gap-3 text-white/75 text-[13px]">
+                    <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                      <CheckCircle2 className="w-3 h-3 text-white" />
                     </div>
-                    <div>
-                      <p className="text-white text-[13px] font-semibold leading-none">{f.title}</p>
-                      <p className="text-white/40 text-[11px] mt-0.5">{f.desc}</p>
-                    </div>
+                    {f}
+                  </div>
+                ))}
+              </div>
+
+              {/* Stats */}
+              <div className={`flex gap-3 ${mounted ? "fu d5" : "opacity-0"}`}>
+                {STATS.map((s, i) => (
+                  <div key={i} className="flex-1 rounded-2xl px-4 py-3 text-center"
+                    style={{ background:"rgba(255,255,255,.15)", border:"1px solid rgba(255,255,255,.22)" }}>
+                    <p className="text-white font-extrabold text-[15px] leading-none">{s.value}</p>
+                    <p className="text-white/55 text-[10px] mt-1.5 uppercase tracking-wide">{s.label}</p>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Footer */}
-            <div className="flex items-center gap-2 text-white/25 text-[11px]">
-              <Shield className="w-3 h-3" />
-              <span>Enterprise-grade security • AES-256 encrypted</span>
+            {/* Powered by */}
+            <div className={`flex items-center gap-2 ${mounted ? "fi d6" : "opacity-0"}`}>
+              <img src={liveuLogo} alt="Live U" className="w-5 h-5 rounded-full object-cover opacity-70" />
+              <p className="text-white/45 text-[11px]">Powered by <span className="text-white/65 font-semibold">Live U Pvt Ltd</span></p>
             </div>
           </div>
         </div>
 
-        {/* ── RIGHT PANEL — login form ── */}
-        <div className={`flex-1 flex items-center justify-center p-8 ${mounted ? "panel-right" : "opacity-0"}`}
-          style={{ background: "#eef5f9" }}>
+        {/* ══ RIGHT — Form ══ */}
+        <div
+          className={`flex-1 flex items-center justify-center p-8 ${mounted ? "sr" : "opacity-0"}`}
+          style={{ background: "#EBF3FA" }}
+        >
+          <div className="w-full max-w-[400px]">
 
-          <div className="w-full max-w-sm">
-
-            {/* Mobile brand */}
-            <div className="flex lg:hidden items-center gap-3 mb-8 justify-center">
-              <img src={drivethruLogo} alt="Drivethru" className="w-10 h-10 object-contain" />
+            {/* Mobile logo */}
+            <div className="flex lg:hidden items-center justify-center gap-3 mb-8">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+                style={{ background:"linear-gradient(135deg,#1a7bbf,#1565a8)" }}>
+                <img src={drivethruLogo} alt="Drivethru" className="w-6 h-6 object-contain" />
+              </div>
               <p className="font-bold text-gray-900 text-lg">Drivethru</p>
             </div>
 
-            {/* Form card */}
-            <div className="bg-white rounded-2xl shadow-xl shadow-black/8 p-8 border border-gray-100/80">
-              <div className="mb-7 flex flex-col items-center text-center">
-                <img src={drivethruLogo} alt="Drivethru" className="h-16 w-auto object-contain mb-4" />
-                <h2 className="text-[22px] font-bold text-gray-900 tracking-tight">Welcome Back</h2>
-                <p className="text-gray-400 text-sm mt-1">Drivethru</p>
-                <p className="text-gray-400 text-xs mt-0.5">Sign in to access your dashboard</p>
-              </div>
+            {/* Greeting */}
+            <div className={`mb-8 ${mounted ? "fu d2" : "opacity-0"}`}>
+              <h2 className="text-[30px] font-extrabold tracking-tight leading-tight" style={{ color:"#0c2d45" }}>
+                Welcome back 👋
+              </h2>
+              <p className="text-[14px] mt-1.5" style={{ color:"#5a87a8" }}>
+                Sign in to your Drivethru dashboard
+              </p>
+            </div>
 
+            {/* Card */}
+            <div
+              className={`rounded-2xl p-8 ${mounted ? "fu d3" : "opacity-0"}`}
+              style={{
+                background: "#fff",
+                boxShadow: "0 20px 60px rgba(21,101,168,.13), 0 2px 8px rgba(21,101,168,.07)",
+                border: "1px solid rgba(41,128,185,.10)",
+              }}
+            >
+              {/* Error */}
               {error && (
-                <div className="mb-5 flex items-start gap-2.5 text-sm px-3.5 py-3 rounded-xl"
-                  style={{ background: "#fef2f2", border: "1.5px solid #fecaca", color: "#b91c1c" }}>
-                  <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                <div className="mb-5 flex items-start gap-2.5 text-[13px] px-4 py-3 rounded-xl"
+                  style={{ background:"#fef2f2", border:"1.5px solid #fecaca", color:"#b91c1c" }}>
+                  <AlertCircle className="w-4 h-4 mt-px shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
 
-              <form onSubmit={handleLogin} className="space-y-4">
+              <form onSubmit={handleLogin} className="space-y-5">
+
                 {/* Username */}
-                <div className="form-row space-y-1.5">
-                  <label className="text-[13px] font-semibold text-gray-600">Username or Email</label>
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-bold uppercase tracking-widest" style={{ color:"#5a87a8" }}>
+                    Username
+                  </label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                    <svg className={`lf-icon w-[16px] h-[16px] ${userFocused ? "active" : ""}`}
+                      viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                    </svg>
                     <input
                       required
-                      className="input-mod"
-                      placeholder="Enter username"
+                      className={`lf-input${userFocused ? " focused" : ""}`}
+                      placeholder="Enter your username"
                       value={username}
                       onChange={e => setUsername(e.target.value)}
+                      onFocus={() => setUserFocused(true)}
+                      onBlur={() => setUserFocused(false)}
                       autoComplete="username"
                     />
                   </div>
                 </div>
 
                 {/* Password */}
-                <div className="form-row space-y-1.5">
-                  <label className="text-[13px] font-semibold text-gray-600">Password</label>
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-bold uppercase tracking-widest" style={{ color:"#5a87a8" }}>
+                    Password
+                  </label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                    <Lock className={`lf-icon w-[15px] h-[15px] ${passFocused ? "active" : ""}`} />
                     <input
                       required
                       type={showPassword ? "text" : "password"}
-                      className="input-mod"
-                      style={{ paddingRight: "2.5rem" }}
-                      placeholder="Enter password"
+                      className={`lf-input${passFocused ? " focused" : ""}`}
+                      style={{ paddingRight:"2.8rem" }}
+                      placeholder="Enter your password"
                       value={password}
                       onChange={e => setPassword(e.target.value)}
+                      onFocus={() => setPassFocused(true)}
+                      onBlur={() => setPassFocused(false)}
                       autoComplete="current-password"
                     />
-                    <button type="button" tabIndex={-1}
+                    <button
+                      type="button"
+                      tabIndex={-1}
                       onClick={() => setShowPassword(s => !s)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
+                      className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
+                      style={{ color:"#9BB5C8" }}
+                      onMouseEnter={e => (e.currentTarget.style.color = "#2980B9")}
+                      onMouseLeave={e => (e.currentTarget.style.color = "#9BB5C8")}
+                    >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
 
                 {/* Submit */}
-                <div className="form-row pt-1">
-                  <button type="submit" className="btn-primary" disabled={loading}>
+                <div className="pt-1">
+                  <button type="submit" className="lf-btn" disabled={loading}>
                     {loading ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                      <>
+                        <svg className="animate-spin w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z"/>
                         </svg>
                         Authenticating…
-                      </span>
-                    ) : "Sign In to Dashboard"}
+                      </>
+                    ) : (
+                      <>
+                        Sign In
+                        <ArrowRight className="w-4 h-4 shrink-0" />
+                      </>
+                    )}
                   </button>
                 </div>
               </form>
 
-              <div className="mt-6 pt-5 border-t border-gray-100 flex items-center justify-center gap-2">
-                <img src={liveuLogo} alt="Live u Pvt Ltd Srilanka" className="w-5 h-5 rounded-full object-cover" />
-                <p className="text-[11px] text-gray-400">Powered by <span className="font-semibold text-gray-500">Live u Pvt Ltd Srilanka</span></p>
+              {/* Powered by — inside card */}
+              <div className="mt-6 pt-5 flex items-center justify-center gap-2"
+                style={{ borderTop:"1px solid #EBF3FA" }}>
+                <img src={liveuLogo} alt="Live U" className="w-4 h-4 rounded-full object-cover opacity-60" />
+                <p className="text-[11px]" style={{ color:"#9BB5C8" }}>
+                  Powered by <span className="font-semibold" style={{ color:"#6fa3c0" }}>Live U Pvt Ltd</span>
+                </p>
               </div>
             </div>
 
-            {/* Bottom note */}
-            <p className="text-center text-[11px] text-gray-400 mt-5">
+            {/* Bottom */}
+            <p className={`text-center text-[11px] mt-5 ${mounted ? "fi d7" : "opacity-0"}`} style={{ color:"#8BAFC6" }}>
               Drivethru © {new Date().getFullYear()} · Attendance Management v2.0
             </p>
           </div>
