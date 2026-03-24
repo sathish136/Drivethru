@@ -1,8 +1,44 @@
 import { useState } from "react";
-import { Download, Calendar as CalendarIcon, Clock, ToggleLeft, ToggleRight } from "lucide-react";
-import { PageHeader, Card, Button, Select } from "@/components/ui";
+import { Calendar as CalendarIcon, Clock } from "lucide-react";
+import { PageHeader, Card, Select } from "@/components/ui";
 import { useMonthlySheet } from "@/hooks/use-attendance";
 import { cn } from "@/lib/utils";
+
+/* ─── Mini PDF icon button ─── */
+function PdfIconButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick} title="Export PDF"
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#E02B20] text-white hover:bg-[#C4241A] active:scale-95 transition-all shadow-sm">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="16" height="16" rx="2.5" fill="#E02B20"/>
+        <path d="M2 3.5C2 2.67 2.67 2 3.5 2H9.5L14 6.5V12.5C14 13.33 13.33 14 12.5 14H3.5C2.67 14 2 13.33 2 12.5V3.5Z" fill="white" fillOpacity="0.15"/>
+        <path d="M9.5 2V6H14" stroke="white" strokeOpacity="0.4" strokeWidth="0.8" fill="none"/>
+        <text x="3" y="12" fontSize="5" fontWeight="800" fill="white" fontFamily="Arial,sans-serif" letterSpacing="0.3">PDF</text>
+      </svg>
+      Export PDF
+    </button>
+  );
+}
+
+/* ─── Mini Excel icon button ─── */
+function ExcelIconButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick} title="Export Excel"
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#1D6F42] text-white hover:bg-[#185C37] active:scale-95 transition-all shadow-sm">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="16" height="16" rx="2.5" fill="#1D6F42"/>
+        <path d="M2 3H9V13H2V3Z" fill="#21A366" fillOpacity="0.5"/>
+        <path d="M9 2H13.5C13.78 2 14 2.22 14 2.5V13.5C14 13.78 13.78 14 13.5 14H9V2Z" fill="white" fillOpacity="0.12"/>
+        <line x1="9" y1="2" x2="9" y2="14" stroke="white" strokeOpacity="0.3" strokeWidth="0.8"/>
+        <text x="2.5" y="11" fontSize="7.5" fontWeight="900" fill="white" fontFamily="Arial,sans-serif">X</text>
+        <line x1="9.5" y1="5.5" x2="13.5" y2="5.5" stroke="white" strokeOpacity="0.35" strokeWidth="0.7"/>
+        <line x1="9.5" y1="8" x2="13.5" y2="8" stroke="white" strokeOpacity="0.35" strokeWidth="0.7"/>
+        <line x1="9.5" y1="10.5" x2="13.5" y2="10.5" stroke="white" strokeOpacity="0.35" strokeWidth="0.7"/>
+      </svg>
+      Export Excel
+    </button>
+  );
+}
 
 export default function MonthlySheet() {
   const [month, setMonth] = useState(new Date().getMonth() + 1);
@@ -45,6 +81,69 @@ export default function MonthlySheet() {
   function isSunday(d: number) { return new Date(year, month - 1, d).getDay() === 0; }
 
   const yearOptions = [2023, 2024, 2025, 2026, 2027];
+  const monthName = new Date(year, month - 1, 1).toLocaleString("default", { month: "long" });
+
+  const handleExportPdf = () => {
+    const dayHeader = daysArray.map(d => `<th style="min-width:28px;text-align:center;padding:4px 2px;font-size:8px;background:#1565a8;color:#fff;">${d}<br/><span style="font-size:7px;opacity:.8">${getDayName(d)}</span></th>`).join("");
+    const bodyRows = rows.map((row: any) =>
+      `<tr>
+        <td style="padding:4px 8px;white-space:nowrap;font-weight:600;border-bottom:1px solid #f0f0f0">${row.employeeName}<br/><span style="font-size:8px;color:#9ca3af">${row.employeeCode}</span></td>
+        ${daysArray.map(day => {
+          const e = row.dailyStatus?.find((d: any) => d.day === day);
+          const st = e?.status || "absent";
+          const colors: Record<string,string> = { present:"#dcfce7", late:"#fef3c7", absent:"#fee2e2", half_day:"#fef9c3", leave:"#dbeafe", holiday:"#f3f4f6" };
+          const labels: Record<string,string> = { present:"P", late:"L", absent:"A", half_day:"HD", leave:"LV", holiday:"H" };
+          return `<td style="padding:2px;text-align:center;border-bottom:1px solid #f0f0f0"><div style="background:${colors[st]||"#f3f4f6"};border-radius:3px;padding:2px;font-size:8px;font-weight:700">${labels[st]||"A"}</div></td>`;
+        }).join("")}
+        <td style="text-align:center;font-weight:700;color:#16a34a;padding:4px;border-bottom:1px solid #f0f0f0">${row.presentDays??0}</td>
+        <td style="text-align:center;font-weight:700;color:#dc2626;padding:4px;border-bottom:1px solid #f0f0f0">${row.absentDays??0}</td>
+        <td style="text-align:center;font-weight:700;color:#d97706;padding:4px;border-bottom:1px solid #f0f0f0">${row.lateDays??0}</td>
+        <td style="text-align:center;font-family:monospace;color:#1d4ed8;padding:4px;border-bottom:1px solid #f0f0f0">${fmtHrs(row.totalWorkHours)}</td>
+        <td style="text-align:center;font-family:monospace;color:#ea580c;padding:4px;border-bottom:1px solid #f0f0f0">${row.overtimeHours>0?fmtHrs(row.overtimeHours):"—"}</td>
+      </tr>`
+    ).join("");
+    const w = window.open("", "_blank", "width=1400,height=900");
+    if (!w) { alert("Please allow popups to export PDF."); return; }
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Monthly Sheet – ${monthName} ${year}</title>
+    <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:9px;color:#1a1a1a}
+    table{width:100%;border-collapse:collapse}th{background:#1565a8;color:#fff;padding:5px 4px;font-size:8px}
+    @media print{@page{margin:6mm;size:landscape}}</style></head><body>
+    <div style="padding:12px 20px 8px;border-bottom:3px solid #1565a8;background:#f5f8ff;display:flex;justify-content:space-between;align-items:center">
+      <div><div style="font-size:16px;font-weight:700;color:#1565a8">Monthly Attendance Sheet</div>
+      <div style="font-size:10px;color:#6b7280">${monthName} ${year} · ${rows.length} Employees</div></div>
+      <div style="font-size:9px;color:#9ca3af">Generated: ${new Date().toLocaleString()}</div>
+    </div>
+    <table><thead><tr>
+      <th style="text-align:left;min-width:160px;padding:6px 8px">Employee</th>
+      ${dayHeader}
+      <th style="background:#16a34a">P</th><th style="background:#dc2626">A</th><th style="background:#d97706">L</th>
+      <th style="background:#1d4ed8">Total Hrs</th><th style="background:#ea580c">OT Hrs</th>
+    </tr></thead><tbody>${bodyRows}</tbody></table>
+    <script>window.addEventListener("load",function(){setTimeout(function(){window.print();},300);});<\/script>
+    </body></html>`);
+    w.document.close();
+  };
+
+  const handleExportExcel = () => {
+    const escape = (v: string | number) => { const s = String(v??""); return s.includes(",")||s.includes('"')?`"${s.replace(/"/g,'""')}"`:s; };
+    const dayHeaders = daysArray.map(d => `${getDayName(d)} ${d}`);
+    const headers = ["Emp ID","Employee","Designation",...dayHeaders,"Present","Absent","Late","Total Hrs","OT Hrs"];
+    const csvRows = rows.map((row: any) => {
+      const dayStatuses = daysArray.map(day => {
+        const e = row.dailyStatus?.find((d: any) => d.day === day);
+        const labels: Record<string,string> = { present:"P", late:"L", absent:"A", half_day:"HD", leave:"LV", holiday:"H" };
+        return labels[e?.status||"absent"]||"A";
+      });
+      return [row.employeeCode, row.employeeName, row.designation||"", ...dayStatuses,
+        row.presentDays??0, row.absentDays??0, row.lateDays??0,
+        row.totalWorkHours!=null?row.totalWorkHours.toFixed(1):"", row.overtimeHours>0?row.overtimeHours.toFixed(1):"0"];
+    });
+    const csv = [headers,...csvRows].map(r=>r.map(escape).join(",")).join("\r\n");
+    const blob = new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href=url; a.download=`monthly-sheet-${monthName}-${year}.csv`; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  };
 
   return (
     <div className="space-y-4">
@@ -52,9 +151,10 @@ export default function MonthlySheet() {
         title="Monthly Attendance Sheet"
         description="Grid view with in/out times, work hours, and OT per employee."
         action={
-          <Button variant="outline" className="gap-2 text-xs h-9">
-            <Download className="w-4 h-4" /> Export
-          </Button>
+          <div className="flex items-center gap-2">
+            <ExcelIconButton onClick={handleExportExcel} />
+            <PdfIconButton onClick={handleExportPdf} />
+          </div>
         }
       />
 
