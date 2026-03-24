@@ -1,7 +1,7 @@
 import { pgTable, serial, text, integer, boolean, timestamp, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { branches } from "./branches";
+import { branches, companies } from "./branches";
 import { shifts } from "./shifts";
 
 export const departments = pgTable("departments", {
@@ -32,6 +32,7 @@ export const employees = pgTable("employees", {
   fullName: text("full_name").notNull(),
   designation: text("designation").notNull(),
   department: text("department").notNull(),
+  companyId: integer("company_id").references(() => companies.id),
   branchId: integer("branch_id").notNull().references(() => branches.id),
   shiftId: integer("shift_id").references(() => shifts.id),
   joiningDate: date("joining_date").notNull(),
