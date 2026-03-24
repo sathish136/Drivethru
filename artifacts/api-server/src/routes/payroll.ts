@@ -410,10 +410,16 @@ router.post("/generate", async (req, res) => {
         - absenceDeduction - lateDeduction - halfDayDeduction - incompleteDeduction
       );
 
-      if (!structData) {
-        epfEmployee = Math.round(grossSalary * (cfg.epfEmployeePercent / 100));
-        epfEmployer = Math.round(grossSalary * (cfg.epfEmployerPercent / 100));
-        etfEmployer = Math.round(grossSalary * (cfg.etfEmployerPercent / 100));
+      /* EPF / ETF always based on actual earned gross (not full basic) */
+      const epfBase = Math.max(0, grossSalary);
+      if (structData) {
+        epfEmployee = Math.round(epfBase * 0.08);
+        epfEmployer = Math.round(epfBase * 0.12);
+        etfEmployer = Math.round(epfBase * 0.03);
+      } else {
+        epfEmployee = Math.round(epfBase * (cfg.epfEmployeePercent / 100));
+        epfEmployer = Math.round(epfBase * (cfg.epfEmployerPercent / 100));
+        etfEmployer = Math.round(epfBase * (cfg.etfEmployerPercent / 100));
       }
 
       const apit          = calcAPIT(grossSalary);
