@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { PageHeader, Card, Button, Input, Label } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
-  Banknote, Percent, DollarSign, Save, RefreshCw, Check,
+  Percent, DollarSign, Save, RefreshCw, Check,
   Edit2, X, Info, AlertTriangle, SlidersHorizontal, Users, ChevronRight,
   Search, UserCheck, Undo2
 } from "lucide-react";
@@ -48,11 +48,10 @@ const DEFAULTS: PayrollConfig = {
   employeeOverrides: {},
 };
 
-type Tab = "general" | "scale" | "fitment";
+type Tab = "general" | "fitment";
 
 const TABS: { key: Tab; label: string; icon: React.ElementType; desc: string }[] = [
   { key: "general",  label: "General Settings",       icon: SlidersHorizontal, desc: "EPF/ETF, allowances & deductions" },
-  { key: "scale",    label: "Designation Salary Scale", icon: Banknote,          desc: "Basic salary by designation" },
   { key: "fitment",  label: "Employee Fitment",        icon: Users,             desc: "Direct salary assignments per employee" },
 ];
 
@@ -73,9 +72,6 @@ export default function PayrollSettings() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [editingDesig, setEditingDesig] = useState<string | null>(null);
-  const [editDesigVal, setEditDesigVal] = useState("");
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [empsLoading, setEmpsLoading] = useState(false);
@@ -136,13 +132,6 @@ export default function PayrollSettings() {
       else setError(d.message || "Save failed");
     } catch { setError("Failed to save. Check server connection."); }
     setSaving(false);
-  }
-
-  function startEditDesig(d: string) { setEditingDesig(d); setEditDesigVal(String(cfg.salaryScale[d] ?? 40000)); }
-  function confirmDesig(d: string) {
-    const v = parseInt(editDesigVal);
-    if (!isNaN(v) && v > 0) setCfg(s => ({ ...s, salaryScale: { ...s.salaryScale, [d]: v } }));
-    setEditingDesig(null);
   }
 
   function startEditEmp(emp: Employee) {
@@ -361,80 +350,6 @@ export default function PayrollSettings() {
             </div>
           </Card>
         </div>
-      )}
-
-      {/* ── Designation Scale Tab ────────────────────────── */}
-      {tab === "scale" && (
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-5 pb-3 border-b border-border">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center">
-                <Banknote className="w-4 h-4 text-violet-600" />
-              </div>
-              <div>
-                <p className="text-sm font-bold">Designation Salary Scale</p>
-                <p className="text-xs text-muted-foreground">
-                  Default basic salary per designation — hover a row and click the edit icon to change
-                </p>
-              </div>
-            </div>
-            <span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-full">
-              {Object.keys(cfg.salaryScale).length} designations
-            </span>
-          </div>
-
-          <div className="overflow-x-auto rounded-xl border border-border">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/50 border-b border-border">
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground w-10">#</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground">Designation</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">Basic Salary (Rs.)</th>
-                  <th className="px-4 py-2.5 text-center text-xs font-semibold text-muted-foreground w-20">Edit</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {Object.entries(cfg.salaryScale)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([designation, salary], idx) => (
-                    <tr key={designation} className="hover:bg-muted/30 transition-colors group">
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground">{idx + 1}</td>
-                      <td className="px-4 py-2.5 font-medium">{designation}</td>
-                      <td className="px-4 py-2.5 text-right">
-                        {editingDesig === designation ? (
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Input
-                              type="number" value={editDesigVal}
-                              onChange={e => setEditDesigVal(e.target.value)}
-                              onKeyDown={e => { if (e.key === "Enter") confirmDesig(designation); if (e.key === "Escape") setEditingDesig(null); }}
-                              className="h-7 w-32 text-right text-sm font-mono" autoFocus
-                            />
-                            <button onClick={() => confirmDesig(designation)} className="p-1 rounded bg-green-100 text-green-700 hover:bg-green-200">
-                              <Check className="w-3.5 h-3.5" />
-                            </button>
-                            <button onClick={() => setEditingDesig(null)} className="p-1 rounded hover:bg-muted text-muted-foreground">
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="font-mono font-semibold">Rs. {salary.toLocaleString("en-LK")}</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 text-center">
-                        {editingDesig !== designation && (
-                          <button onClick={() => startEditDesig(designation)}
-                            className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-muted text-muted-foreground hover:text-foreground"
-                            title="Edit salary">
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
       )}
 
       {/* ── Employee Fitment Tab ─────────────────────────── */}
