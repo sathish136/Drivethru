@@ -68,6 +68,7 @@ function AttendanceReport() {
   const [status, setStatus]       = useState("");
   const [empType, setEmpType]     = useState("");
   const [department, setDepartment] = useState("");
+  const [empName, setEmpName]     = useState("");
   const [applied, setApplied] = useState({ startDate, endDate, branchId, status });
 
   const { data: branches } = useListBranches();
@@ -87,14 +88,15 @@ function AttendanceReport() {
     return (data?.records || []).filter((r: any) => {
       const matchType = !empType || (r as any).employeeType === empType;
       const matchDept = !department || r.department === department;
-      return matchType && matchDept;
+      const matchName = !empName || (r.employeeName || "").toLowerCase().includes(empName.toLowerCase());
+      return matchType && matchDept && matchName;
     });
-  }, [data, empType, department]);
+  }, [data, empType, department, empName]);
 
   return (
     <div className="space-y-4">
       <Card className="p-4">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 items-end">
           <div>
             <Label className="text-xs">Start Date</Label>
             <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
@@ -131,20 +133,22 @@ function AttendanceReport() {
               <option value="casual">Casual</option>
             </Select>
           </div>
+          <div>
+            <Label className="text-xs">Department</Label>
+            <Select value={department} onChange={e => setDepartment(e.target.value)}>
+              <option value="">All Departments</option>
+              {departments.map(d => <option key={d} value={d}>{d}</option>)}
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Employee Name</Label>
+            <Input placeholder="Search name…" value={empName} onChange={e => setEmpName(e.target.value)} />
+          </div>
           <div className="flex gap-2">
             <Button onClick={() => setApplied({ startDate, endDate, branchId, status })} className="flex-1">Apply</Button>
             <Button variant="outline"><FileDown className="w-4 h-4" /></Button>
           </div>
         </div>
-        {departments.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-border">
-            <Label className="text-xs">Department</Label>
-            <Select value={department} onChange={e => setDepartment(e.target.value)} className="mt-1 w-48">
-              <option value="">All Departments</option>
-              {departments.map(d => <option key={d} value={d}>{d}</option>)}
-            </Select>
-          </div>
-        )}
       </Card>
 
       {data && (
@@ -182,12 +186,12 @@ function AttendanceReport() {
                 {filtered.slice(0, 300).map((r: any) => (
                   <tr key={r.id} className="hover:bg-muted/30 transition-colors">
                     <td className="px-3 py-2 font-mono whitespace-nowrap">{r.date}</td>
-                    <td className="px-3 py-2 font-mono text-muted-foreground">{r.employeeCode}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-muted-foreground">{r.employeeCode}</td>
                     <td className="px-3 py-2 font-medium whitespace-nowrap">{r.employeeName}</td>
-                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.department || "—"}</td>
-                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.branchName}</td>
-                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.designation || "—"}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.department || "—"}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.branchName}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.designation || "—"}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
                       {r.employeeType ? (
                         <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium capitalize",
                           r.employeeType === "permanent" ? "bg-blue-100 text-blue-700" :
@@ -196,15 +200,15 @@ function AttendanceReport() {
                         )}>{r.employeeType}</span>
                       ) : "—"}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <span className={cn("px-2 py-0.5 rounded text-xs font-medium uppercase", STATUS_COLORS[r.status] || "bg-gray-100")}>
                         {r.status.replace("_", " ")}
                       </span>
                     </td>
-                    <td className="px-3 py-2 font-mono">{r.inTime1 || "—"}</td>
-                    <td className="px-3 py-2 font-mono">{r.outTime1 || "—"}</td>
-                    <td className="px-3 py-2 font-mono">{r.totalHours != null ? `${r.totalHours.toFixed(1)}h` : "—"}</td>
-                    <td className="px-3 py-2 font-mono">{r.overtimeHours != null && r.overtimeHours > 0 ? `${r.overtimeHours.toFixed(1)}h` : "—"}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap">{r.inTime1 || "—"}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap">{r.outTime1 || "—"}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap">{r.totalHours != null ? `${r.totalHours.toFixed(1)}h` : "—"}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap">{r.overtimeHours != null && r.overtimeHours > 0 ? `${r.overtimeHours.toFixed(1)}h` : "—"}</td>
                   </tr>
                 ))}
                 {!filtered.length && (
@@ -226,6 +230,7 @@ function MonthlyReport() {
   const [branchId, setBranchId] = useState("");
   const [empType, setEmpType]   = useState("");
   const [department, setDepartment] = useState("");
+  const [empName, setEmpName]   = useState("");
   const [applied, setApplied] = useState({ month, year, branchId });
   const { data: branches } = useListBranches();
   const { data, isLoading } = useGetMonthlyReport({
@@ -243,14 +248,15 @@ function MonthlyReport() {
     return (data?.employees || []).filter((e: any) => {
       const matchType = !empType || e.employeeType === empType;
       const matchDept = !department || e.department === department;
-      return matchType && matchDept;
+      const matchName = !empName || (e.employeeName || "").toLowerCase().includes(empName.toLowerCase());
+      return matchType && matchDept && matchName;
     });
-  }, [data, empType, department]);
+  }, [data, empType, department, empName]);
 
   return (
     <div className="space-y-4">
       <Card className="p-4">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 items-end">
           <div>
             <Label className="text-xs">Month</Label>
             <Select value={month} onChange={e => setMonth(Number(e.target.value))}>
@@ -286,6 +292,10 @@ function MonthlyReport() {
               {departments.map(d => <option key={d} value={d}>{d}</option>)}
             </Select>
           </div>
+          <div>
+            <Label className="text-xs">Employee Name</Label>
+            <Input placeholder="Search name…" value={empName} onChange={e => setEmpName(e.target.value)} />
+          </div>
           <div className="flex gap-2">
             <Button onClick={() => setApplied({ month, year, branchId })} className="flex-1">Generate</Button>
             <Button variant="outline"><FileDown className="w-4 h-4" /></Button>
@@ -317,12 +327,12 @@ function MonthlyReport() {
               <tbody className="divide-y divide-border">
                 {filtered.map((e: any) => (
                   <tr key={e.employeeId} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-3 py-2 font-mono text-muted-foreground">{e.employeeCode}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-muted-foreground">{e.employeeCode}</td>
                     <td className="px-3 py-2 font-medium whitespace-nowrap">{e.employeeName}</td>
-                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{e.department || "—"}</td>
-                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap max-w-[120px] truncate">{e.branchName}</td>
-                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{e.designation}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{e.department || "—"}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{e.branchName}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{e.designation}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
                       {e.employeeType ? (
                         <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium capitalize",
                           e.employeeType === "permanent" ? "bg-blue-100 text-blue-700" :
@@ -331,15 +341,15 @@ function MonthlyReport() {
                         )}>{e.employeeType}</span>
                       ) : "—"}
                     </td>
-                    <td className="px-3 py-2 text-center text-green-600 font-semibold">{e.presentDays}</td>
-                    <td className="px-3 py-2 text-center text-red-600 font-semibold">{e.absentDays}</td>
-                    <td className="px-3 py-2 text-center text-amber-600 font-semibold">{e.lateDays}</td>
-                    <td className="px-3 py-2 text-center text-yellow-600 font-semibold">{e.halfDays}</td>
-                    <td className="px-3 py-2 text-center text-purple-600 font-semibold">{e.leaveDays}</td>
-                    <td className="px-3 py-2 text-center text-gray-600 font-semibold">{e.holidayDays}</td>
-                    <td className="px-3 py-2 text-center font-mono">{e.totalWorkHours.toFixed(1)}h</td>
-                    <td className="px-3 py-2 text-center font-mono text-amber-600">{e.overtimeHours.toFixed(1)}h</td>
-                    <td className="px-3 py-2 text-center">
+                    <td className="px-3 py-2 text-center whitespace-nowrap text-green-600 font-semibold">{e.presentDays}</td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap text-red-600 font-semibold">{e.absentDays}</td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap text-amber-600 font-semibold">{e.lateDays}</td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap text-yellow-600 font-semibold">{e.halfDays}</td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap text-purple-600 font-semibold">{e.leaveDays}</td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap text-gray-600 font-semibold">{e.holidayDays}</td>
+                    <td className="px-3 py-2 text-center font-mono whitespace-nowrap">{e.totalWorkHours.toFixed(1)}h</td>
+                    <td className="px-3 py-2 text-center font-mono whitespace-nowrap text-amber-600">{e.overtimeHours.toFixed(1)}h</td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap">
                       <span className={cn("px-2 py-0.5 rounded text-xs font-bold",
                         e.attendancePercentage >= 90 ? "bg-green-100 text-green-700" :
                         e.attendancePercentage >= 75 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"
@@ -365,6 +375,7 @@ function OvertimeReport() {
   const [endDate, setEndDate]     = useState(now.toISOString().split("T")[0]);
   const [branchId, setBranchId]   = useState("");
   const [empType, setEmpType]     = useState("");
+  const [empName, setEmpName]     = useState("");
   const [applied, setApplied] = useState({ startDate, endDate, branchId });
   const { data: branches } = useListBranches();
   const { data, isLoading } = useGetOvertimeReport({
@@ -374,13 +385,17 @@ function OvertimeReport() {
   });
 
   const filtered = useMemo(() => {
-    return (data?.employees || []).filter((e: any) => !empType || e.employeeType === empType);
-  }, [data, empType]);
+    return (data?.employees || []).filter((e: any) => {
+      const matchType = !empType || e.employeeType === empType;
+      const matchName = !empName || (e.employeeName || "").toLowerCase().includes(empName.toLowerCase());
+      return matchType && matchName;
+    });
+  }, [data, empType, empName]);
 
   return (
     <div className="space-y-4">
       <Card className="p-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 items-end">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
           <div>
             <Label className="text-xs">Start Date</Label>
             <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
@@ -404,6 +419,10 @@ function OvertimeReport() {
               <option value="contract">Contract</option>
               <option value="casual">Casual</option>
             </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Employee Name</Label>
+            <Input placeholder="Search name…" value={empName} onChange={e => setEmpName(e.target.value)} />
           </div>
           <div className="flex gap-2">
             <Button onClick={() => setApplied({ startDate, endDate, branchId })} className="flex-1">Apply</Button>
@@ -435,11 +454,11 @@ function OvertimeReport() {
               <tbody className="divide-y divide-border">
                 {filtered.map((e: any) => (
                   <tr key={e.employeeId} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-3 py-2 font-mono text-muted-foreground">{e.employeeCode}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-muted-foreground">{e.employeeCode}</td>
                     <td className="px-3 py-2 font-medium whitespace-nowrap">{e.employeeName}</td>
-                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap max-w-[100px] truncate">{e.branchName}</td>
-                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{e.designation}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{e.branchName}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{e.designation}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
                       {e.employeeType ? (
                         <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium capitalize",
                           e.employeeType === "permanent" ? "bg-blue-100 text-blue-700" :
@@ -448,9 +467,9 @@ function OvertimeReport() {
                         )}>{e.employeeType}</span>
                       ) : "—"}
                     </td>
-                    <td className="px-3 py-2 text-center font-semibold text-amber-600">{e.overtimeDays}</td>
-                    <td className="px-3 py-2 text-center font-bold text-amber-700">{e.totalOvertimeHours.toFixed(1)}h</td>
-                    <td className="px-3 py-2 text-muted-foreground">
+                    <td className="px-3 py-2 text-center whitespace-nowrap font-semibold text-amber-600">{e.overtimeDays}</td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap font-bold text-amber-700">{e.totalOvertimeHours.toFixed(1)}h</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
                       {e.records.slice(0,3).map((r: any) => `${r.date}: ${r.overtimeHours.toFixed(1)}h`).join(" | ")}
                       {e.records.length > 3 && ` +${e.records.length-3} more`}
                     </td>
@@ -482,6 +501,7 @@ function PayrollReport() {
   const [year, setYear]     = useState(now.getFullYear());
   const [empType, setEmpType] = useState("");
   const [status, setStatus] = useState("");
+  const [empName, setEmpName] = useState("");
   const [data, setData]     = useState<PayrollRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const { data: branches } = useListBranches();
@@ -502,9 +522,10 @@ function PayrollReport() {
     return data.filter(r => {
       const matchType   = !empType || r.employee.employeeType === empType;
       const matchStatus = !status  || r.status === status;
-      return matchType && matchStatus;
+      const matchName   = !empName || (r.employee.fullName || "").toLowerCase().includes(empName.toLowerCase());
+      return matchType && matchStatus && matchName;
     });
-  }, [data, empType, status]);
+  }, [data, empType, status, empName]);
 
   const totals = useMemo(() => ({
     gross:       filtered.reduce((s, r) => s + r.grossSalary, 0),
@@ -550,7 +571,11 @@ function PayrollReport() {
               <option value="paid">Paid</option>
             </Select>
           </div>
-          <div className="flex gap-2 col-span-2 md:col-span-1">
+          <div>
+            <Label className="text-xs">Employee Name</Label>
+            <Input placeholder="Search name…" value={empName} onChange={e => setEmpName(e.target.value)} />
+          </div>
+          <div className="flex gap-2">
             <Button onClick={load} className="flex-1">Refresh</Button>
             <Button variant="outline"><FileDown className="w-4 h-4" /></Button>
           </div>
@@ -593,11 +618,11 @@ function PayrollReport() {
               <tbody className="divide-y divide-border">
                 {filtered.map(r => (
                   <tr key={r.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-3 py-2 font-mono text-muted-foreground">{r.employee.employeeId}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-muted-foreground">{r.employee.employeeId}</td>
                     <td className="px-3 py-2 font-medium whitespace-nowrap">{r.employee.fullName}</td>
-                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.employee.designation}</td>
-                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.employee.department || "—"}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.employee.designation}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.employee.department || "—"}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
                       {r.employee.employeeType ? (
                         <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium capitalize",
                           r.employee.employeeType === "permanent" ? "bg-blue-100 text-blue-700" :
@@ -606,16 +631,16 @@ function PayrollReport() {
                         )}>{r.employee.employeeType}</span>
                       ) : "—"}
                     </td>
-                    <td className="px-3 py-2 font-mono">{fmt(r.basicSalary)}</td>
-                    <td className="px-3 py-2 font-mono text-emerald-700 font-semibold">{fmt(r.grossSalary)}</td>
-                    <td className="px-3 py-2 font-mono text-purple-600">{fmt(r.epfEmployee)}</td>
-                    <td className="px-3 py-2 font-mono text-indigo-600">{fmt(r.epfEmployer)}</td>
-                    <td className="px-3 py-2 font-mono text-violet-600">{fmt(r.etfEmployer)}</td>
-                    <td className="px-3 py-2 font-mono text-amber-600">{fmt(r.apit)}</td>
-                    <td className="px-3 py-2 font-mono text-orange-600">{fmt(r.overtimePay)}</td>
-                    <td className="px-3 py-2 font-mono text-red-600">{fmt(r.totalDeductions)}</td>
-                    <td className="px-3 py-2 font-mono font-bold text-blue-700">{fmt(r.netSalary)}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 font-mono whitespace-nowrap">{fmt(r.basicSalary)}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-emerald-700 font-semibold">{fmt(r.grossSalary)}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-purple-600">{fmt(r.epfEmployee)}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-indigo-600">{fmt(r.epfEmployer)}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-violet-600">{fmt(r.etfEmployer)}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-amber-600">{fmt(r.apit)}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-orange-600">{fmt(r.overtimePay)}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-red-600">{fmt(r.totalDeductions)}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap font-bold text-blue-700">{fmt(r.netSalary)}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <span className={cn("px-2 py-0.5 rounded text-[10px] font-bold uppercase",
                         r.status === "paid"     ? "bg-emerald-100 text-emerald-700" :
                         r.status === "approved" ? "bg-blue-100 text-blue-700" :
