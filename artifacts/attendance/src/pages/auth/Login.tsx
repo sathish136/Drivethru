@@ -173,11 +173,14 @@ export default function Login() {
               style={{ width:560, height:560, top:"42%", left:"50%", transform:"translate(-50%,-50%)",
                 border:"1px solid rgba(255,255,255,.07)" }} />
 
-            {/* Floating shapes */}
-            <div className="float-shape absolute right-[14%] top-[18%] rounded-2xl"
-              style={{ width:80, height:80,
-                background:"rgba(255,255,255,.10)", backdropFilter:"blur(4px)",
-                border:"1px solid rgba(255,255,255,.2)", transform:"rotate(12deg)" }} />
+            {/* Floating logo card */}
+            <div className="float-shape absolute right-[10%] top-[16%] rounded-3xl flex items-center justify-center"
+              style={{ width:100, height:100,
+                background:"rgba(255,255,255,.18)", backdropFilter:"blur(12px)",
+                border:"1.5px solid rgba(255,255,255,.35)", transform:"rotate(10deg)",
+                boxShadow:"0 12px 40px rgba(0,0,0,.12)" }}>
+              <img src={drivethruLogo} alt="Drivethru" style={{ width:56, height:56, objectFit:"contain", transform:"rotate(-10deg)" }} />
+            </div>
             <div className="float-shape2 absolute left-[10%] bottom-[22%] rounded-2xl"
               style={{ width:56, height:56,
                 background:"rgba(255,255,255,.08)",
@@ -269,18 +272,24 @@ export default function Login() {
         >
           <div className="w-full max-w-[400px]">
 
-            {/* Mobile logo */}
-            <div className="flex lg:hidden items-center justify-center gap-3 mb-8">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-                style={{ background:"linear-gradient(135deg,#1a7bbf,#1565a8)" }}>
-                <img src={drivethruLogo} alt="Drivethru" className="w-6 h-6 object-contain" />
+            {/* Logo — always visible */}
+            <div className={`flex items-center gap-3 mb-8 ${mounted ? "fu d1" : "opacity-0"}`}>
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"
+                style={{
+                  background: "linear-gradient(135deg, #1a7bbf, #1565a8)",
+                  boxShadow: "0 6px 20px rgba(21,101,168,.30)",
+                }}>
+                <img src={drivethruLogo} alt="Drivethru" className="w-8 h-8 object-contain" />
               </div>
-              <p className="font-bold text-gray-900 text-lg">Drivethru</p>
+              <div>
+                <p className="font-extrabold text-[17px] leading-tight" style={{ color:"#0c2d45" }}>Drivethru</p>
+                <p className="text-[11px] uppercase tracking-widest font-medium" style={{ color:"#7aafc8" }}>Attendance System</p>
+              </div>
             </div>
 
             {/* Greeting */}
             <div className={`mb-8 ${mounted ? "fu d2" : "opacity-0"}`}>
-              <h2 className="text-[30px] font-extrabold tracking-tight leading-tight" style={{ color:"#0c2d45" }}>
+              <h2 className="text-[28px] font-extrabold tracking-tight leading-tight" style={{ color:"#0c2d45" }}>
                 Welcome back 👋
               </h2>
               <p className="text-[14px] mt-1.5" style={{ color:"#5a87a8" }}>
