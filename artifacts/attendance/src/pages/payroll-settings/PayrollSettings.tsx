@@ -755,7 +755,11 @@ export default function PayrollSettings() {
                   </thead>
                   <tbody className="divide-y divide-border">
                     {structures
-                      .filter(s => s.name.toLowerCase().includes(structSearch.toLowerCase()))
+                      .filter(s => {
+                        const hasAssigned = assignments.filter(a => a.structure.id === s.id).length > 0;
+                        const matchSearch = s.name.toLowerCase().includes(structSearch.toLowerCase());
+                        return hasAssigned && matchSearch;
+                      })
                       .map(s => {
                         const empCount = assignments.filter(a => a.structure.id === s.id).length;
                         return (
@@ -809,6 +813,13 @@ export default function PayrollSettings() {
                           </tr>
                         );
                       })}
+                    {structures.filter(s => assignments.filter(a => a.structure.id === s.id).length > 0 && s.name.toLowerCase().includes(structSearch.toLowerCase())).length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground text-sm">
+                          No salary structures with assigned employees found.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
