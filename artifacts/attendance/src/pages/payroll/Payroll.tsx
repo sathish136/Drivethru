@@ -144,7 +144,7 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
         <div className="relative bg-gradient-to-br from-slate-800 to-slate-900 rounded-t-2xl px-7 py-6 print:rounded-none">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center shadow-md p-1.5">
+              <div className="w-16 h-16 rounded-2xl bg-slate-700 flex items-center justify-center p-2">
                 <img src={logo} alt={orgName} className="w-full h-full object-contain" />
               </div>
               <div>
