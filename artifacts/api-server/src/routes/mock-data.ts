@@ -116,10 +116,12 @@ const SL_BRANCHES = [
 ];
 
 const SL_SHIFTS = [
-  { name: "General Shift", type: "normal" as const, startTime1: "08:00", endTime1: "17:00", graceMinutes: 10, overtimeThreshold: 60, isActive: true },
-  { name: "Morning Shift", type: "normal" as const, startTime1: "06:00", endTime1: "14:00", graceMinutes: 5, overtimeThreshold: 60, isActive: true },
-  { name: "Evening Shift", type: "normal" as const, startTime1: "14:00", endTime1: "22:00", graceMinutes: 5, overtimeThreshold: 60, isActive: true },
-  { name: "Split Shift", type: "split" as const, startTime1: "07:00", endTime1: "12:00", startTime2: "14:00", endTime2: "18:00", graceMinutes: 10, overtimeThreshold: 45, isActive: true },
+  { name: "Flexible Shift",       type: "normal" as const, startTime1: "02:00", endTime1: "23:00", graceMinutes: 30, overtimeThreshold: 60, isActive: true },
+  { name: "Kitchen Shift - Sunday", type: "normal" as const, startTime1: "08:00", endTime1: "20:00", graceMinutes: 10, overtimeThreshold: 60, isActive: true },
+  { name: "Receptionist Shift",   type: "normal" as const, startTime1: "08:30", endTime1: "17:30", graceMinutes: 10, overtimeThreshold: 60, isActive: true },
+  { name: "Kitchen Shift",        type: "normal" as const, startTime1: "07:00", endTime1: "21:00", graceMinutes: 10, overtimeThreshold: 60, isActive: true },
+  { name: "Regular Shift",        type: "normal" as const, startTime1: "08:00", endTime1: "17:00", graceMinutes: 10, overtimeThreshold: 60, isActive: true },
+  { name: "Night Watcher Shift",  type: "normal" as const, startTime1: "20:00", endTime1: "08:00", graceMinutes: 10, overtimeThreshold: 60, isActive: true },
 ];
 
 const SL_DEPARTMENTS = [
