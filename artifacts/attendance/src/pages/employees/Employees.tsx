@@ -729,16 +729,16 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
               ) : (
                 <>
                   <p className="text-xs text-muted-foreground">Upload documents in PDF, JPG, PNG, or DOC format (max 10MB each).</p>
-                  <DocUploadRow label="Aadhar Card" fieldName="aadharDoc" currentUrl={emp?.aadharDocUrl} empId={emp?.id} onUploaded={onSaved} />
-                  <DocUploadRow label="PAN Card" fieldName="panDoc" currentUrl={emp?.panDocUrl} empId={emp?.id} onUploaded={onSaved} />
+                  <DocUploadRow label="NIC (National Identity Card)" fieldName="aadharDoc" currentUrl={emp?.aadharDocUrl} empId={emp?.id} onUploaded={onSaved} />
+                  <DocUploadRow label="Passport Copy" fieldName="panDoc" currentUrl={emp?.panDocUrl} empId={emp?.id} onUploaded={onSaved} />
                   <DocUploadRow label="Certificates" fieldName="certificatesDoc" currentUrl={emp?.certificatesDocUrl} empId={emp?.id} onUploaded={onSaved} />
                   <DocUploadRow label="Resume / CV" fieldName="resumeDoc" currentUrl={emp?.resumeDocUrl} empId={emp?.id} onUploaded={onSaved} />
                   <div className="rounded-lg bg-muted/50 p-3 mt-2">
                     <p className="text-xs font-medium mb-1.5">Document Status</p>
                     <div className="grid grid-cols-2 gap-2">
                       {[
-                        { label: "Aadhar Card", url: emp?.aadharDocUrl },
-                        { label: "PAN Card", url: emp?.panDocUrl },
+                        { label: "NIC (National Identity Card)", url: emp?.aadharDocUrl },
+                        { label: "Passport Copy", url: emp?.panDocUrl },
                         { label: "Certificates", url: emp?.certificatesDocUrl },
                         { label: "Resume / CV", url: emp?.resumeDocUrl },
                       ].map(doc => (
