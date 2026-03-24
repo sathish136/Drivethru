@@ -247,18 +247,16 @@ export default function Loans() {
 
   const years = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 1 + i);
 
-  // Theme-only status badge
   const statusBadge = (s: string) => {
-    if (s === "active")    return "bg-primary/10 text-primary border border-primary/20";
-    if (s === "completed") return "bg-muted text-foreground border border-border";
-    return "bg-muted text-muted-foreground border border-border line-through";
+    if (s === "active")    return "bg-emerald-100 text-emerald-700 border border-emerald-200";
+    if (s === "completed") return "bg-blue-100 text-blue-700 border border-blue-200";
+    return "bg-red-100 text-red-600 border border-red-200";
   };
 
-  // Theme-only type badge
   const typeBadge = (t: string) =>
     t === "loan"
-      ? "bg-primary/15 text-primary border border-primary/25"
-      : "bg-sidebar/10 text-sidebar-foreground border border-sidebar/20";
+      ? "bg-amber-100 text-amber-700 border border-amber-200"
+      : "bg-violet-100 text-violet-700 border border-violet-200";
 
   return (
     <div className="min-h-screen bg-background">
@@ -403,8 +401,8 @@ export default function Loans() {
                           <div className="font-medium text-foreground">{MONTHS[l.startMonth - 1]?.slice(0, 3)} {l.startYear}</div>
                           {end && <div className="text-muted-foreground">→ {MONTHS[end.month - 1]?.slice(0, 3)} {end.year}</div>}
                         </td>
-                        <td className="px-4 py-3 text-sm text-primary font-medium">{fmt(l.paidAmount)}</td>
-                        <td className="px-4 py-3 text-sm font-bold text-foreground">{fmt(l.remainingBalance)}</td>
+                        <td className="px-4 py-3 text-sm text-emerald-600 font-medium">{fmt(l.paidAmount)}</td>
+                        <td className="px-4 py-3 text-sm font-bold text-red-600">{fmt(l.remainingBalance)}</td>
                         <td className="px-4 py-3">
                           <div className="w-28">
                             <div className="flex justify-between items-center text-xs mb-1">
@@ -567,12 +565,18 @@ export default function Loans() {
                         key={t}
                         className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
                           form.type === t
-                            ? "border-primary bg-primary/8 shadow-sm"
-                            : "border-border hover:border-primary/40 hover:bg-muted/60"
+                            ? t === "loan"
+                              ? "border-amber-400 bg-amber-50 shadow-sm"
+                              : "border-violet-400 bg-violet-50 shadow-sm"
+                            : "border-border hover:border-muted-foreground/30 hover:bg-muted/60"
                         }`}
                       >
                         <input type="radio" name="type" value={t} checked={form.type === t} onChange={() => setForm(f => ({ ...f, type: t }))} className="sr-only" />
-                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${form.type === t ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                          form.type === t
+                            ? t === "loan" ? "bg-amber-500 text-white" : "bg-violet-500 text-white"
+                            : "bg-muted text-muted-foreground"
+                        }`}>
                           {t === "loan" ? (
                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -584,7 +588,7 @@ export default function Loans() {
                           )}
                         </div>
                         <div>
-                          <p className={`font-semibold capitalize text-sm ${form.type === t ? "text-primary" : "text-foreground"}`}>{t}</p>
+                          <p className={`font-semibold capitalize text-sm ${form.type === t ? (t === "loan" ? "text-amber-700" : "text-violet-700") : "text-foreground"}`}>{t}</p>
                           <p className="text-xs text-muted-foreground">{t === "loan" ? "Long-term repayment" : "Salary advance"}</p>
                         </div>
                       </label>
