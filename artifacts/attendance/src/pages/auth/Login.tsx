@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Mail, Lock, AlertCircle, Shield, Clock, Users, BarChart3, Eye, EyeOff } from "lucide-react";
+import liveuLogo from "@/assets/liveu-logo.png";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -137,7 +138,7 @@ export default function Login() {
               <div className="relative">
                 <div className="anim-pulse-ring absolute inset-0 rounded-full"
                   style={{ background: "hsl(119 41% 54% / .4)" }} />
-                <img src={LOGO} alt="Drivethru" className="w-12 h-12 rounded-full relative object-contain bg-white p-0.5"
+                <img src={liveuLogo} alt="Liveu Pvr Ltd" className="w-12 h-12 rounded-full relative object-cover"
                   style={{ boxShadow: "0 0 20px hsl(119 41% 54% / .5)" }} />
               </div>
               <div>
@@ -194,7 +195,7 @@ export default function Login() {
 
             {/* Mobile brand */}
             <div className="flex lg:hidden items-center gap-3 mb-8 justify-center">
-              <img src={LOGO} alt="Drivethru" className="w-10 h-10 rounded-full object-contain bg-white p-0.5"
+              <img src={liveuLogo} alt="Liveu Pvr Ltd" className="w-10 h-10 rounded-full object-cover"
                 style={{ boxShadow: "0 2px 10px hsl(119 41% 54% / .4)" }} />
               <p className="font-bold text-gray-900 text-lg">Drivethru</p>
             </div>
@@ -273,8 +274,8 @@ export default function Login() {
               </form>
 
               <div className="mt-6 pt-5 border-t border-gray-100 flex items-center justify-center gap-2">
-                <img src={LOGO} alt="Drivethru" className="w-5 h-5 rounded-full object-contain bg-white" />
-                <p className="text-[11px] text-gray-400">Powered by <span className="font-semibold text-gray-500">Drivethru</span> · ZKTeco Integrated</p>
+                <img src={liveuLogo} alt="Liveu" className="w-5 h-5 rounded-full object-cover" />
+                <p className="text-[11px] text-gray-400">Powered by <span className="font-semibold text-gray-500">Liveu</span></p>
               </div>
             </div>
 
