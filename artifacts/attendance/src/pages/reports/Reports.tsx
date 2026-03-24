@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useGetAttendanceReport, useGetMonthlyReport, useGetOvertimeReport, useListBranches } from "@workspace/api-client-react";
 import { PageHeader, Card, Input, Select, Label } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { Users, Clock, Calendar, Banknote, FileDown } from "lucide-react";
+import { Users, Clock, Calendar, Banknote } from "lucide-react";
 import drivethruLogo from "@/assets/drivethru-logo.png";
 import liveuLogo from "@/assets/liveu-logo.png";
 
@@ -106,26 +106,72 @@ ${tableHtml}
   w.document.close();
 }
 
-/* ─── PDF Export button ─── */
-function PdfButton({ onClick }: { onClick: () => void }) {
+/* ─── CSV export helper ─── */
+function exportCsv(headers: string[], rows: (string | number)[][], filename: string) {
+  const escape = (v: string | number) => {
+    const s = String(v ?? "");
+    return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = [headers, ...rows].map(r => r.map(escape).join(",")).join("\r\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* ─── Mini Adobe PDF icon button ─── */
+function PdfIconButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 active:scale-95 transition-all shadow-sm"
+      title="Export PDF"
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#E02B20] text-white hover:bg-[#C4241A] active:scale-95 transition-all shadow-sm"
     >
-      <FileDown className="w-4 h-4" />
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="16" height="16" rx="2.5" fill="#E02B20"/>
+        <path d="M2 3.5C2 2.67 2.67 2 3.5 2H9.5L14 6.5V12.5C14 13.33 13.33 14 12.5 14H3.5C2.67 14 2 13.33 2 12.5V3.5Z" fill="white" fillOpacity="0.15"/>
+        <path d="M9.5 2V6H14" stroke="white" strokeOpacity="0.4" strokeWidth="0.8" fill="none"/>
+        <text x="3" y="12" fontSize="5" fontWeight="800" fill="white" fontFamily="Arial,sans-serif" letterSpacing="0.3">PDF</text>
+      </svg>
       Export PDF
     </button>
   );
 }
 
-/* ── Filter card wrapper with title + PDF button ── */
-function FilterCard({ title, onExport, children }: { title: string; onExport: () => void; children: React.ReactNode }) {
+/* ─── Mini Excel icon button ─── */
+function ExcelIconButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      title="Export Excel"
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#1D6F42] text-white hover:bg-[#185C37] active:scale-95 transition-all shadow-sm"
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="16" height="16" rx="2.5" fill="#1D6F42"/>
+        <path d="M2 3H9V13H2V3Z" fill="#21A366" fillOpacity="0.5"/>
+        <path d="M9 2H13.5C13.78 2 14 2.22 14 2.5V13.5C14 13.78 13.78 14 13.5 14H9V2Z" fill="white" fillOpacity="0.12"/>
+        <line x1="9" y1="2" x2="9" y2="14" stroke="white" strokeOpacity="0.3" strokeWidth="0.8"/>
+        <text x="2.5" y="11" fontSize="7.5" fontWeight="900" fill="white" fontFamily="Arial,sans-serif">X</text>
+        <line x1="9.5" y1="5.5" x2="13.5" y2="5.5" stroke="white" strokeOpacity="0.35" strokeWidth="0.7"/>
+        <line x1="9.5" y1="8" x2="13.5" y2="8" stroke="white" strokeOpacity="0.35" strokeWidth="0.7"/>
+        <line x1="9.5" y1="10.5" x2="13.5" y2="10.5" stroke="white" strokeOpacity="0.35" strokeWidth="0.7"/>
+      </svg>
+      Export Excel
+    </button>
+  );
+}
+
+/* ── Filter card wrapper with title + PDF + Excel buttons ── */
+function FilterCard({ title, onExport, onExportExcel, children }: { title: string; onExport: () => void; onExportExcel: () => void; children: React.ReactNode }) {
   return (
     <Card className="p-0 overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
         <span className="text-sm font-semibold text-foreground">{title}</span>
-        <PdfButton onClick={onExport} />
+        <div className="flex items-center gap-2">
+          <ExcelIconButton onClick={onExportExcel} />
+          <PdfIconButton onClick={onExport} />
+        </div>
       </div>
       <div className="p-4">{children}</div>
     </Card>
@@ -226,9 +272,20 @@ function AttendanceReport() {
     });
   };
 
+  const handleExportExcel = () => {
+    const rows = filtered.map((r: any) => [
+      r.date, r.employeeCode, r.employeeName, r.department||"", r.branchName,
+      r.designation||"", r.employeeType||"", r.status.replace("_"," ").toUpperCase(),
+      r.inTime1||"", r.outTime1||"",
+      r.totalHours!=null?r.totalHours.toFixed(1):"",
+      r.overtimeHours>0?r.overtimeHours.toFixed(1):"",
+    ]);
+    exportCsv(HEADERS, rows, `attendance-report-${dStart}-${dEnd}.csv`);
+  };
+
   return (
     <div className="space-y-4">
-      <FilterCard title="Attendance Report Filters" onExport={handleExport}>
+      <FilterCard title="Attendance Report Filters" onExport={handleExport} onExportExcel={handleExportExcel}>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
           <div><Label className="text-xs">Start Date</Label>
             <Input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/></div>
@@ -379,9 +436,18 @@ function MonthlyReport() {
     });
   };
 
+  const handleExportExcel = () => {
+    const rows = filtered.map((e: any) => [
+      e.employeeCode, e.employeeName, e.department||"", e.branchName, e.designation, e.employeeType||"",
+      e.presentDays, e.absentDays, e.lateDays, e.halfDays, e.leaveDays, e.holidayDays,
+      e.totalWorkHours.toFixed(1), e.overtimeHours.toFixed(1), `${e.attendancePercentage}%`,
+    ]);
+    exportCsv(HEADERS, rows, `monthly-report-${getMonthName(dMonth)}-${dYear}.csv`);
+  };
+
   return (
     <div className="space-y-4">
-      <FilterCard title="Monthly Report Filters" onExport={handleExport}>
+      <FilterCard title="Monthly Report Filters" onExport={handleExport} onExportExcel={handleExportExcel}>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <div><Label className="text-xs">Month</Label>
             <Select value={month} onChange={e=>setMonth(Number(e.target.value))}>
@@ -515,9 +581,18 @@ function OvertimeReport() {
     });
   };
 
+  const handleExportExcel = () => {
+    const rows = filtered.map((e: any) => [
+      e.employeeCode, e.employeeName, e.branchName, e.designation, e.employeeType||"",
+      e.overtimeDays, e.totalOvertimeHours.toFixed(1),
+      e.records.map((r: any) => `${r.date}: ${r.overtimeHours.toFixed(1)}h`).join(" | "),
+    ]);
+    exportCsv(HEADERS, rows, `overtime-report-${dStart}-${dEnd}.csv`);
+  };
+
   return (
     <div className="space-y-4">
-      <FilterCard title="Overtime Report Filters" onExport={handleExport}>
+      <FilterCard title="Overtime Report Filters" onExport={handleExport} onExportExcel={handleExportExcel}>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           <div><Label className="text-xs">Start Date</Label>
             <Input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/></div>
@@ -680,9 +755,21 @@ function PayrollReport() {
     });
   };
 
+  const handleExportExcel = () => {
+    const rows = filtered.map(r => [
+      r.employee.employeeId, r.employee.fullName, r.employee.designation, r.employee.department||"",
+      r.employee.employeeType||"",
+      Math.round(r.basicSalary), Math.round(r.grossSalary),
+      Math.round(r.epfEmployee), Math.round(r.epfEmployer), Math.round(r.etfEmployer),
+      Math.round(r.apit), Math.round(r.overtimePay), Math.round(r.totalDeductions),
+      Math.round(r.netSalary), r.status.toUpperCase(),
+    ]);
+    exportCsv(HEADERS, rows, `payroll-report-${getMonthName(dMonth)}-${dYear}.csv`);
+  };
+
   return (
     <div className="space-y-4">
-      <FilterCard title="Payroll Report Filters" onExport={handleExport}>
+      <FilterCard title="Payroll Report Filters" onExport={handleExport} onExportExcel={handleExportExcel}>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           <div><Label className="text-xs">Month</Label>
             <Select value={month} onChange={e=>setMonth(Number(e.target.value))}>
