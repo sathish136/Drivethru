@@ -342,10 +342,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           sidebarLight ? "border-b border-gray-200" : "border-b border-white/8",
           collapsed ? "justify-center py-4 px-0" : "px-4 pt-5 pb-4 gap-3"
         )}>
-          <div className="w-10 h-10 rounded-2xl bg-white flex items-center justify-center shrink-0 overflow-hidden"
+          <div className="h-10 w-10 rounded-xl bg-white flex items-center justify-center shrink-0 overflow-hidden"
             style={{ boxShadow: "0 2px 10px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.06)" }}>
             {logoUrl
-              ? <img src={logoUrl} alt="Logo" className="w-7 h-7 object-contain" />
+              ? <img src={logoUrl} alt="Logo" className="w-9 h-9 object-contain" />
               : <span className="font-extrabold text-sm text-primary">D</span>}
           </div>
 
