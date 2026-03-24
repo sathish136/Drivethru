@@ -26,26 +26,26 @@
 }
 
 :root {
-  /* Green Theme base on #5db75c -> HSL 119 41% 54% */
-  --background: 120 20% 98%;
-  --foreground: 220 20% 15%;
+  /* Drivethru Blue Theme — #3a9ec2 -> HSL 200 55% 49% */
+  --background: 200 20% 98%;
+  --foreground: 210 20% 15%;
   
-  --primary: 119 41% 54%;
+  --primary: 200 60% 48%;
   --primary-foreground: 0 0% 100%;
   
-  --muted: 120 10% 92%;
-  --muted-foreground: 220 15% 45%;
+  --muted: 200 10% 92%;
+  --muted-foreground: 210 15% 45%;
   
-  --border: 220 15% 90%;
-  --input: 220 15% 92%;
-  --ring: 119 41% 54%;
+  --border: 210 15% 90%;
+  --input: 210 15% 92%;
+  --ring: 200 60% 48%;
   
   --card: 0 0% 100%;
-  --card-foreground: 220 20% 15%;
+  --card-foreground: 210 20% 15%;
 
-  --sidebar: 220 30% 12%;
-  --sidebar-foreground: 220 20% 80%;
-  --sidebar-active: 119 41% 54%;
+  --sidebar: 210 35% 12%;
+  --sidebar-foreground: 210 20% 80%;
+  --sidebar-active: 200 60% 48%;
 }
 
 @layer base {

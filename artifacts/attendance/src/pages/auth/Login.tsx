@@ -2,16 +2,22 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Mail, Lock, AlertCircle, Shield, Clock, Users, BarChart3, Eye, EyeOff } from "lucide-react";
 import liveuLogo from "@/assets/liveu-logo.png";
+import drivethruLogo from "@/assets/drivethru-logo.png";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-
-const LOGO = "https://collective.ruhr/wp-content/uploads/2018/07/logo_drivethru_surfcamps.png";
 
 const features = [
   { icon: Clock,    title: "Real-time Attendance",  desc: "Live biometric tracking across all branches" },
   { icon: Users,    title: "Employee Management",    desc: "Manage staff records, shifts and payroll"    },
   { icon: BarChart3,title: "Smart Analytics",         desc: "Reports and insights at your fingertips"     },
 ];
+
+/* Drivethru brand blue: hsl(200 60% 48%) ≈ #3a9ec2 */
+const B = "200 60% 48%";
+const primary     = `hsl(${B})`;
+const primaryDim  = `hsl(${B} / .15)`;
+const primaryBorder = `hsl(${B} / .25)`;
+const primaryGlow = `hsl(${B} / .45)`;
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -79,23 +85,23 @@ export default function Login() {
         .form-row:nth-child(3){ animation: count-in .45s .54s both }
         .input-mod {
           width:100%; padding:.625rem .875rem .625rem 2.6rem;
-          background:#f8faf8; border:1.5px solid #e4ebe4;
-          border-radius:.75rem; font-size:.875rem; color:#1a2e1a;
+          background:#f4f9fc; border:1.5px solid #cce4ef;
+          border-radius:.75rem; font-size:.875rem; color:#0f2d3a;
           outline:none; transition: border-color .2s, box-shadow .2s, background .2s;
         }
         .input-mod:focus {
-          border-color:hsl(119 41% 54%); background:#fff;
-          box-shadow:0 0 0 3px hsl(119 41% 54% / .15);
+          border-color:${primary}; background:#fff;
+          box-shadow:0 0 0 3px ${primaryGlow}33;
         }
         .btn-primary {
           width:100%; padding:.75rem; border-radius:.875rem; font-size:.9375rem;
           font-weight:600; color:#fff; border:none; cursor:pointer;
-          background: linear-gradient(135deg,hsl(119 41% 50%),hsl(130 50% 42%));
-          box-shadow: 0 4px 18px hsl(119 41% 54% / .4);
+          background: linear-gradient(135deg, hsl(200 60% 46%), hsl(205 65% 38%));
+          box-shadow: 0 4px 18px ${primaryGlow};
           transition: opacity .2s, transform .15s, box-shadow .2s;
           position:relative; overflow:hidden;
         }
-        .btn-primary:hover:not(:disabled){ opacity:.92; transform:translateY(-1px); box-shadow:0 6px 24px hsl(119 41% 54% / .5); }
+        .btn-primary:hover:not(:disabled){ opacity:.92; transform:translateY(-1px); box-shadow:0 6px 24px ${primaryGlow}; }
         .btn-primary:active:not(:disabled){ transform:translateY(0); }
         .btn-primary:disabled{ opacity:.7; cursor:not-allowed; }
         .btn-primary::after { content:''; position:absolute; inset:0;
@@ -103,29 +109,29 @@ export default function Login() {
           border-radius:inherit; }
       `}</style>
 
-      <div className="min-h-screen flex overflow-hidden" style={{ background: "hsl(220 30% 10%)" }}>
+      <div className="min-h-screen flex overflow-hidden" style={{ background: "hsl(210 35% 10%)" }}>
 
         {/* ── LEFT PANEL — branding & animations ── */}
         <div className={`hidden lg:flex lg:w-[55%] flex-col relative overflow-hidden ${mounted ? "panel-left" : "opacity-0"}`}
-          style={{ background: "linear-gradient(145deg, hsl(220 30% 11%) 0%, hsl(220 35% 8%) 100%)" }}>
+          style={{ background: "linear-gradient(145deg, hsl(210 35% 11%) 0%, hsl(210 40% 8%) 100%)" }}>
 
           {/* Animated blobs */}
           <div className="anim-blob absolute w-[480px] h-[480px] -top-24 -left-24 opacity-[.08]"
-            style={{ background: "hsl(119 41% 54%)", filter: "blur(2px)" }} />
+            style={{ background: primary, filter: "blur(2px)" }} />
           <div className="anim-blob absolute w-[360px] h-[360px] bottom-0 right-0 opacity-[.06]"
-            style={{ background: "hsl(210 80% 60%)", animationDelay: "-4s", filter: "blur(2px)" }} />
+            style={{ background: "hsl(190 70% 55%)", animationDelay: "-4s", filter: "blur(2px)" }} />
 
           {/* Floating circles */}
           <div className="anim-float1 absolute top-[15%] right-[12%] w-28 h-28 rounded-full border border-white/8"
             style={{ background: "radial-gradient(circle at 30% 30%, rgba(255,255,255,.06), transparent)" }} />
           <div className="anim-float2 absolute bottom-[20%] left-[8%] w-20 h-20 rounded-full border border-white/6"
-            style={{ background: "radial-gradient(circle at 30% 30%, rgba(93,183,92,.08), transparent)" }} />
+            style={{ background: `radial-gradient(circle at 30% 30%, ${primaryDim}, transparent)` }} />
           <div className="anim-float3 absolute top-[55%] right-[22%] w-12 h-12 rounded-full"
-            style={{ background: "hsl(119 41% 54% / .12)", border: "1px solid hsl(119 41% 54% / .2)" }} />
+            style={{ background: primaryDim, border: `1px solid ${primaryBorder}` }} />
 
           {/* Spinning ring */}
           <div className="anim-spin absolute top-[30%] left-[5%] w-40 h-40 rounded-full opacity-10"
-            style={{ border: "1.5px dashed hsl(119 41% 54%)" }} />
+            style={{ border: `1.5px dashed ${primary}` }} />
 
           {/* Grid dots pattern */}
           <div className="absolute inset-0 opacity-[.03]"
@@ -133,13 +139,13 @@ export default function Login() {
 
           {/* Content */}
           <div className="relative z-10 flex flex-col h-full px-12 py-10">
-            {/* Brand */}
+            {/* Brand — Liveu logo on left side */}
             <div className="flex items-center gap-3">
               <div className="relative">
                 <div className="anim-pulse-ring absolute inset-0 rounded-full"
-                  style={{ background: "hsl(119 41% 54% / .4)" }} />
+                  style={{ background: primaryGlow }} />
                 <img src={liveuLogo} alt="Live u Pvt Ltd Srilanka" className="w-12 h-12 rounded-full relative object-cover"
-                  style={{ boxShadow: "0 0 20px hsl(119 41% 54% / .5)" }} />
+                  style={{ boxShadow: `0 0 20px ${primaryGlow}` }} />
               </div>
               <div>
                 <p className="font-bold text-white text-base tracking-tight leading-none">Drivethru</p>
@@ -150,12 +156,12 @@ export default function Login() {
             {/* Hero text */}
             <div className="mt-auto mb-10">
               <div className="anim-shimmer inline-flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-3 py-1 mb-5">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" style={{ boxShadow: "0 0 6px #4ade80" }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-400 inline-block" style={{ boxShadow: "0 0 6px #38bdf8" }} />
                 <span className="text-white/60 text-[11px] font-medium">System Operational</span>
               </div>
               <h1 className="text-4xl font-bold text-white leading-tight tracking-tight">
                 Workforce<br />
-                <span style={{ color: "hsl(119 41% 60%)" }}>Intelligence</span><br />
+                <span style={{ color: primary }}>Intelligence</span><br />
                 Platform
               </h1>
               <p className="mt-4 text-white/45 text-[14px] leading-relaxed max-w-xs">
@@ -167,8 +173,8 @@ export default function Login() {
                 {features.map((f, i) => (
                   <div key={i} className="feature-row flex items-center gap-3">
                     <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-                      style={{ background: "hsl(119 41% 54% / .15)", border: "1px solid hsl(119 41% 54% / .2)" }}>
-                      <f.icon className="w-4 h-4" style={{ color: "hsl(119 41% 65%)" }} />
+                      style={{ background: primaryDim, border: `1px solid ${primaryBorder}` }}>
+                      <f.icon className="w-4 h-4" style={{ color: `hsl(200 65% 70%)` }} />
                     </div>
                     <div>
                       <p className="text-white text-[13px] font-semibold leading-none">{f.title}</p>
@@ -189,21 +195,20 @@ export default function Login() {
 
         {/* ── RIGHT PANEL — login form ── */}
         <div className={`flex-1 flex items-center justify-center p-8 ${mounted ? "panel-right" : "opacity-0"}`}
-          style={{ background: "#f0f4f0" }}>
+          style={{ background: "#eef5f9" }}>
 
           <div className="w-full max-w-sm">
 
             {/* Mobile brand */}
             <div className="flex lg:hidden items-center gap-3 mb-8 justify-center">
-              <img src={liveuLogo} alt="Live u Pvt Ltd Srilanka" className="w-10 h-10 rounded-full object-cover"
-                style={{ boxShadow: "0 2px 10px hsl(119 41% 54% / .4)" }} />
+              <img src={drivethruLogo} alt="Drivethru" className="w-10 h-10 object-contain" />
               <p className="font-bold text-gray-900 text-lg">Drivethru</p>
             </div>
 
             {/* Form card */}
             <div className="bg-white rounded-2xl shadow-xl shadow-black/8 p-8 border border-gray-100/80">
               <div className="mb-7 flex flex-col items-center text-center">
-                <img src={LOGO} alt="Drivethru" className="w-16 h-16 object-contain mb-4" />
+                <img src={drivethruLogo} alt="Drivethru" className="h-16 w-auto object-contain mb-4" />
                 <h2 className="text-[22px] font-bold text-gray-900 tracking-tight">Welcome Back</h2>
                 <p className="text-gray-400 text-sm mt-1">Drivethru</p>
                 <p className="text-gray-400 text-xs mt-0.5">Sign in to access your dashboard</p>
@@ -274,7 +279,7 @@ export default function Login() {
               </form>
 
               <div className="mt-6 pt-5 border-t border-gray-100 flex items-center justify-center gap-2">
-                <img src={liveuLogo} alt="Liveu" className="w-5 h-5 rounded-full object-cover" />
+                <img src={liveuLogo} alt="Live u Pvt Ltd Srilanka" className="w-5 h-5 rounded-full object-cover" />
                 <p className="text-[11px] text-gray-400">Powered by <span className="font-semibold text-gray-500">Live u Pvt Ltd Srilanka</span></p>
               </div>
             </div>
