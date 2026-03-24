@@ -42,6 +42,10 @@ router.get("/", async (req, res) => {
     const { month, year, branchId, status } = req.query as Record<string, string>;
     if (!month || !year) return res.status(400).json({ message: "month and year required" });
 
+    // Only fetch payroll for employees who have a salary structure assigned
+    const assignedEmployeeRows = await db.select({ employeeId: employeeSalaryAssignments.employeeId }).from(employeeSalaryAssignments);
+    const assignedEmployeeIds = new Set(assignedEmployeeRows.map(r => r.employeeId));
+
     const rows = await db.select({
       payroll: payrollRecords,
       emp: {
@@ -57,7 +61,8 @@ router.get("/", async (req, res) => {
       .innerJoin(employees, eq(payrollRecords.employeeId, employees.id));
 
     let result = rows.filter(r =>
-      r.payroll.month === parseInt(month) && r.payroll.year === parseInt(year)
+      r.payroll.month === parseInt(month) && r.payroll.year === parseInt(year) &&
+      assignedEmployeeIds.has(r.emp.id)
     );
     if (branchId) result = result.filter(r => r.payroll.branchId === parseInt(branchId));
     if (status) result = result.filter(r => r.payroll.status === status);
@@ -76,6 +81,10 @@ router.get("/employees-for-payroll", async (req, res) => {
 
     const cfg = await getPayrollSettings();
 
+    // Only include employees who have a salary structure assigned
+    const assignedRows = await db.select({ employeeId: employeeSalaryAssignments.employeeId }).from(employeeSalaryAssignments);
+    const assignedIds = new Set(assignedRows.map(r => r.employeeId));
+
     const allEmployees = await db.select({
       id: employees.id,
       employeeId: employees.employeeId,
@@ -89,7 +98,7 @@ router.get("/employees-for-payroll", async (req, res) => {
       etfNumber: employees.etfNumber,
     }).from(employees);
 
-    const activeEmps = allEmployees.filter(e => e.status === "active");
+    const activeEmps = allEmployees.filter(e => e.status === "active" && assignedIds.has(e.id));
     const filteredByBranch = branchId ? activeEmps.filter(e => e.branchId === parseInt(branchId)) : activeEmps;
 
     const existingPayroll = await db.select({
