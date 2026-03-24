@@ -180,7 +180,7 @@ export default function PayrollSettings() {
     setEmpsLoading(true);
     fetch(apiUrl("/employees"))
       .then(r => r.json())
-      .then(d => setEmployees(Array.isArray(d) ? d.filter((e: Employee) => e.status === "active") : []))
+      .then(d => setEmployees((d.employees ?? (Array.isArray(d) ? d : [])).filter((e: Employee) => e.status === "active")))
       .catch(() => setError("Failed to load employees"))
       .finally(() => setEmpsLoading(false));
   }, [tab]);
@@ -220,7 +220,7 @@ export default function PayrollSettings() {
       if (allEmployees.length === 0) {
         fetch(apiUrl("/employees"))
           .then(r => r.json())
-          .then(d => setAllEmployees(Array.isArray(d) ? d.filter((e: Employee) => e.status === "active") : []))
+          .then(d => setAllEmployees((d.employees ?? (Array.isArray(d) ? d : [])).filter((e: Employee) => e.status === "active")))
           .catch(() => {});
       }
     }
