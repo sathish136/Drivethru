@@ -30,6 +30,7 @@ import {
   Sliders,
   Sun,
   Moon,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -53,10 +54,11 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "HR Management",
     items: [
-      { href: "/employees",        label: "Employees",        icon: UserRound },
-      { href: "/payroll",          label: "Payroll",          icon: Wallet    },
-      { href: "/payroll-settings", label: "Payroll Settings", icon: Sliders   },
-      { href: "/shifts",           label: "Shifts",           icon: Timer     },
+      { href: "/employees",        label: "Employees",        icon: UserRound  },
+      { href: "/payroll",          label: "Payroll",          icon: Wallet     },
+      { href: "/payroll-settings", label: "Payroll Settings", icon: Sliders    },
+      { href: "/hr-settings",      label: "HR Settings",      icon: BookOpen   },
+      { href: "/shifts",           label: "Shifts",           icon: Timer      },
     ],
   },
   {

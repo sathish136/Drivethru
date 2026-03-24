@@ -17,6 +17,7 @@ import Users from "@/pages/users/Users";
 import Payroll from "@/pages/payroll/Payroll";
 import PayrollSettings from "@/pages/payroll-settings/PayrollSettings";
 import ActivityLogs from "@/pages/activity-logs/ActivityLogs";
+import HRSettings from "@/pages/hr-settings/HRSettings";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -49,6 +50,7 @@ function Router() {
       <Route path="/biometric"><ProtectedRoute component={Biometric} /></Route>
       <Route path="/settings"><ProtectedRoute component={Settings} /></Route>
       <Route path="/users"><ProtectedRoute component={Users} /></Route>
+      <Route path="/hr-settings"><ProtectedRoute component={HRSettings} /></Route>
       <Route path="/activity-logs"><ProtectedRoute component={ActivityLogs} /></Route>
       <Route component={NotFound} />
     </Switch>
