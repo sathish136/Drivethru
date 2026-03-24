@@ -330,7 +330,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           {!collapsed && (
             <>
               <div className="flex-1 min-w-0">
-                <span className="font-bold text-sm tracking-tight text-white block truncate">Post Office</span>
+                <span className="font-bold text-sm tracking-tight text-white block truncate">Drivethru</span>
                 <span className="text-[10px] text-white/50 block truncate">Attendance Management</span>
               </div>
               <button
