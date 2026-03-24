@@ -11,7 +11,7 @@ import {
   MapPin, X, Building2, Users, Layers,
   FileText, Upload, CheckCircle2, AlertCircle, UserCircle,
   Briefcase, Phone, Hash, CreditCard, Calendar,
-  IdCard, Home, Shield, Camera
+  IdCard, Home, Shield, Camera, DollarSign, BadgeIndianRupee
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -226,7 +226,7 @@ function DocUploadRow({
 // ── Employee Profile Drawer ────────────────────────────────────────────────────
 const EMPTY_EMP = {
   employeeId:"", firstName:"", lastName:"", gender:"male", dateOfBirth:"", phone:"", email:"",
-  address:"", nicNumber:"", panNumber:"",
+  address:"", nicNumber:"", panNumber:"", aadharNumber:"",
   designation:"", department:"", branchId:1, shiftId:"", joiningDate:"",
   employeeType:"permanent", reportingManagerId:"", biometricId:"", status:"active",
   epfNumber:"", etfNumber:"", basicSalary:"",
@@ -246,7 +246,8 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
     dateOfBirth: emp.dateOfBirth || "",
     shiftId: emp.shiftId || "",
     reportingManagerId: emp.reportingManagerId || "",
-    nicNumber: emp.nicNumber || emp.aadharNumber || "",
+    nicNumber: emp.nicNumber || "",
+    aadharNumber: emp.aadharNumber || "",
     panNumber: emp.panNumber || "",
     epfNumber: emp.epfNumber || "",
     etfNumber: emp.etfNumber || "",
@@ -300,6 +301,16 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
   function handleSave() {
     setEmpIdError("");
+    if (!form.department) {
+      setTab("professional");
+      alert("Please select a Department before saving.");
+      return;
+    }
+    if (!form.designation) {
+      setTab("professional");
+      alert("Please select a Designation before saving.");
+      return;
+    }
     const payload = {
       ...form,
       fullName: `${form.firstName} ${form.lastName}`.trim() || form.firstName || "Employee",
@@ -500,11 +511,15 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                 </div>
                 <div className="grid grid-cols-2 gap-4 p-4">
                   <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">Aadhar Number</Label>
+                    <Label className="text-xs font-semibold mb-1.5 block">
+                      Aadhar Number
+                      <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">(Indian nationals only)</span>
+                    </Label>
                     <div className="relative">
                       <IdCard className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                       <Input className="pl-8 font-mono tracking-wider" placeholder="XXXX XXXX XXXX" value={form.aadharNumber} onChange={e => set("aadharNumber", e.target.value)} maxLength={14} />
                     </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">Leave blank for Sri Lankan or other non-Indian staff.</p>
                   </div>
                   <div>
                     <Label className="text-xs font-semibold mb-1.5 block">PAN Number</Label>
@@ -856,6 +871,107 @@ function DesignationsTab() {
   );
 }
 
+// ── Payroll Tab ────────────────────────────────────────────────────────────────
+function PayrollTab() {
+  const { data } = useListEmployees({ limit: 500 });
+  const employees: any[] = data?.employees || [];
+  const active = employees.filter(e => e.status === "active");
+
+  const totalBasic = active.reduce((sum, e) => sum + (parseFloat(e.basicSalary) || 0), 0);
+
+  return (
+    <div className="space-y-4">
+      {/* Summary cards */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center shrink-0">
+            <Users className="w-5 h-5 text-green-600" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Active Staff</p>
+            <p className="text-2xl font-bold text-foreground">{active.length}</p>
+          </div>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
+            <BadgeIndianRupee className="w-5 h-5 text-blue-600" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Total Monthly Basic</p>
+            <p className="text-2xl font-bold text-foreground">
+              {totalBasic > 0 ? `₹ ${totalBasic.toLocaleString("en-IN")}` : "—"}
+            </p>
+          </div>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0">
+            <DollarSign className="w-5 h-5 text-purple-600" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Avg Basic Salary</p>
+            <p className="text-2xl font-bold text-foreground">
+              {active.length > 0 && totalBasic > 0
+                ? `₹ ${Math.round(totalBasic / active.length).toLocaleString("en-IN")}`
+                : "—"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Payroll Table */}
+      <Card className="overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+          <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+            <BadgeIndianRupee className="w-3.5 h-3.5 text-primary" />
+            Employee Payroll Details
+          </p>
+          <span className="text-xs text-muted-foreground">{active.length} active employees</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-muted/50">
+              <tr>
+                {["Emp ID", "Name", "Designation", "Department", "Type", "Basic Salary", "EPF No.", "ETF No."].map(h => (
+                  <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {employees.length === 0 ? (
+                <tr><td colSpan={8} className="text-center py-10 text-muted-foreground">No employees found.</td></tr>
+              ) : (
+                employees.map((emp: any) => (
+                  <tr key={emp.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-3 py-2.5 font-mono text-primary font-medium">{emp.employeeId}</td>
+                    <td className="px-3 py-2.5">
+                      <div className="font-medium">{empDisplayName(emp)}</div>
+                      <div className="text-muted-foreground text-[10px]">{emp.email}</div>
+                    </td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{emp.designation || "—"}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{emp.department || "—"}</td>
+                    <td className="px-3 py-2.5">
+                      <span className={cn("px-1.5 py-0.5 rounded text-xs font-medium", EMP_TYPE_STYLE[emp.employeeType] || EMP_TYPE_STYLE.permanent)}>
+                        {emp.employeeType?.[0]?.toUpperCase() + emp.employeeType?.slice(1) || "Permanent"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 font-mono font-medium">
+                      {emp.basicSalary
+                        ? `₹ ${parseFloat(emp.basicSalary).toLocaleString("en-IN")}`
+                        : <span className="text-muted-foreground">Not set</span>}
+                    </td>
+                    <td className="px-3 py-2.5 font-mono text-muted-foreground">{emp.epfNumber || "—"}</td>
+                    <td className="px-3 py-2.5 font-mono text-muted-foreground">{emp.etfNumber || "—"}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function Employees() {
   const [activeTab, setActiveTab] = useState<Tab>("Employee List");
@@ -951,6 +1067,7 @@ export default function Employees() {
               {t === "Employee List" && <Users className="w-3.5 h-3.5" />}
               {t === "Departments" && <Building2 className="w-3.5 h-3.5" />}
               {t === "Designations" && <Layers className="w-3.5 h-3.5" />}
+              {t === "Payroll" && <BadgeIndianRupee className="w-3.5 h-3.5" />}
               {t}
               {t === "Employee List" && (
                 <span className={cn(
@@ -1113,6 +1230,7 @@ export default function Employees() {
 
       {activeTab === "Departments" && <DepartmentsTab />}
       {activeTab === "Designations" && <DesignationsTab />}
+      {activeTab === "Payroll" && <PayrollTab />}
 
       {drawerOpen && (
         <EmployeeDrawer
