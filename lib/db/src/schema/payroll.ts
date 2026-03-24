@@ -37,6 +37,7 @@ export const payrollRecords = pgTable("payroll_records", {
   halfDayDeduction: real("half_day_deduction").notNull().default(0),
   incompleteDeduction: real("incomplete_deduction").notNull().default(0),
   otherDeductions: real("other_deductions").notNull().default(0),
+  loanDeduction: real("loan_deduction").notNull().default(0),
   totalDeductions: real("total_deductions").notNull().default(0),
 
   netSalary: real("net_salary").notNull().default(0),
@@ -83,3 +84,24 @@ export const insertSalaryStructureSchema = createInsertSchema(salaryStructures).
 export const insertEmployeeSalaryAssignmentSchema = createInsertSchema(employeeSalaryAssignments).omit({ id: true, createdAt: true, updatedAt: true });
 export type SalaryStructure = typeof salaryStructures.$inferSelect;
 export type EmployeeSalaryAssignment = typeof employeeSalaryAssignments.$inferSelect;
+
+/* ── Staff Loans & Advances ─────────────────────────────── */
+
+export const staffLoans = pgTable("staff_loans", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employee_id").notNull().references(() => employees.id),
+  type: text("type").notNull().$type<"loan" | "advance">().default("loan"),
+  totalAmount: real("total_amount").notNull(),
+  monthlyInstallment: real("monthly_installment").notNull(),
+  startMonth: integer("start_month").notNull(),
+  startYear: integer("start_year").notNull(),
+  paidAmount: real("paid_amount").notNull().default(0),
+  remainingBalance: real("remaining_balance").notNull(),
+  status: text("status").notNull().$type<"active" | "completed" | "cancelled">().default("active"),
+  description: text("description"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertStaffLoanSchema = createInsertSchema(staffLoans).omit({ id: true, createdAt: true, updatedAt: true });
+export type StaffLoan = typeof staffLoans.$inferSelect;

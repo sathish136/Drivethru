@@ -50,6 +50,7 @@ interface PayrollRow {
   lateDeduction: number;
   absenceDeduction: number;
   otherDeductions: number;
+  loanDeduction: number;
   totalDeductions: number;
   netSalary: number;
   status: PayStatus;
@@ -132,6 +133,7 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
     { label: "Absence Deduction",   val: row.absenceDeduction },
     { label: "Late Deduction",      val: row.lateDeduction },
     { label: "Other Deductions",    val: row.otherDeductions },
+    { label: "Loan / Advance Deduction", val: row.loanDeduction ?? 0 },
   ].filter(d => d.val > 0 || d.label === "EPF – Employee (8%)");
 
   return (

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import {
   payrollRecords, employees, attendanceRecords, payrollSettings,
-  salaryStructures, employeeSalaryAssignments, holidays, shifts,
+  salaryStructures, employeeSalaryAssignments, holidays, shifts, staffLoans,
 } from "@workspace/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 
@@ -202,8 +202,18 @@ router.post("/generate", async (req, res) => {
     const allShifts = await db.select().from(shifts);
     const shiftMap = new Map(allShifts.map(s => [s.id, s]));
 
+    /* ── Fetch active loans for target employees ── */
+    const activeLoans = await db.select().from(staffLoans)
+      .where(and(eq(staffLoans.status, "active"), inArray(staffLoans.employeeId, empIds)));
+    const loansByEmployee = new Map<number, typeof activeLoans>();
+    for (const loan of activeLoans) {
+      if (!loansByEmployee.has(loan.employeeId)) loansByEmployee.set(loan.employeeId, []);
+      loansByEmployee.get(loan.employeeId)!.push(loan);
+    }
+
     const wdCount = workingDaysInMonth(year, month);
     const generated: any[] = [];
+    const loanUpdates: { id: number; paidAmount: number; remainingBalance: number; status: string }[] = [];
 
     await db.delete(payrollRecords).where(
       and(
@@ -424,8 +434,31 @@ router.post("/generate", async (req, res) => {
 
       const apit          = calcAPIT(grossSalary);
       const otherDeductions = otherDeductionsFromStruct;
-      const totalDeductions = epfEmployee + apit + lateDeduction + absenceDeduction + halfDayDeduction + incompleteDeduction + otherDeductions;
-      const netSalary     = grossSalary - epfEmployee - apit - otherDeductions;
+
+      /* ── Loan / Advance deduction for this month ── */
+      let loanDeduction = 0;
+      const empLoans = loansByEmployee.get(emp.id) ?? [];
+      for (const loan of empLoans) {
+        /* Only apply if start month/year <= current month/year */
+        const loanStart = loan.startYear * 100 + loan.startMonth;
+        const current   = year * 100 + month;
+        if (loanStart > current) continue;
+
+        const installment = Math.min(loan.monthlyInstallment, loan.remainingBalance);
+        loanDeduction += installment;
+        const newPaid      = Math.round((loan.paidAmount + installment) * 100) / 100;
+        const newBalance   = Math.max(0, Math.round((loan.remainingBalance - installment) * 100) / 100);
+        loanUpdates.push({
+          id: loan.id,
+          paidAmount: newPaid,
+          remainingBalance: newBalance,
+          status: newBalance <= 0 ? "completed" : "active",
+        });
+      }
+      loanDeduction = Math.round(loanDeduction);
+
+      const totalDeductions = epfEmployee + apit + lateDeduction + absenceDeduction + halfDayDeduction + incompleteDeduction + otherDeductions + loanDeduction;
+      const netSalary     = grossSalary - epfEmployee - apit - otherDeductions - loanDeduction;
 
       const record = {
         employeeId: emp.id,
@@ -456,6 +489,7 @@ router.post("/generate", async (req, res) => {
         halfDayDeduction,
         incompleteDeduction,
         otherDeductions,
+        loanDeduction,
         totalDeductions,
         netSalary,
         status: "draft" as const,
@@ -466,6 +500,16 @@ router.post("/generate", async (req, res) => {
 
     for (let i = 0; i < generated.length; i += 50) {
       await db.insert(payrollRecords).values(generated.slice(i, i + 50));
+    }
+
+    /* ── Update loan balances after payroll is saved ── */
+    for (const update of loanUpdates) {
+      await db.update(staffLoans).set({
+        paidAmount: update.paidAmount,
+        remainingBalance: update.remainingBalance,
+        status: update.status as "active" | "completed" | "cancelled",
+        updatedAt: new Date(),
+      }).where(eq(staffLoans.id, update.id));
     }
 
     res.json({ success: true, count: generated.length, message: `Payroll generated for ${generated.length} employees` });

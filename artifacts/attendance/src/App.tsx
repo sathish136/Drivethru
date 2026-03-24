@@ -20,6 +20,7 @@ import ActivityLogs from "@/pages/activity-logs/ActivityLogs";
 import HRSettings from "@/pages/hr-settings/HRSettings";
 import Approvals from "@/pages/attendance/Approvals";
 import LeaveBalances from "@/pages/leave/LeaveBalances";
+import Loans from "@/pages/loans/Loans";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -56,6 +57,7 @@ function Router() {
       <Route path="/users"><ProtectedRoute component={Users} /></Route>
       <Route path="/hr-settings"><ProtectedRoute component={HRSettings} /></Route>
       <Route path="/activity-logs"><ProtectedRoute component={ActivityLogs} /></Route>
+      <Route path="/loans"><ProtectedRoute component={Loans} /></Route>
       <Route component={NotFound} />
     </Switch>
   );
