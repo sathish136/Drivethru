@@ -48,6 +48,7 @@ router.get("/attendance", async (req, res) => {
         employeeCode: r.empCode || "",
         designation: r.empDesignation || "",
         department: r.empDepartment || "",
+        employeeType: r.empType || "",
         branchName: r.branchName || "",
         shiftName: null,
         createdAt: r.rec.createdAt.toISOString(),
@@ -101,6 +102,7 @@ router.get("/monthly", async (req, res) => {
       return {
         employeeId: emp.id, employeeName: emp.fullName, employeeCode: emp.employeeId,
         branchName: branchName || "", designation: emp.designation,
+        department: emp.department || "", employeeType: emp.employeeType || "",
         presentDays, absentDays, lateDays, halfDays, leaveDays, holidayDays,
         totalWorkHours: Math.round(totalWorkHours * 10) / 10,
         overtimeHours: Math.round(overtimeHours * 10) / 10,
@@ -137,6 +139,7 @@ router.get("/overtime", async (req, res) => {
           employeeCode: r.emp?.employeeId || "",
           branchName: r.branchName || "",
           designation: r.emp?.designation || "",
+          employeeType: r.emp?.employeeType || "",
           totalOvertimeHours: 0,
           overtimeDays: 0,
           records: [],

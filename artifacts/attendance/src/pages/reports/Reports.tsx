@@ -1,10 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useGetAttendanceReport, useGetMonthlyReport, useGetOvertimeReport, useListBranches } from "@workspace/api-client-react";
 import { PageHeader, Card, Button, Input, Select, Label } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { FileDown, Users, Clock, Calendar } from "lucide-react";
+import { FileDown, Users, Clock, Calendar, Banknote } from "lucide-react";
 
-type Tab = "attendance" | "monthly" | "overtime";
+type Tab = "attendance" | "monthly" | "overtime" | "payroll";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+function apiUrl(path: string) { return `${BASE}/api${path}`; }
+
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 const STATUS_COLORS: Record<string, string> = {
   present: "bg-green-100 text-green-700",
@@ -15,21 +20,21 @@ const STATUS_COLORS: Record<string, string> = {
   holiday: "bg-gray-100 text-gray-700",
 };
 
-function getMonthName(m: number) {
-  return ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][m-1];
-}
+function fmt(n: number) { return `Rs. ${Math.round(n).toLocaleString("en-LK")}`; }
+function getMonthName(m: number) { return MONTHS[m - 1]; }
 
 export default function Reports() {
   const [tab, setTab] = useState<Tab>("attendance");
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Reports" description="Detailed attendance, monthly, and overtime reports for all branches." />
+      <PageHeader title="Reports" description="Detailed attendance, monthly, overtime and payroll reports." />
       <div className="flex gap-1 border-b border-border">
         {([
-          { id: "attendance", label: "Attendance Report", icon: Users },
-          { id: "monthly", label: "Monthly Report", icon: Calendar },
-          { id: "overtime", label: "Overtime Report", icon: Clock },
+          { id: "attendance", label: "Attendance Report",  icon: Users },
+          { id: "monthly",    label: "Monthly Report",     icon: Calendar },
+          { id: "overtime",   label: "Overtime Report",    icon: Clock },
+          { id: "payroll",    label: "Payroll Report",     icon: Banknote },
         ] as const).map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -48,8 +53,9 @@ export default function Reports() {
       </div>
 
       {tab === "attendance" && <AttendanceReport />}
-      {tab === "monthly" && <MonthlyReport />}
-      {tab === "overtime" && <OvertimeReport />}
+      {tab === "monthly"    && <MonthlyReport />}
+      {tab === "overtime"   && <OvertimeReport />}
+      {tab === "payroll"    && <PayrollReport />}
     </div>
   );
 }
@@ -57,9 +63,11 @@ export default function Reports() {
 function AttendanceReport() {
   const now = new Date();
   const [startDate, setStartDate] = useState(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0]);
-  const [endDate, setEndDate] = useState(now.toISOString().split("T")[0]);
-  const [branchId, setBranchId] = useState("");
-  const [status, setStatus] = useState("");
+  const [endDate, setEndDate]     = useState(now.toISOString().split("T")[0]);
+  const [branchId, setBranchId]   = useState("");
+  const [status, setStatus]       = useState("");
+  const [empType, setEmpType]     = useState("");
+  const [department, setDepartment] = useState("");
   const [applied, setApplied] = useState({ startDate, endDate, branchId, status });
 
   const { data: branches } = useListBranches();
@@ -70,10 +78,23 @@ function AttendanceReport() {
     ...(applied.status ? { status: applied.status } : {}),
   });
 
+  const departments = useMemo(() => {
+    const set = new Set((data?.records || []).map((r: any) => r.department).filter(Boolean));
+    return Array.from(set).sort() as string[];
+  }, [data]);
+
+  const filtered = useMemo(() => {
+    return (data?.records || []).filter((r: any) => {
+      const matchType = !empType || (r as any).employeeType === empType;
+      const matchDept = !department || r.department === department;
+      return matchType && matchDept;
+    });
+  }, [data, empType, department]);
+
   return (
     <div className="space-y-4">
       <Card className="p-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 items-end">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
           <div>
             <Label className="text-xs">Start Date</Label>
             <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
@@ -92,30 +113,49 @@ function AttendanceReport() {
           <div>
             <Label className="text-xs">Status</Label>
             <Select value={status} onChange={e => setStatus(e.target.value)}>
-              <option value="">All Status</option>
+              <option value="">All Statuses</option>
               <option value="present">Present</option>
               <option value="absent">Absent</option>
               <option value="late">Late</option>
               <option value="half_day">Half Day</option>
               <option value="leave">Leave</option>
+              <option value="holiday">Holiday</option>
             </Select>
           </div>
-          <Button onClick={() => setApplied({ startDate, endDate, branchId, status })}>Apply</Button>
-          <Button variant="outline" className="flex items-center gap-2">
-            <FileDown className="w-4 h-4" />Export
-          </Button>
+          <div>
+            <Label className="text-xs">Employee Type</Label>
+            <Select value={empType} onChange={e => setEmpType(e.target.value)}>
+              <option value="">All Types</option>
+              <option value="permanent">Permanent</option>
+              <option value="contract">Contract</option>
+              <option value="casual">Casual</option>
+            </Select>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={() => setApplied({ startDate, endDate, branchId, status })} className="flex-1">Apply</Button>
+            <Button variant="outline"><FileDown className="w-4 h-4" /></Button>
+          </div>
         </div>
+        {departments.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-border">
+            <Label className="text-xs">Department</Label>
+            <Select value={department} onChange={e => setDepartment(e.target.value)} className="mt-1 w-48">
+              <option value="">All Departments</option>
+              {departments.map(d => <option key={d} value={d}>{d}</option>)}
+            </Select>
+          </div>
+        )}
       </Card>
 
       {data && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
           {[
-            { label: "Present", val: data.summary.present, cls: "text-green-600" },
-            { label: "Absent", val: data.summary.absent, cls: "text-red-600" },
-            { label: "Late", val: data.summary.late, cls: "text-amber-600" },
-            { label: "Half Day", val: data.summary.halfDay, cls: "text-yellow-600" },
-            { label: "Leave", val: data.summary.leave, cls: "text-purple-600" },
-            { label: "Holiday", val: data.summary.holiday, cls: "text-gray-600" },
+            { label: "Present",  val: filtered.filter((r: any) => r.status === "present").length,  cls: "text-green-600" },
+            { label: "Absent",   val: filtered.filter((r: any) => r.status === "absent").length,   cls: "text-red-600" },
+            { label: "Late",     val: filtered.filter((r: any) => r.status === "late").length,     cls: "text-amber-600" },
+            { label: "Half Day", val: filtered.filter((r: any) => r.status === "half_day").length, cls: "text-yellow-600" },
+            { label: "Leave",    val: filtered.filter((r: any) => r.status === "leave").length,    cls: "text-purple-600" },
+            { label: "Holiday",  val: filtered.filter((r: any) => r.status === "holiday").length,  cls: "text-gray-600" },
           ].map(({ label, val, cls }) => (
             <Card key={label} className="p-3 text-center">
               <div className={cn("text-2xl font-bold", cls)}>{val}</div>
@@ -133,19 +173,29 @@ function AttendanceReport() {
             <table className="w-full text-xs">
               <thead className="bg-muted/50">
                 <tr>
-                  {["Date","Emp ID","Employee","Branch","Designation","Status","In Time","Out Time","Total Hrs","OT Hrs","Source"].map(h => (
+                  {["Date","Emp ID","Employee","Department","Branch","Designation","Type","Status","In Time","Out Time","Total Hrs","OT Hrs"].map(h => (
                     <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {(data?.records || []).slice(0, 200).map(r => (
+                {filtered.slice(0, 300).map((r: any) => (
                   <tr key={r.id} className="hover:bg-muted/30 transition-colors">
                     <td className="px-3 py-2 font-mono whitespace-nowrap">{r.date}</td>
                     <td className="px-3 py-2 font-mono text-muted-foreground">{r.employeeCode}</td>
                     <td className="px-3 py-2 font-medium whitespace-nowrap">{r.employeeName}</td>
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.department || "—"}</td>
                     <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.branchName}</td>
-                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{(r as any).designation || "—"}</td>
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.designation || "—"}</td>
+                    <td className="px-3 py-2">
+                      {r.employeeType ? (
+                        <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium capitalize",
+                          r.employeeType === "permanent" ? "bg-blue-100 text-blue-700" :
+                          r.employeeType === "contract"  ? "bg-purple-100 text-purple-700" :
+                          "bg-orange-100 text-orange-700"
+                        )}>{r.employeeType}</span>
+                      ) : "—"}
+                    </td>
                     <td className="px-3 py-2">
                       <span className={cn("px-2 py-0.5 rounded text-xs font-medium uppercase", STATUS_COLORS[r.status] || "bg-gray-100")}>
                         {r.status.replace("_", " ")}
@@ -155,11 +205,10 @@ function AttendanceReport() {
                     <td className="px-3 py-2 font-mono">{r.outTime1 || "—"}</td>
                     <td className="px-3 py-2 font-mono">{r.totalHours != null ? `${r.totalHours.toFixed(1)}h` : "—"}</td>
                     <td className="px-3 py-2 font-mono">{r.overtimeHours != null && r.overtimeHours > 0 ? `${r.overtimeHours.toFixed(1)}h` : "—"}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{r.source}</td>
                   </tr>
                 ))}
-                {!data?.records?.length && (
-                  <tr><td colSpan={11} className="text-center py-8 text-muted-foreground">No records found. Apply filters and click Apply.</td></tr>
+                {!filtered.length && (
+                  <tr><td colSpan={12} className="text-center py-8 text-muted-foreground">No records found. Apply filters and click Apply.</td></tr>
                 )}
               </tbody>
             </table>
@@ -172,9 +221,11 @@ function AttendanceReport() {
 
 function MonthlyReport() {
   const now = new Date();
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth]     = useState(now.getMonth() + 1);
+  const [year, setYear]       = useState(now.getFullYear());
   const [branchId, setBranchId] = useState("");
+  const [empType, setEmpType]   = useState("");
+  const [department, setDepartment] = useState("");
   const [applied, setApplied] = useState({ month, year, branchId });
   const { data: branches } = useListBranches();
   const { data, isLoading } = useGetMonthlyReport({
@@ -183,10 +234,23 @@ function MonthlyReport() {
     ...(applied.branchId ? { branchId: Number(applied.branchId) } : {}),
   });
 
+  const departments = useMemo(() => {
+    const set = new Set((data?.employees || []).map((e: any) => e.department).filter(Boolean));
+    return Array.from(set).sort() as string[];
+  }, [data]);
+
+  const filtered = useMemo(() => {
+    return (data?.employees || []).filter((e: any) => {
+      const matchType = !empType || e.employeeType === empType;
+      const matchDept = !department || e.department === department;
+      return matchType && matchDept;
+    });
+  }, [data, empType, department]);
+
   return (
     <div className="space-y-4">
       <Card className="p-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
           <div>
             <Label className="text-xs">Month</Label>
             <Select value={month} onChange={e => setMonth(Number(e.target.value))}>
@@ -196,7 +260,7 @@ function MonthlyReport() {
           <div>
             <Label className="text-xs">Year</Label>
             <Select value={year} onChange={e => setYear(Number(e.target.value))}>
-              {[2024,2025,2026].map(y=><option key={y} value={y}>{y}</option>)}
+              {[2024,2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
             </Select>
           </div>
           <div>
@@ -206,17 +270,33 @@ function MonthlyReport() {
               {branches?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </Select>
           </div>
+          <div>
+            <Label className="text-xs">Employee Type</Label>
+            <Select value={empType} onChange={e => setEmpType(e.target.value)}>
+              <option value="">All Types</option>
+              <option value="permanent">Permanent</option>
+              <option value="contract">Contract</option>
+              <option value="casual">Casual</option>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Department</Label>
+            <Select value={department} onChange={e => setDepartment(e.target.value)}>
+              <option value="">All Departments</option>
+              {departments.map(d => <option key={d} value={d}>{d}</option>)}
+            </Select>
+          </div>
           <div className="flex gap-2">
-            <Button onClick={() => setApplied({ month, year, branchId })}>Generate</Button>
-            <Button variant="outline" className="flex items-center gap-2"><FileDown className="w-4 h-4" /></Button>
+            <Button onClick={() => setApplied({ month, year, branchId })} className="flex-1">Generate</Button>
+            <Button variant="outline"><FileDown className="w-4 h-4" /></Button>
           </div>
         </div>
       </Card>
 
       {data && (
-        <Card className="p-3 flex gap-6 text-sm border-green-200 bg-green-50/30">
+        <Card className="p-3 flex flex-wrap gap-6 text-sm border-green-200 bg-green-50/30">
           <div><span className="text-muted-foreground">Period: </span><strong>{getMonthName(data.month)} {data.year}</strong></div>
-          <div><span className="text-muted-foreground">Total Employees: </span><strong>{data.totalEmployees}</strong></div>
+          <div><span className="text-muted-foreground">Showing: </span><strong>{filtered.length} of {data.totalEmployees} Employees</strong></div>
           <div><span className="text-muted-foreground">Working Days: </span><strong>{data.workingDays}</strong></div>
         </Card>
       )}
@@ -229,18 +309,28 @@ function MonthlyReport() {
             <table className="w-full text-xs">
               <thead className="bg-muted/50">
                 <tr>
-                  {["Emp ID","Employee","Branch","Designation","Present","Absent","Late","Half Day","Leave","Holiday","Work Hours","OT Hours","Att %"].map(h => (
+                  {["Emp ID","Employee","Department","Branch","Designation","Type","Present","Absent","Late","Half Day","Leave","Holiday","Work Hrs","OT Hrs","Att %"].map(h => (
                     <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {(data?.employees || []).map(e => (
+                {filtered.map((e: any) => (
                   <tr key={e.employeeId} className="hover:bg-muted/30 transition-colors">
                     <td className="px-3 py-2 font-mono text-muted-foreground">{e.employeeCode}</td>
                     <td className="px-3 py-2 font-medium whitespace-nowrap">{e.employeeName}</td>
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{e.department || "—"}</td>
                     <td className="px-3 py-2 text-muted-foreground whitespace-nowrap max-w-[120px] truncate">{e.branchName}</td>
                     <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{e.designation}</td>
+                    <td className="px-3 py-2">
+                      {e.employeeType ? (
+                        <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium capitalize",
+                          e.employeeType === "permanent" ? "bg-blue-100 text-blue-700" :
+                          e.employeeType === "contract"  ? "bg-purple-100 text-purple-700" :
+                          "bg-orange-100 text-orange-700"
+                        )}>{e.employeeType}</span>
+                      ) : "—"}
+                    </td>
                     <td className="px-3 py-2 text-center text-green-600 font-semibold">{e.presentDays}</td>
                     <td className="px-3 py-2 text-center text-red-600 font-semibold">{e.absentDays}</td>
                     <td className="px-3 py-2 text-center text-amber-600 font-semibold">{e.lateDays}</td>
@@ -257,8 +347,8 @@ function MonthlyReport() {
                     </td>
                   </tr>
                 ))}
-                {!data?.employees?.length && (
-                  <tr><td colSpan={13} className="text-center py-8 text-muted-foreground">Click Generate to load the monthly report.</td></tr>
+                {!filtered.length && (
+                  <tr><td colSpan={15} className="text-center py-8 text-muted-foreground">Click Generate to load the monthly report.</td></tr>
                 )}
               </tbody>
             </table>
@@ -272,8 +362,9 @@ function MonthlyReport() {
 function OvertimeReport() {
   const now = new Date();
   const [startDate, setStartDate] = useState(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0]);
-  const [endDate, setEndDate] = useState(now.toISOString().split("T")[0]);
-  const [branchId, setBranchId] = useState("");
+  const [endDate, setEndDate]     = useState(now.toISOString().split("T")[0]);
+  const [branchId, setBranchId]   = useState("");
+  const [empType, setEmpType]     = useState("");
   const [applied, setApplied] = useState({ startDate, endDate, branchId });
   const { data: branches } = useListBranches();
   const { data, isLoading } = useGetOvertimeReport({
@@ -282,10 +373,14 @@ function OvertimeReport() {
     ...(applied.branchId ? { branchId: Number(applied.branchId) } : {}),
   });
 
+  const filtered = useMemo(() => {
+    return (data?.employees || []).filter((e: any) => !empType || e.employeeType === empType);
+  }, [data, empType]);
+
   return (
     <div className="space-y-4">
       <Card className="p-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 items-end">
           <div>
             <Label className="text-xs">Start Date</Label>
             <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
@@ -301,17 +396,26 @@ function OvertimeReport() {
               {branches?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </Select>
           </div>
+          <div>
+            <Label className="text-xs">Employee Type</Label>
+            <Select value={empType} onChange={e => setEmpType(e.target.value)}>
+              <option value="">All Types</option>
+              <option value="permanent">Permanent</option>
+              <option value="contract">Contract</option>
+              <option value="casual">Casual</option>
+            </Select>
+          </div>
           <div className="flex gap-2">
-            <Button onClick={() => setApplied({ startDate, endDate, branchId })}>Apply</Button>
-            <Button variant="outline" className="flex items-center gap-2"><FileDown className="w-4 h-4" /></Button>
+            <Button onClick={() => setApplied({ startDate, endDate, branchId })} className="flex-1">Apply</Button>
+            <Button variant="outline"><FileDown className="w-4 h-4" /></Button>
           </div>
         </div>
       </Card>
 
       {data && (
         <Card className="p-3 flex gap-6 text-sm border-amber-200 bg-amber-50/30">
-          <div><span className="text-muted-foreground">Total OT Hours: </span><strong className="text-amber-700">{data.totalOvertimeHours.toFixed(1)}h</strong></div>
-          <div><span className="text-muted-foreground">Employees with OT: </span><strong>{data.employees.length}</strong></div>
+          <div><span className="text-muted-foreground">Total OT Hours: </span><strong className="text-amber-700">{filtered.reduce((s: number, e: any) => s + e.totalOvertimeHours, 0).toFixed(1)}h</strong></div>
+          <div><span className="text-muted-foreground">Employees with OT: </span><strong>{filtered.length}</strong></div>
         </Card>
       )}
 
@@ -323,28 +427,205 @@ function OvertimeReport() {
             <table className="w-full text-xs">
               <thead className="bg-muted/50">
                 <tr>
-                  {["Emp ID","Employee","Branch","Designation","OT Days","Total OT Hours","Daily Breakdown"].map(h => (
+                  {["Emp ID","Employee","Branch","Designation","Type","OT Days","Total OT Hours","Daily Breakdown"].map(h => (
                     <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {(data?.employees || []).map(e => (
+                {filtered.map((e: any) => (
                   <tr key={e.employeeId} className="hover:bg-muted/30 transition-colors">
                     <td className="px-3 py-2 font-mono text-muted-foreground">{e.employeeCode}</td>
                     <td className="px-3 py-2 font-medium whitespace-nowrap">{e.employeeName}</td>
                     <td className="px-3 py-2 text-muted-foreground whitespace-nowrap max-w-[100px] truncate">{e.branchName}</td>
                     <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{e.designation}</td>
+                    <td className="px-3 py-2">
+                      {e.employeeType ? (
+                        <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium capitalize",
+                          e.employeeType === "permanent" ? "bg-blue-100 text-blue-700" :
+                          e.employeeType === "contract"  ? "bg-purple-100 text-purple-700" :
+                          "bg-orange-100 text-orange-700"
+                        )}>{e.employeeType}</span>
+                      ) : "—"}
+                    </td>
                     <td className="px-3 py-2 text-center font-semibold text-amber-600">{e.overtimeDays}</td>
                     <td className="px-3 py-2 text-center font-bold text-amber-700">{e.totalOvertimeHours.toFixed(1)}h</td>
                     <td className="px-3 py-2 text-muted-foreground">
-                      {e.records.slice(0,3).map(r => `${r.date}: ${r.overtimeHours.toFixed(1)}h`).join(" | ")}
+                      {e.records.slice(0,3).map((r: any) => `${r.date}: ${r.overtimeHours.toFixed(1)}h`).join(" | ")}
                       {e.records.length > 3 && ` +${e.records.length-3} more`}
                     </td>
                   </tr>
                 ))}
-                {!data?.employees?.length && (
-                  <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">No overtime records found for this period.</td></tr>
+                {!filtered.length && (
+                  <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">No overtime records found for this period.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+interface PayrollRecord {
+  id: number; employeeId: number; month: number; year: number;
+  basicSalary: number; grossSalary: number; netSalary: number;
+  epfEmployee: number; epfEmployer: number; etfEmployer: number; apit: number;
+  totalDeductions: number; overtimePay: number; status: string;
+  employee: { id: number; employeeId: string; fullName: string; designation: string; department: string; employeeType?: string };
+}
+
+function PayrollReport() {
+  const now = new Date();
+  const [month, setMonth]   = useState(now.getMonth() + 1);
+  const [year, setYear]     = useState(now.getFullYear());
+  const [empType, setEmpType] = useState("");
+  const [status, setStatus] = useState("");
+  const [data, setData]     = useState<PayrollRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const { data: branches } = useListBranches();
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await fetch(apiUrl(`/payroll?month=${month}&year=${year}`));
+      const d = await r.json();
+      setData(Array.isArray(d) ? d : []);
+    } catch { setData([]); }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [month, year]);
+
+  const filtered = useMemo(() => {
+    return data.filter(r => {
+      const matchType   = !empType || r.employee.employeeType === empType;
+      const matchStatus = !status  || r.status === status;
+      return matchType && matchStatus;
+    });
+  }, [data, empType, status]);
+
+  const totals = useMemo(() => ({
+    gross:       filtered.reduce((s, r) => s + r.grossSalary, 0),
+    net:         filtered.reduce((s, r) => s + r.netSalary, 0),
+    epfEmployee: filtered.reduce((s, r) => s + r.epfEmployee, 0),
+    epfEmployer: filtered.reduce((s, r) => s + r.epfEmployer, 0),
+    etf:         filtered.reduce((s, r) => s + r.etfEmployer, 0),
+    apit:        filtered.reduce((s, r) => s + r.apit, 0),
+    ot:          filtered.reduce((s, r) => s + r.overtimePay, 0),
+  }), [filtered]);
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
+          <div>
+            <Label className="text-xs">Month</Label>
+            <Select value={month} onChange={e => setMonth(Number(e.target.value))}>
+              {Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{getMonthName(i+1)}</option>)}
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Year</Label>
+            <Select value={year} onChange={e => setYear(Number(e.target.value))}>
+              {[2024,2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Employee Type</Label>
+            <Select value={empType} onChange={e => setEmpType(e.target.value)}>
+              <option value="">All Types</option>
+              <option value="permanent">Permanent</option>
+              <option value="contract">Contract</option>
+              <option value="casual">Casual</option>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Status</Label>
+            <Select value={status} onChange={e => setStatus(e.target.value)}>
+              <option value="">All Statuses</option>
+              <option value="draft">Draft</option>
+              <option value="approved">Approved</option>
+              <option value="paid">Paid</option>
+            </Select>
+          </div>
+          <div className="flex gap-2 col-span-2 md:col-span-1">
+            <Button onClick={load} className="flex-1">Refresh</Button>
+            <Button variant="outline"><FileDown className="w-4 h-4" /></Button>
+          </div>
+        </div>
+      </Card>
+
+      {filtered.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: "Total Employees", val: filtered.length,           fmt: false, cls: "text-primary" },
+            { label: "Total Gross",     val: totals.gross,              fmt: true,  cls: "text-emerald-600" },
+            { label: "Total Net Pay",   val: totals.net,                fmt: true,  cls: "text-blue-600" },
+            { label: "Total EPF (Emp)", val: totals.epfEmployee,        fmt: true,  cls: "text-purple-600" },
+            { label: "EPF Employer",    val: totals.epfEmployer,        fmt: true,  cls: "text-indigo-600" },
+            { label: "ETF",             val: totals.etf,                fmt: true,  cls: "text-violet-600" },
+            { label: "Total APIT",      val: totals.apit,               fmt: true,  cls: "text-amber-600" },
+            { label: "Total OT Pay",    val: totals.ot,                 fmt: true,  cls: "text-orange-600" },
+          ].map(({ label, val, fmt: f, cls }) => (
+            <Card key={label} className="p-3">
+              <div className={cn("text-lg font-bold", cls)}>{f ? fmt(val as number) : val}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">{label}</div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Card className="overflow-hidden">
+        {loading ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">Loading payroll data...</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/50">
+                <tr>
+                  {["Emp ID","Employee","Designation","Department","Type","Basic","Gross","EPF(Emp)","EPF(Er)","ETF","APIT","OT Pay","Deductions","Net Salary","Status"].map(h => (
+                    <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filtered.map(r => (
+                  <tr key={r.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-3 py-2 font-mono text-muted-foreground">{r.employee.employeeId}</td>
+                    <td className="px-3 py-2 font-medium whitespace-nowrap">{r.employee.fullName}</td>
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.employee.designation}</td>
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.employee.department || "—"}</td>
+                    <td className="px-3 py-2">
+                      {r.employee.employeeType ? (
+                        <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium capitalize",
+                          r.employee.employeeType === "permanent" ? "bg-blue-100 text-blue-700" :
+                          r.employee.employeeType === "contract"  ? "bg-purple-100 text-purple-700" :
+                          "bg-orange-100 text-orange-700"
+                        )}>{r.employee.employeeType}</span>
+                      ) : "—"}
+                    </td>
+                    <td className="px-3 py-2 font-mono">{fmt(r.basicSalary)}</td>
+                    <td className="px-3 py-2 font-mono text-emerald-700 font-semibold">{fmt(r.grossSalary)}</td>
+                    <td className="px-3 py-2 font-mono text-purple-600">{fmt(r.epfEmployee)}</td>
+                    <td className="px-3 py-2 font-mono text-indigo-600">{fmt(r.epfEmployer)}</td>
+                    <td className="px-3 py-2 font-mono text-violet-600">{fmt(r.etfEmployer)}</td>
+                    <td className="px-3 py-2 font-mono text-amber-600">{fmt(r.apit)}</td>
+                    <td className="px-3 py-2 font-mono text-orange-600">{fmt(r.overtimePay)}</td>
+                    <td className="px-3 py-2 font-mono text-red-600">{fmt(r.totalDeductions)}</td>
+                    <td className="px-3 py-2 font-mono font-bold text-blue-700">{fmt(r.netSalary)}</td>
+                    <td className="px-3 py-2">
+                      <span className={cn("px-2 py-0.5 rounded text-[10px] font-bold uppercase",
+                        r.status === "paid"     ? "bg-emerald-100 text-emerald-700" :
+                        r.status === "approved" ? "bg-blue-100 text-blue-700" :
+                        "bg-amber-100 text-amber-700"
+                      )}>{r.status}</span>
+                    </td>
+                  </tr>
+                ))}
+                {!filtered.length && (
+                  <tr><td colSpan={15} className="text-center py-8 text-muted-foreground">No payroll records found for {getMonthName(month)} {year}.</td></tr>
                 )}
               </tbody>
             </table>

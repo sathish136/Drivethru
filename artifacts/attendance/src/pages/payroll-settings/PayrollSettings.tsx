@@ -100,10 +100,9 @@ function blankStructure(): SalaryStructure {
   };
 }
 
-type MainTab = "general" | "fitment" | "structures";
+type MainTab = "general" | "structures";
 const MAIN_TABS: { key: MainTab; label: string; icon: React.ElementType; desc: string }[] = [
   { key: "general",    label: "General Settings",    icon: SlidersHorizontal, desc: "EPF/ETF, allowances & deductions" },
-  { key: "fitment",    label: "Employee Fitment",    icon: Users,             desc: "Direct salary assignments per employee" },
   { key: "structures", label: "Salary Structures",   icon: LayoutList,        desc: "Create & assign individual salary structures" },
 ];
 
@@ -561,133 +560,6 @@ export default function PayrollSettings() {
                 <p className="text-[10px] text-blue-600 mt-2">Derived from attendance data, not configurable.</p>
               </div>
             </div>
-          </Card>
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════
-          EMPLOYEE FITMENT TAB
-      ══════════════════════════════════════════ */}
-      {tab === "fitment" && (
-        <div className="space-y-4">
-          <Card className="p-4 bg-blue-50/40 border-blue-200">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0 mt-0.5">
-                <UserCheck className="w-4 h-4 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-blue-900">Employee Salary Fitment</p>
-                <p className="text-xs text-blue-700 mt-0.5">
-                  Assign a custom basic salary directly to specific employees. This overrides the designation-based salary scale for that employee during payroll generation.
-                </p>
-              </div>
-            </div>
-          </Card>
-
-          {overrideCount > 0 && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/20 text-xs text-primary font-medium">
-              <UserCheck className="w-3.5 h-3.5" />
-              {overrideCount} employee{overrideCount > 1 ? "s have" : " has"} a custom salary fitment applied
-            </div>
-          )}
-
-          <Card className="p-5">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input placeholder="Search by name, ID, designation or department…" value={empSearch}
-                  onChange={e => setEmpSearch(e.target.value)} className="pl-9" />
-              </div>
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {filteredEmps.length} of {employees.length} employees
-              </span>
-            </div>
-            {empsLoading ? (
-              <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
-                <RefreshCw className="w-4 h-4 animate-spin" /><span className="text-sm">Loading employees…</span>
-              </div>
-            ) : (
-              <div className="overflow-x-auto rounded-xl border border-border">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-muted/50 border-b border-border">
-                      <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground">Employee</th>
-                      <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground">Designation</th>
-                      <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">Scale Salary</th>
-                      <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">Fitment Salary</th>
-                      <th className="px-4 py-2.5 text-center text-xs font-semibold text-muted-foreground w-28">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {filteredEmps.map(emp => {
-                      const scaleSalary = cfg.salaryScale[emp.designation] ?? 40000;
-                      const overrideSalary = cfg.employeeOverrides[String(emp.id)];
-                      const hasOverride = overrideSalary !== undefined;
-                      const isEditing = editingEmpId === emp.id;
-                      return (
-                        <tr key={emp.id} className={cn("transition-colors group", hasOverride ? "bg-primary/3 hover:bg-primary/5" : "hover:bg-muted/30")}>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
-                                <span className="text-[10px] font-bold text-muted-foreground">
-                                  {emp.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
-                                </span>
-                              </div>
-                              <div>
-                                <p className="font-medium text-sm leading-tight">{emp.fullName}</p>
-                                <p className="text-[10px] text-muted-foreground">{emp.employeeId}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <p className="text-sm">{emp.designation}</p>
-                            <p className="text-[10px] text-muted-foreground">{emp.department}</p>
-                          </td>
-                          <td className="px-4 py-3 text-right font-mono text-sm text-muted-foreground">Rs. {scaleSalary.toLocaleString("en-LK")}</td>
-                          <td className="px-4 py-3 text-right">
-                            {isEditing ? (
-                              <div className="flex items-center justify-end gap-1.5">
-                                <Input type="number" value={editEmpVal} onChange={e => setEditEmpVal(e.target.value)}
-                                  onKeyDown={e => { if (e.key === "Enter") confirmEmpOverride(emp.id); if (e.key === "Escape") setEditingEmpId(null); }}
-                                  className="h-7 w-32 text-right text-sm font-mono" autoFocus />
-                                <button onClick={() => confirmEmpOverride(emp.id)} className="p-1 rounded bg-green-100 text-green-700 hover:bg-green-200"><Check className="w-3.5 h-3.5" /></button>
-                                <button onClick={() => setEditingEmpId(null)} className="p-1 rounded hover:bg-muted text-muted-foreground"><X className="w-3.5 h-3.5" /></button>
-                              </div>
-                            ) : hasOverride ? (
-                              <div className="flex items-center justify-end gap-1.5">
-                                <span className="font-mono font-bold text-sm text-primary">Rs. {overrideSalary.toLocaleString("en-LK")}</span>
-                                <span className="px-1.5 py-0.5 text-[9px] font-bold bg-primary/10 text-primary rounded-full uppercase tracking-wide">Fitment</span>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-muted-foreground italic">— using scale default —</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            {!isEditing && (
-                              <div className="flex items-center justify-center gap-1">
-                                <button onClick={() => startEditEmp(emp)} title={hasOverride ? "Edit fitment" : "Set fitment"}
-                                  className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                {hasOverride && (
-                                  <button onClick={() => clearEmpOverride(emp.id)} title="Remove fitment"
-                                    className="p-1.5 rounded-lg hover:bg-red-50 transition-colors text-muted-foreground hover:text-red-600">
-                                    <Undo2 className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {filteredEmps.length === 0 && (
-                      <tr><td colSpan={5} className="px-4 py-10 text-center text-muted-foreground text-sm">No employees match your search</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
           </Card>
         </div>
       )}
