@@ -5,7 +5,7 @@ import { eq, and, inArray } from "drizzle-orm";
 
 const router = Router();
 
-const SALARY_SCALE: Record<string, number> = {
+export const SALARY_SCALE: Record<string, number> = {
   "Postmaster General": 150000,
   "Deputy Postmaster General": 120000,
   "Regional Postmaster": 80000,
@@ -51,12 +51,6 @@ router.get("/", async (req, res) => {
     const { month, year, branchId, status } = req.query as Record<string, string>;
     if (!month || !year) return res.status(400).json({ message: "month and year required" });
 
-    const conditions = [
-      eq(payrollRecords.month, parseInt(month)),
-      eq(payrollRecords.year, parseInt(year)),
-    ];
-    if (status) conditions.push(eq(payrollRecords.status, status as any));
-
     const rows = await db.select({
       payroll: payrollRecords,
       emp: {
@@ -66,6 +60,7 @@ router.get("/", async (req, res) => {
         designation: employees.designation,
         department: employees.department,
         branchId: employees.branchId,
+        employeeType: employees.employeeType,
       },
     }).from(payrollRecords)
       .innerJoin(employees, eq(payrollRecords.employeeId, employees.id));
@@ -83,13 +78,74 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/generate", async (req, res) => {
+router.get("/employees-for-payroll", async (req, res) => {
   try {
-    const { month, year, branchId } = req.body as { month: number; year: number; branchId?: number };
+    const { month, year, branchId } = req.query as Record<string, string>;
     if (!month || !year) return res.status(400).json({ message: "month and year required" });
 
-    const allEmployees = await db.select().from(employees);
-    const targetEmps = branchId ? allEmployees.filter(e => e.branchId === branchId) : allEmployees;
+    const allEmployees = await db.select({
+      id: employees.id,
+      employeeId: employees.employeeId,
+      fullName: employees.fullName,
+      designation: employees.designation,
+      department: employees.department,
+      branchId: employees.branchId,
+      employeeType: employees.employeeType,
+      status: employees.status,
+      epfNumber: employees.epfNumber,
+      etfNumber: employees.etfNumber,
+    }).from(employees);
+
+    const activeEmps = allEmployees.filter(e => e.status === "active");
+    const filteredByBranch = branchId ? activeEmps.filter(e => e.branchId === parseInt(branchId)) : activeEmps;
+
+    const existingPayroll = await db.select({
+      employeeId: payrollRecords.employeeId,
+      status: payrollRecords.status,
+      netSalary: payrollRecords.netSalary,
+      grossSalary: payrollRecords.grossSalary,
+    }).from(payrollRecords)
+      .where(and(eq(payrollRecords.month, parseInt(month)), eq(payrollRecords.year, parseInt(year))));
+
+    const payrollMap = new Map(existingPayroll.map(p => [p.employeeId, p]));
+
+    const result = filteredByBranch.map(emp => ({
+      ...emp,
+      basicSalary: SALARY_SCALE[emp.designation] ?? 40000,
+      hasPayroll: payrollMap.has(emp.id),
+      payrollStatus: payrollMap.get(emp.id)?.status ?? null,
+      currentNetSalary: payrollMap.get(emp.id)?.netSalary ?? null,
+      currentGrossSalary: payrollMap.get(emp.id)?.grossSalary ?? null,
+    }));
+
+    const branchList = await db.select().from(branches);
+
+    res.json({ employees: result, branches: branchList });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Failed to fetch employees for payroll" });
+  }
+});
+
+router.post("/generate", async (req, res) => {
+  try {
+    const { month, year, branchId, employeeIds } = req.body as {
+      month: number;
+      year: number;
+      branchId?: number;
+      employeeIds?: number[];
+    };
+    if (!month || !year) return res.status(400).json({ message: "month and year required" });
+
+    let allEmps = await db.select().from(employees);
+    allEmps = allEmps.filter(e => e.status === "active");
+
+    let targetEmps = allEmps;
+    if (employeeIds && employeeIds.length > 0) {
+      targetEmps = allEmps.filter(e => employeeIds.includes(e.id));
+    } else if (branchId) {
+      targetEmps = allEmps.filter(e => e.branchId === branchId);
+    }
 
     if (targetEmps.length === 0) return res.status(404).json({ message: "No employees found" });
 
@@ -102,10 +158,13 @@ router.post("/generate", async (req, res) => {
     const wdCount = workingDaysInMonth(year, month);
     const generated: any[] = [];
 
-    const delConditions: any[] = [eq(payrollRecords.month, month), eq(payrollRecords.year, year)];
-    if (branchId) delConditions.push(eq(payrollRecords.branchId, branchId));
-    await db.delete(payrollRecords).where(and(...delConditions));
-
+    await db.delete(payrollRecords).where(
+      and(
+        eq(payrollRecords.month, month),
+        eq(payrollRecords.year, year),
+        inArray(payrollRecords.employeeId, empIds)
+      )
+    );
 
     for (const emp of targetEmps) {
       const empAtt = filteredAtt.filter(a => a.employeeId === emp.id);
@@ -233,6 +292,20 @@ router.get("/:id", async (req, res) => {
   }
 });
 
+router.patch("/bulk-status", async (req, res) => {
+  try {
+    const { ids, status } = req.body as { ids: number[]; status: "draft" | "approved" | "paid" };
+    const update: any = { status, updatedAt: new Date() };
+    if (status === "approved") update.approvedAt = new Date();
+    if (status === "paid") update.paidAt = new Date();
+    await db.update(payrollRecords).set(update).where(inArray(payrollRecords.id, ids));
+    res.json({ success: true, updated: ids.length });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Failed to bulk update" });
+  }
+});
+
 router.patch("/:id/status", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -245,20 +318,6 @@ router.patch("/:id/status", async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: "Failed to update status" });
-  }
-});
-
-router.patch("/bulk-status", async (req, res) => {
-  try {
-    const { ids, status } = req.body as { ids: number[]; status: "draft" | "approved" | "paid" };
-    const update: any = { status, updatedAt: new Date() };
-    if (status === "approved") update.approvedAt = new Date();
-    if (status === "paid") update.paidAt = new Date();
-    await db.update(payrollRecords).set(update).where(inArray(payrollRecords.id, ids));
-    res.json({ success: true, updated: ids.length });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: "Failed to bulk update" });
   }
 });
 

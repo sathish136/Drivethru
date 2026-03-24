@@ -1,10 +1,12 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { PageHeader, Card, Button, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
-  Banknote, RefreshCw, CheckCircle, CreditCard, Download,
+  Banknote, RefreshCw, CheckCircle, CreditCard,
   Users, TrendingUp, Minus, Eye, X, Printer,
-  ChevronDown, ChevronUp, AlertCircle
+  ChevronDown, ChevronUp, AlertCircle, UserCheck,
+  Search, Filter, Building2, Briefcase, ListChecks,
+  BadgeCheck, Clock, CircleDashed, ChevronRight,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -59,7 +61,31 @@ interface PayrollRow {
     designation: string;
     department: string;
     branchId: number;
+    employeeType?: string;
   };
+}
+
+interface EmpForPayroll {
+  id: number;
+  employeeId: string;
+  fullName: string;
+  designation: string;
+  department: string;
+  branchId: number;
+  employeeType: string | null;
+  status: string;
+  epfNumber: string | null;
+  etfNumber: string | null;
+  basicSalary: number;
+  hasPayroll: boolean;
+  payrollStatus: PayStatus | null;
+  currentNetSalary: number | null;
+  currentGrossSalary: number | null;
+}
+
+interface BranchInfo {
+  id: number;
+  name: string;
 }
 
 interface Summary {
@@ -77,6 +103,12 @@ const STATUS_STYLES: Record<PayStatus, string> = {
   draft:    "bg-amber-100 text-amber-700 border border-amber-200",
   approved: "bg-blue-100 text-blue-700 border border-blue-200",
   paid:     "bg-emerald-100 text-emerald-700 border border-emerald-200",
+};
+
+const EMP_TYPE_LABELS: Record<string, string> = {
+  permanent: "Permanent",
+  contract: "Contract",
+  casual: "Casual",
 };
 
 function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }) {
@@ -199,6 +231,331 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
   );
 }
 
+function GeneratePayrollModal({
+  month, year, onClose, onGenerated,
+}: {
+  month: number;
+  year: number;
+  onClose: () => void;
+  onGenerated: () => void;
+}) {
+  const [employees, setEmployees] = useState<EmpForPayroll[]>([]);
+  const [branches, setBranches] = useState<BranchInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [search, setSearch] = useState("");
+  const [filterBranch, setFilterBranch] = useState<string>("all");
+  const [filterDept, setFilterDept] = useState<string>("all");
+  const [filterType, setFilterType] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(apiUrl(`/payroll/employees-for-payroll?month=${month}&year=${year}`));
+        const data = await res.json();
+        setEmployees(data.employees ?? []);
+        setBranches(data.branches ?? []);
+        const defaultSelected = new Set<number>(
+          (data.employees ?? []).filter((e: EmpForPayroll) => !e.hasPayroll).map((e: EmpForPayroll) => e.id)
+        );
+        setSelected(defaultSelected);
+      } catch {
+        setError("Failed to load employees. Check server connection.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [month, year]);
+
+  const departments = useMemo(() => {
+    const set = new Set(employees.map(e => e.department));
+    return Array.from(set).sort();
+  }, [employees]);
+
+  const filtered = useMemo(() => {
+    return employees.filter(e => {
+      const q = search.toLowerCase();
+      const matchSearch = !q || e.fullName.toLowerCase().includes(q) ||
+        e.employeeId.toLowerCase().includes(q) ||
+        e.designation.toLowerCase().includes(q);
+      const matchBranch = filterBranch === "all" || e.branchId === parseInt(filterBranch);
+      const matchDept = filterDept === "all" || e.department === filterDept;
+      const matchType = filterType === "all" || e.employeeType === filterType;
+      const matchStatus = filterStatus === "all" ||
+        (filterStatus === "assigned" && e.hasPayroll) ||
+        (filterStatus === "unassigned" && !e.hasPayroll);
+      return matchSearch && matchBranch && matchDept && matchType && matchStatus;
+    });
+  }, [employees, search, filterBranch, filterDept, filterType, filterStatus]);
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every(e => selected.has(e.id));
+
+  const toggleAll = () => {
+    if (allFilteredSelected) {
+      const s = new Set(selected);
+      filtered.forEach(e => s.delete(e.id));
+      setSelected(s);
+    } else {
+      const s = new Set(selected);
+      filtered.forEach(e => s.add(e.id));
+      setSelected(s);
+    }
+  };
+
+  const selectAllActive = () => {
+    setSelected(new Set(employees.map(e => e.id)));
+  };
+
+  const selectOnlyNew = () => {
+    setSelected(new Set(employees.filter(e => !e.hasPayroll).map(e => e.id)));
+  };
+
+  const clearAll = () => setSelected(new Set());
+
+  const generate = async () => {
+    if (selected.size === 0) return;
+    if (!confirm(`Generate payroll for ${selected.size} employee(s) for ${MONTHS[month - 1]} ${year}? Existing draft records for selected employees will be overwritten.`)) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      const r = await fetch(apiUrl("/payroll/generate"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month, year, employeeIds: Array.from(selected) }),
+      });
+      const d = await r.json();
+      if (d.success) {
+        onGenerated();
+        onClose();
+      } else {
+        setError(d.message ?? "Generation failed.");
+      }
+    } catch {
+      setError("Failed to connect to server.");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const branchName = (id: number) => branches.find(b => b.id === id)?.name ?? `Branch ${id}`;
+
+  const selectedCount = selected.size;
+  const alreadyHavePayroll = Array.from(selected).filter(id => employees.find(e => e.id === id)?.hasPayroll).length;
+  const newlyAdded = selectedCount - alreadyHavePayroll;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-background rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="p-5 border-b border-border flex items-center justify-between shrink-0">
+          <div>
+            <h2 className="font-bold text-lg flex items-center gap-2">
+              <UserCheck className="w-5 h-5 text-primary" />
+              Assign Employees to Payroll
+            </h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Select which employees to include in <strong>{MONTHS[month - 1]} {year}</strong> payroll
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+            <X className="w-5 h-5 text-muted-foreground" />
+          </button>
+        </div>
+
+        <div className="p-4 border-b border-border shrink-0 space-y-3">
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="relative flex-1 min-w-48">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search by name, ID or designation…"
+                className="w-full pl-8 pr-3 py-1.5 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 bg-background"
+              />
+            </div>
+            <Select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} className="text-xs w-40">
+              <option value="all">All Branches</option>
+              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </Select>
+            <Select value={filterDept} onChange={e => setFilterDept(e.target.value)} className="text-xs w-36">
+              <option value="all">All Departments</option>
+              {departments.map(d => <option key={d} value={d}>{d}</option>)}
+            </Select>
+            <Select value={filterType} onChange={e => setFilterType(e.target.value)} className="text-xs w-32">
+              <option value="all">All Types</option>
+              <option value="permanent">Permanent</option>
+              <option value="contract">Contract</option>
+              <option value="casual">Casual</option>
+            </Select>
+            <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="text-xs w-36">
+              <option value="all">All Employees</option>
+              <option value="unassigned">Not Yet Assigned</option>
+              <option value="assigned">Already Assigned</option>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-muted-foreground">Quick select:</span>
+            <button onClick={selectAllActive} className="text-xs px-2.5 py-1 rounded-lg border border-border hover:bg-muted transition-colors">
+              All Active Employees ({employees.length})
+            </button>
+            <button onClick={selectOnlyNew} className="text-xs px-2.5 py-1 rounded-lg border border-border hover:bg-muted transition-colors text-primary border-primary/30 bg-primary/5">
+              Only New (Without Payroll) ({employees.filter(e => !e.hasPayroll).length})
+            </button>
+            <button onClick={clearAll} className="text-xs px-2.5 py-1 rounded-lg border border-border hover:bg-muted transition-colors text-muted-foreground">
+              Clear All
+            </button>
+            <span className="ml-auto text-xs text-muted-foreground">{filtered.length} employees shown</span>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto flex-1">
+          {loading ? (
+            <div className="p-12 text-center text-muted-foreground text-sm">Loading employees…</div>
+          ) : error ? (
+            <div className="p-6 text-center text-red-600 text-sm">{error}</div>
+          ) : filtered.length === 0 ? (
+            <div className="p-12 text-center text-muted-foreground text-sm">No employees match your filters.</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
+                <tr className="border-b border-border">
+                  <th className="p-3 w-10">
+                    <input type="checkbox" checked={allFilteredSelected} onChange={toggleAll} className="rounded" />
+                  </th>
+                  <th className="p-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Employee</th>
+                  <th className="p-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Designation</th>
+                  <th className="p-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Branch</th>
+                  <th className="p-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Type</th>
+                  <th className="p-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide">Basic Salary</th>
+                  <th className="p-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Payroll Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((emp, i) => (
+                  <tr
+                    key={emp.id}
+                    className={cn(
+                      "border-b border-border/60 hover:bg-muted/30 transition-colors cursor-pointer",
+                      i % 2 === 0 ? "bg-background" : "bg-muted/10",
+                      selected.has(emp.id) && "bg-primary/5 hover:bg-primary/8"
+                    )}
+                    onClick={() => {
+                      const s = new Set(selected);
+                      s.has(emp.id) ? s.delete(emp.id) : s.add(emp.id);
+                      setSelected(s);
+                    }}
+                  >
+                    <td className="p-3">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(emp.id)}
+                        onChange={() => {}}
+                        onClick={e => e.stopPropagation()}
+                        className="rounded pointer-events-none"
+                      />
+                    </td>
+                    <td className="p-3">
+                      <p className="font-medium text-foreground">{emp.fullName}</p>
+                      <p className="text-xs text-muted-foreground">{emp.employeeId}</p>
+                    </td>
+                    <td className="p-3">
+                      <p className="text-sm">{emp.designation}</p>
+                      <p className="text-xs text-muted-foreground">{emp.department}</p>
+                    </td>
+                    <td className="p-3 text-sm text-muted-foreground">{branchName(emp.branchId)}</td>
+                    <td className="p-3">
+                      <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium",
+                        emp.employeeType === "permanent" ? "bg-blue-100 text-blue-700" :
+                        emp.employeeType === "contract" ? "bg-purple-100 text-purple-700" :
+                        "bg-orange-100 text-orange-700"
+                      )}>
+                        {EMP_TYPE_LABELS[emp.employeeType ?? "permanent"] ?? emp.employeeType}
+                      </span>
+                    </td>
+                    <td className="p-3 text-right font-medium text-sm">{fmt(emp.basicSalary)}</td>
+                    <td className="p-3">
+                      {emp.hasPayroll ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span className={cn("inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium w-fit",
+                            STATUS_STYLES[emp.payrollStatus!]
+                          )}>
+                            {emp.payrollStatus === "paid" ? <BadgeCheck className="w-3 h-3" /> :
+                             emp.payrollStatus === "approved" ? <CheckCircle className="w-3 h-3" /> :
+                             <Clock className="w-3 h-3" />}
+                            {emp.payrollStatus?.toUpperCase()}
+                          </span>
+                          <span className="text-xs text-muted-foreground">Net: {fmt(emp.currentNetSalary ?? 0)}</span>
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-muted text-muted-foreground w-fit">
+                          <CircleDashed className="w-3 h-3" />
+                          Not Generated
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="p-4 border-t border-border shrink-0">
+          {error && (
+            <div className="mb-3 flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              {error}
+            </div>
+          )}
+
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+              <span className="flex items-center gap-1.5">
+                <ListChecks className="w-4 h-4 text-primary" />
+                <strong className="text-foreground">{selectedCount}</strong> selected
+              </span>
+              {newlyAdded > 0 && (
+                <span className="text-emerald-600 text-xs">+{newlyAdded} new</span>
+              )}
+              {alreadyHavePayroll > 0 && (
+                <span className="text-amber-600 text-xs">↺ {alreadyHavePayroll} will be regenerated</span>
+              )}
+            </div>
+
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                onClick={onClose}
+                className="text-xs bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={generate}
+                disabled={generating || selectedCount === 0}
+                className="text-xs flex items-center gap-2"
+              >
+                <Banknote className="w-3.5 h-3.5" />
+                {generating ? "Generating…" : `Generate Payroll for ${selectedCount} Employee${selectedCount !== 1 ? "s" : ""}`}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Payroll() {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -206,9 +563,9 @@ export default function Payroll() {
   const [payroll, setPayroll] = useState<PayrollRow[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [payslip, setPayslip] = useState<PayrollRow | null>(null);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<string>("employee.fullName");
   const [sortAsc, setSortAsc] = useState(true);
@@ -232,29 +589,6 @@ export default function Payroll() {
   }, [month, year]);
 
   useEffect(() => { fetchPayroll(); }, [fetchPayroll]);
-
-  const generatePayroll = async () => {
-    if (!confirm(`Generate payroll for ${MONTHS[month - 1]} ${year}? This will overwrite existing draft records.`)) return;
-    setGenerating(true); setMsg(null);
-    try {
-      const r = await fetch(apiUrl("/payroll/generate"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ month, year }),
-      });
-      const d = await r.json();
-      if (d.success) {
-        setMsg({ type: "success", text: d.message });
-        await fetchPayroll();
-      } else {
-        setMsg({ type: "error", text: d.message });
-      }
-    } catch {
-      setMsg({ type: "error", text: "Generation failed. Check server." });
-    } finally {
-      setGenerating(false);
-    }
-  };
 
   const updateStatus = async (id: number, status: PayStatus) => {
     await fetch(apiUrl(`/payroll/${id}/status`), {
@@ -345,15 +679,14 @@ export default function Payroll() {
             className="text-xs flex items-center gap-2 bg-secondary text-secondary-foreground hover:bg-secondary/80"
           >
             <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
-            {loading ? "Loading…" : "Load Payroll"}
+            {loading ? "Loading…" : "Refresh"}
           </Button>
           <Button
-            onClick={generatePayroll}
-            disabled={generating}
+            onClick={() => setShowGenerateModal(true)}
             className="text-xs flex items-center gap-2"
           >
-            <Banknote className="w-3.5 h-3.5" />
-            {generating ? "Generating…" : "Generate Payroll"}
+            <UserCheck className="w-3.5 h-3.5" />
+            Assign &amp; Generate Payroll
           </Button>
           {selected.size > 0 && (
             <>
@@ -374,41 +707,48 @@ export default function Payroll() {
         </div>
       </Card>
 
-      {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: "Total Employees", val: summary.totalEmployees, icon: Users, color: "text-blue-600", bg: "bg-blue-50", fmt: (v: number) => v.toString() },
-            { label: "Total Gross",    val: summary.totalGross, icon: TrendingUp, color: "text-emerald-600", bg: "bg-emerald-50", fmt },
-            { label: "Total Net Pay",  val: summary.totalNet,   icon: Banknote,   color: "text-primary",     bg: "bg-primary/5",  fmt },
-            { label: "Total EPF",      val: summary.totalEPF,   icon: CreditCard, color: "text-violet-600", bg: "bg-violet-50",  fmt },
-          ].map(s => (
-            <Card key={s.label} className="p-4">
-              <div className="flex items-start gap-3">
-                <div className={cn("p-2 rounded-lg", s.bg)}>
-                  <s.icon className={cn("w-4 h-4", s.color)} />
+      {summary && summary.totalEmployees > 0 && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { label: "Total Employees", val: summary.totalEmployees, icon: Users, color: "text-blue-600", bg: "bg-blue-50", fmt: (v: number) => v.toString() },
+              { label: "Total Gross",    val: summary.totalGross, icon: TrendingUp, color: "text-emerald-600", bg: "bg-emerald-50", fmt },
+              { label: "Total Net Pay",  val: summary.totalNet,   icon: Banknote,   color: "text-primary",     bg: "bg-primary/5",  fmt },
+              { label: "Total EPF",      val: summary.totalEPF,   icon: CreditCard, color: "text-violet-600", bg: "bg-violet-50",  fmt },
+            ].map(s => (
+              <Card key={s.label} className="p-4">
+                <div className="flex items-start gap-3">
+                  <div className={cn("p-2 rounded-lg", s.bg)}>
+                    <s.icon className={cn("w-4 h-4", s.color)} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground">{s.label}</p>
+                    <p className={cn("font-bold text-base mt-0.5 truncate", s.color)}>{s.fmt(s.val)}</p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground">{s.label}</p>
-                  <p className={cn("font-bold text-base mt-0.5 truncate", s.color)}>{s.fmt(s.val)}</p>
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
+              </Card>
+            ))}
+          </div>
 
-      {summary && (
-        <div className="flex gap-3 flex-wrap">
-          {[
-            { label: "Draft",    count: summary.statusCounts.draft,    color: "bg-amber-100 text-amber-700 border-amber-200" },
-            { label: "Approved", count: summary.statusCounts.approved,  color: "bg-blue-100 text-blue-700 border-blue-200" },
-            { label: "Paid",     count: summary.statusCounts.paid,      color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-          ].map(s => (
-            <div key={s.label} className={cn("flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium", s.color)}>
-              {s.label}: <span className="font-bold">{s.count}</span>
-            </div>
-          ))}
-        </div>
+          <div className="flex gap-3 flex-wrap items-center">
+            {[
+              { label: "Draft",    count: summary.statusCounts.draft,    color: "bg-amber-100 text-amber-700 border-amber-200", icon: Clock },
+              { label: "Approved", count: summary.statusCounts.approved,  color: "bg-blue-100 text-blue-700 border-blue-200", icon: CheckCircle },
+              { label: "Paid",     count: summary.statusCounts.paid,      color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: BadgeCheck },
+            ].map(s => (
+              <div key={s.label} className={cn("flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium", s.color)}>
+                <s.icon className="w-3.5 h-3.5" />
+                {s.label}: <span className="font-bold">{s.count}</span>
+              </div>
+            ))}
+            <button
+              onClick={() => setShowGenerateModal(true)}
+              className="ml-auto text-xs text-primary flex items-center gap-1 hover:underline"
+            >
+              Manage employee assignments <ChevronRight className="w-3 h-3" />
+            </button>
+          </div>
+        </>
       )}
 
       {payroll.length > 0 && (
@@ -439,6 +779,7 @@ export default function Payroll() {
                   </th>
                   {[
                     { label: "Employee",    field: "employee.fullName" },
+                    { label: "Type",        field: null },
                     { label: "Attendance",  field: null },
                     { label: "Basic",       field: null },
                     { label: "Gross Salary", field: "grossSalary" },
@@ -478,6 +819,15 @@ export default function Payroll() {
                     <td className="p-3">
                       <p className="font-medium text-foreground">{row.employee.fullName}</p>
                       <p className="text-xs text-muted-foreground">{row.employee.employeeId} · {row.employee.designation}</p>
+                    </td>
+                    <td className="p-3">
+                      <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium",
+                        row.employee.employeeType === "permanent" ? "bg-blue-100 text-blue-700" :
+                        row.employee.employeeType === "contract" ? "bg-purple-100 text-purple-700" :
+                        "bg-orange-100 text-orange-700"
+                      )}>
+                        {EMP_TYPE_LABELS[row.employee.employeeType ?? "permanent"] ?? "Permanent"}
+                      </span>
                     </td>
                     <td className="p-3">
                       <div className="flex gap-1 text-[11px]">
@@ -540,17 +890,32 @@ export default function Payroll() {
 
       {payroll.length === 0 && !loading && (
         <Card className="p-12 text-center">
-          <Banknote className="w-12 h-12 mx-auto mb-3 text-muted-foreground/40" />
+          <UserCheck className="w-12 h-12 mx-auto mb-3 text-muted-foreground/40" />
           <p className="text-muted-foreground font-medium mb-1">No payroll data for {MONTHS[month - 1]} {year}</p>
-          <p className="text-xs text-muted-foreground mb-4">Click "Generate Payroll" to calculate salaries from attendance records.</p>
-          <Button onClick={generatePayroll} disabled={generating} className="text-xs mx-auto flex items-center gap-2">
-            <Banknote className="w-3.5 h-3.5" />
-            {generating ? "Generating…" : "Generate Payroll"}
+          <p className="text-xs text-muted-foreground mb-4">
+            Click "Assign &amp; Generate Payroll" to select employees and calculate their salaries from attendance records.
+          </p>
+          <Button onClick={() => setShowGenerateModal(true)} className="text-xs mx-auto flex items-center gap-2">
+            <UserCheck className="w-3.5 h-3.5" />
+            Assign &amp; Generate Payroll
           </Button>
         </Card>
       )}
 
       {payslip && <PayslipModal row={payslip} onClose={() => setPayslip(null)} />}
+
+      {showGenerateModal && (
+        <GeneratePayrollModal
+          month={month}
+          year={year}
+          onClose={() => setShowGenerateModal(false)}
+          onGenerated={() => {
+            setShowGenerateModal(false);
+            setMsg({ type: "success", text: `Payroll generated successfully for ${MONTHS[month - 1]} ${year}.` });
+            fetchPayroll();
+          }}
+        />
+      )}
     </div>
   );
 }
