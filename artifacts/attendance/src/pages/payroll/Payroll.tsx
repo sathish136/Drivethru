@@ -114,118 +114,199 @@ const EMP_TYPE_LABELS: Record<string, string> = {
 
 function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }) {
   const logo = localStorage.getItem("org_logo");
+  const orgName = localStorage.getItem("org_name") || "Sri Lanka Post";
+
+  const earnings = [
+    { label: "Basic Salary",        val: row.basicSalary },
+    { label: "Transport Allowance", val: row.transportAllowance },
+    { label: "Housing Allowance",   val: row.housingAllowance },
+    { label: "Other Allowances",    val: row.otherAllowances },
+    { label: "Overtime Pay",        val: row.overtimePay },
+  ].filter(e => e.val > 0 || e.label === "Basic Salary");
+
+  const deductions = [
+    { label: "EPF – Employee (8%)", val: row.epfEmployee },
+    { label: "APIT (Income Tax)",   val: row.apit },
+    { label: "Absence Deduction",   val: row.absenceDeduction },
+    { label: "Late Deduction",      val: row.lateDeduction },
+    { label: "Other Deductions",    val: row.otherDeductions },
+  ].filter(d => d.val > 0 || d.label === "EPF – Employee (8%)");
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}>
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* ── Header ── */}
+        <div className="relative bg-gradient-to-br from-slate-800 to-slate-900 rounded-t-2xl px-7 py-6 print:rounded-none">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
               {logo
-                ? <img src={logo} alt="Logo" className="w-12 h-12 object-contain" />
-                : <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-bold text-xl">P</div>}
+                ? <img src={logo} alt="Logo" className="w-14 h-14 object-contain rounded-xl bg-white/10 p-1" />
+                : (
+                  <div className="w-14 h-14 rounded-xl bg-white/15 flex items-center justify-center">
+                    <span className="text-white font-black text-2xl">{orgName.charAt(0)}</span>
+                  </div>
+                )}
               <div>
-                <h2 className="font-bold text-lg text-foreground">Sri Lanka Post</h2>
-                <p className="text-sm text-muted-foreground">PAY SLIP — {MONTHS[row.month - 1]} {row.year}</p>
+                <h2 className="text-white font-bold text-xl leading-tight">{orgName}</h2>
+                <p className="text-slate-300 text-sm mt-0.5 uppercase tracking-widest font-medium">
+                  Employee Pay Slip
+                </p>
               </div>
             </div>
-            <div className="flex gap-2">
-              <Button className="text-xs flex items-center gap-1.5 py-1.5" onClick={() => window.print()}>
+            <div className="flex items-center gap-2">
+              <div className="text-right mr-2">
+                <p className="text-slate-400 text-xs uppercase tracking-wide">Pay Period</p>
+                <p className="text-white font-bold text-base">{MONTHS[row.month - 1]} {row.year}</p>
+              </div>
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-3 py-2 rounded-lg transition-colors"
+              >
                 <Printer className="w-3.5 h-3.5" />Print
-              </Button>
-              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
-                <X className="w-5 h-5 text-muted-foreground" />
+              </button>
+              <button onClick={onClose} className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors">
+                <X className="w-4 h-4 text-white" />
               </button>
             </div>
           </div>
 
-          <div className="bg-muted/40 rounded-xl p-4 mb-5 grid grid-cols-2 gap-3 text-sm">
-            <div><span className="text-muted-foreground text-xs">Employee Name</span><p className="font-semibold">{row.employee.fullName}</p></div>
-            <div><span className="text-muted-foreground text-xs">Employee ID</span><p className="font-semibold">{row.employee.employeeId}</p></div>
-            <div><span className="text-muted-foreground text-xs">Designation</span><p className="font-semibold">{row.employee.designation}</p></div>
-            <div><span className="text-muted-foreground text-xs">Department</span><p className="font-semibold">{row.employee.department}</p></div>
-            <div><span className="text-muted-foreground text-xs">Pay Period</span><p className="font-semibold">{MONTHS[row.month - 1]} {row.year}</p></div>
-            <div><span className="text-muted-foreground text-xs">Payment Status</span>
-              <span className={cn("inline-block mt-0.5 px-2 py-0.5 rounded-full text-xs font-medium", STATUS_STYLES[row.status])}>
-                {row.status.toUpperCase()}
+        </div>
+
+        <div className="px-7 py-5 space-y-5">
+
+          {/* ── Employee Info ── */}
+          <div className="grid grid-cols-3 gap-4 border border-slate-100 rounded-xl p-4 bg-slate-50/50">
+            <div>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Employee Name</p>
+              <p className="font-bold text-slate-800 text-sm">{row.employee.fullName}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Employee ID</p>
+              <p className="font-semibold text-slate-700 text-sm">{row.employee.employeeId}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Status</p>
+              <span className={cn("inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide", STATUS_STYLES[row.status])}>
+                {row.status}
               </span>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Designation</p>
+              <p className="font-semibold text-slate-700 text-sm">{row.employee.designation}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Department</p>
+              <p className="font-semibold text-slate-700 text-sm">{row.employee.department}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Pay Period</p>
+              <p className="font-semibold text-slate-700 text-sm">{MONTHS[row.month - 1]} {row.year}</p>
             </div>
           </div>
 
-          <div className="mb-4 grid grid-cols-5 gap-2 text-center text-xs">
+          {/* ── Attendance Summary ── */}
+          <div className="grid grid-cols-5 gap-2">
             {[
-              { label: "Working Days", val: row.workingDays },
-              { label: "Present", val: row.presentDays },
-              { label: "Absent", val: row.absentDays },
-              { label: "Late", val: row.lateDays },
-              { label: "OT Hours", val: row.overtimeHours.toFixed(1) },
+              { label: "Working Days", val: row.workingDays, color: "bg-blue-50 text-blue-700 border-blue-100" },
+              { label: "Present",      val: row.presentDays,  color: "bg-emerald-50 text-emerald-700 border-emerald-100" },
+              { label: "Absent",       val: row.absentDays,   color: "bg-red-50 text-red-600 border-red-100" },
+              { label: "Late",         val: row.lateDays,     color: "bg-amber-50 text-amber-700 border-amber-100" },
+              { label: "OT Hours",     val: row.overtimeHours.toFixed(1), color: "bg-purple-50 text-purple-700 border-purple-100" },
             ].map(s => (
-              <div key={s.label} className="bg-muted/40 rounded-lg p-2">
-                <p className="text-muted-foreground text-[10px]">{s.label}</p>
-                <p className="font-bold text-sm mt-0.5">{s.val}</p>
+              <div key={s.label} className={cn("rounded-xl border p-3 text-center", s.color)}>
+                <p className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{s.label}</p>
+                <p className="font-black text-lg mt-0.5">{s.val}</p>
               </div>
             ))}
           </div>
 
-          <div className="grid grid-cols-2 gap-4 mb-5">
-            <div>
-              <h3 className="font-semibold text-sm mb-2 text-emerald-700 flex items-center gap-1.5">
-                <TrendingUp className="w-3.5 h-3.5" />Earnings
-              </h3>
-              <div className="space-y-1.5 text-sm">
-                {[
-                  { label: "Basic Salary",       val: row.basicSalary },
-                  { label: "Transport Allowance", val: row.transportAllowance },
-                  { label: "Housing Allowance",   val: row.housingAllowance },
-                  { label: "Other Allowances",    val: row.otherAllowances },
-                  { label: "Overtime Pay",        val: row.overtimePay },
-                ].filter(e => e.val > 0 || e.label === "Basic Salary").map(e => (
-                  <div key={e.label} className="flex justify-between">
-                    <span className="text-muted-foreground">{e.label}</span>
-                    <span className="font-medium">{fmt(e.val)}</span>
+          {/* ── Earnings & Deductions ── */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Earnings */}
+            <div className="border border-emerald-100 rounded-xl overflow-hidden">
+              <div className="bg-emerald-600 px-4 py-2.5 flex items-center gap-2">
+                <TrendingUp className="w-3.5 h-3.5 text-white" />
+                <span className="text-white text-xs font-bold uppercase tracking-wide">Earnings</span>
+              </div>
+              <div className="px-4 py-3 space-y-2">
+                {earnings.map(e => (
+                  <div key={e.label} className="flex justify-between items-center text-sm">
+                    <span className="text-slate-500">{e.label}</span>
+                    <span className="font-semibold text-slate-800">{fmt(e.val)}</span>
                   </div>
                 ))}
-                <div className="flex justify-between font-bold text-emerald-700 border-t border-emerald-100 pt-1.5 mt-1">
-                  <span>Gross Salary</span>
-                  <span>{fmt(row.grossSalary)}</span>
+                <div className="flex justify-between items-center pt-2 mt-1 border-t border-emerald-100">
+                  <span className="text-sm font-bold text-emerald-700">Gross Salary</span>
+                  <span className="font-bold text-emerald-700">{fmt(row.grossSalary)}</span>
                 </div>
               </div>
             </div>
-            <div>
-              <h3 className="font-semibold text-sm mb-2 text-red-600 flex items-center gap-1.5">
-                <Minus className="w-3.5 h-3.5" />Deductions
-              </h3>
-              <div className="space-y-1.5 text-sm">
-                {[
-                  { label: "EPF – Employee (8%)",  val: row.epfEmployee },
-                  { label: "APIT (Income Tax)",    val: row.apit },
-                  { label: "Absence Deduction",    val: row.absenceDeduction },
-                  { label: "Late Deduction",       val: row.lateDeduction },
-                  { label: "Other Deductions",     val: row.otherDeductions },
-                ].filter(d => d.val > 0 || d.label === "APIT (Income Tax)").map(d => (
-                  <div key={d.label} className="flex justify-between">
-                    <span className="text-muted-foreground">{d.label}</span>
-                    <span className="font-medium text-red-600">{fmt(d.val)}</span>
+
+            {/* Deductions */}
+            <div className="border border-red-100 rounded-xl overflow-hidden">
+              <div className="bg-red-500 px-4 py-2.5 flex items-center gap-2">
+                <Minus className="w-3.5 h-3.5 text-white" />
+                <span className="text-white text-xs font-bold uppercase tracking-wide">Deductions</span>
+              </div>
+              <div className="px-4 py-3 space-y-2">
+                {deductions.map(d => (
+                  <div key={d.label} className="flex justify-between items-center text-sm">
+                    <span className="text-slate-500">{d.label}</span>
+                    <span className="font-semibold text-red-600">{fmt(d.val)}</span>
                   </div>
                 ))}
-                <div className="flex justify-between font-bold text-red-600 border-t border-red-100 pt-1.5 mt-1">
-                  <span>Total Deductions</span>
-                  <span>{fmt(row.totalDeductions)}</span>
+                <div className="flex justify-between items-center pt-2 mt-1 border-t border-red-100">
+                  <span className="text-sm font-bold text-red-600">Total Deductions</span>
+                  <span className="font-bold text-red-600">{fmt(row.totalDeductions)}</span>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex justify-between items-center">
+          {/* ── Employer Contributions ── */}
+          <div className="border border-indigo-100 rounded-xl overflow-hidden">
+            <div className="bg-indigo-50 border-b border-indigo-100 px-4 py-2 flex items-center gap-2">
+              <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+              <span className="text-indigo-700 text-xs font-bold uppercase tracking-wide">Employer Contributions</span>
+              <span className="text-[10px] text-indigo-400 ml-1">(not deducted from employee)</span>
+            </div>
+            <div className="px-4 py-3 grid grid-cols-3 gap-4 text-sm">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">EPF – Employer (12%)</span>
+                <span className="font-semibold text-indigo-700">{fmt(row.epfEmployer)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">ETF (3%)</span>
+                <span className="font-semibold text-indigo-700">{fmt(row.etfEmployer)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-semibold">Total Employer Cost</span>
+                <span className="font-bold text-indigo-800">{fmt(row.grossSalary + row.epfEmployer + row.etfEmployer)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Net Salary ── */}
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-xl px-6 py-5 flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Net Salary (Take Home)</p>
-              <p className="text-2xl font-bold text-primary">{fmt(row.netSalary)}</p>
+              <p className="text-slate-300 text-xs uppercase tracking-widest font-semibold mb-1">Net Salary (Take Home)</p>
+              <p className="text-3xl font-black text-white">{fmt(row.netSalary)}</p>
             </div>
-            <div className="text-right text-xs text-muted-foreground space-y-0.5">
-              <p>EPF – Employer (12%): {fmt(row.epfEmployer)}</p>
-              <p>ETF (3%): {fmt(row.etfEmployer)}</p>
-              <p className="font-semibold text-foreground">Total Employer Cost: {fmt(row.grossSalary + row.epfEmployer + row.etfEmployer)}</p>
+            <div className="text-right">
+              <div className="text-slate-400 text-xs space-y-0.5">
+                <p>Gross: <span className="text-slate-200 font-semibold">{fmt(row.grossSalary)}</span></p>
+                <p>Deductions: <span className="text-red-300 font-semibold">− {fmt(row.totalDeductions)}</span></p>
+              </div>
             </div>
+          </div>
+
+          {/* ── Footer ── */}
+          <div className="flex items-center justify-between pt-1 pb-2 text-[10px] text-slate-400 border-t border-slate-100">
+            <p>Generated: {new Date(row.generatedAt).toLocaleDateString("en-LK", { day: "2-digit", month: "long", year: "numeric" })}</p>
+            <p>This is a computer-generated payslip and does not require a signature.</p>
           </div>
         </div>
       </div>
