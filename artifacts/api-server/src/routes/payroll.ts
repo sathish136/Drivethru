@@ -321,8 +321,13 @@ router.get("/summary", async (req, res) => {
     const { month, year } = req.query as Record<string, string>;
     if (!month || !year) return res.status(400).json({ message: "month and year required" });
 
-    const rows = await db.select().from(payrollRecords)
+    const assignedRows = await db.select({ employeeId: employeeSalaryAssignments.employeeId }).from(employeeSalaryAssignments);
+    const assignedIds = new Set(assignedRows.map(r => r.employeeId));
+
+    const allRows = await db.select().from(payrollRecords)
       .where(and(eq(payrollRecords.month, parseInt(month)), eq(payrollRecords.year, parseInt(year))));
+
+    const rows = allRows.filter(r => assignedIds.has(r.employeeId));
 
     const summary = {
       totalEmployees: rows.length,
