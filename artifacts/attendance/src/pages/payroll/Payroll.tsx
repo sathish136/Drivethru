@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { PageHeader, Card, Button, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import drivethruLogo from "@/assets/drivethru-brand.svg";
 import {
   Banknote, RefreshCw, CheckCircle, CreditCard,
   Users, TrendingUp, Minus, Eye, X, Printer,
@@ -113,8 +114,9 @@ const EMP_TYPE_LABELS: Record<string, string> = {
 };
 
 function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }) {
-  const logo = localStorage.getItem("org_logo");
-  const orgName = localStorage.getItem("org_name") || "Sri Lanka Post";
+  const customLogo = localStorage.getItem("org_logo");
+  const logo = customLogo || drivethruLogo;
+  const orgName = "Drivethru";
 
   const earnings = [
     { label: "Basic Salary",        val: row.basicSalary },
@@ -139,26 +141,22 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
         onClick={e => e.stopPropagation()}
       >
         {/* ── Header ── */}
-        <div className="relative bg-gradient-to-br from-slate-800 to-slate-900 rounded-t-2xl px-7 py-6 print:rounded-none">
+        <div className="relative rounded-t-2xl px-7 py-6 print:rounded-none" style={{ background: "linear-gradient(135deg, hsl(200,60%,42%) 0%, hsl(200,65%,32%) 100%)" }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              {logo
-                ? <img src={logo} alt="Logo" className="w-14 h-14 object-contain rounded-xl bg-white/10 p-1" />
-                : (
-                  <div className="w-14 h-14 rounded-xl bg-white/15 flex items-center justify-center">
-                    <span className="text-white font-black text-2xl">{orgName.charAt(0)}</span>
-                  </div>
-                )}
+              <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center shadow-md p-1.5">
+                <img src={logo} alt={orgName} className="w-full h-full object-contain" />
+              </div>
               <div>
-                <h2 className="text-white font-bold text-xl leading-tight">{orgName}</h2>
-                <p className="text-slate-300 text-sm mt-0.5 uppercase tracking-widest font-medium">
+                <h2 className="text-white font-black text-2xl leading-tight tracking-tight">{orgName}</h2>
+                <p className="text-white/70 text-xs mt-0.5 uppercase tracking-widest font-semibold">
                   Employee Pay Slip
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <div className="text-right mr-2">
-                <p className="text-slate-400 text-xs uppercase tracking-wide">Pay Period</p>
+                <p className="text-white/60 text-xs uppercase tracking-wide">Pay Period</p>
                 <p className="text-white font-bold text-base">{MONTHS[row.month - 1]} {row.year}</p>
               </div>
               <button
@@ -290,14 +288,14 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
           </div>
 
           {/* ── Net Salary ── */}
-          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-xl px-6 py-5 flex items-center justify-between">
+          <div className="rounded-xl px-6 py-5 flex items-center justify-between" style={{ background: "linear-gradient(135deg, hsl(200,60%,42%) 0%, hsl(200,65%,32%) 100%)" }}>
             <div>
-              <p className="text-slate-300 text-xs uppercase tracking-widest font-semibold mb-1">Net Salary (Take Home)</p>
+              <p className="text-white/70 text-xs uppercase tracking-widest font-semibold mb-1">Net Salary (Take Home)</p>
               <p className="text-3xl font-black text-white">{fmt(row.netSalary)}</p>
             </div>
             <div className="text-right">
-              <div className="text-slate-400 text-xs space-y-0.5">
-                <p>Gross: <span className="text-slate-200 font-semibold">{fmt(row.grossSalary)}</span></p>
+              <div className="text-white/60 text-xs space-y-0.5">
+                <p>Gross: <span className="text-white font-semibold">{fmt(row.grossSalary)}</span></p>
                 <p>Deductions: <span className="text-red-300 font-semibold">− {fmt(row.totalDeductions)}</span></p>
               </div>
             </div>
