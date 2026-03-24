@@ -15,6 +15,7 @@ import Biometric from "@/pages/biometric/Biometric";
 import Settings from "@/pages/settings/Settings";
 import Users from "@/pages/users/Users";
 import Payroll from "@/pages/payroll/Payroll";
+import PayrollSettings from "@/pages/payroll-settings/PayrollSettings";
 import ActivityLogs from "@/pages/activity-logs/ActivityLogs";
 import NotFound from "@/pages/not-found";
 
@@ -44,6 +45,7 @@ function Router() {
       <Route path="/shifts"><ProtectedRoute component={Shifts} /></Route>
       <Route path="/reports"><ProtectedRoute component={Reports} /></Route>
       <Route path="/payroll"><ProtectedRoute component={Payroll} /></Route>
+      <Route path="/payroll-settings"><ProtectedRoute component={PayrollSettings} /></Route>
       <Route path="/biometric"><ProtectedRoute component={Biometric} /></Route>
       <Route path="/settings"><ProtectedRoute component={Settings} /></Route>
       <Route path="/users"><ProtectedRoute component={Users} /></Route>

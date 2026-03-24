@@ -27,6 +27,7 @@ import {
   MapPin,
   ArrowRight,
   User,
+  SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -50,9 +51,10 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "HR Management",
     items: [
-      { href: "/employees", label: "Employees", icon: Users    },
-      { href: "/payroll",   label: "Payroll",   icon: Banknote },
-      { href: "/shifts",    label: "Shifts",    icon: Clock    },
+      { href: "/employees",        label: "Employees",        icon: Users              },
+      { href: "/payroll",          label: "Payroll",          icon: Banknote           },
+      { href: "/payroll-settings", label: "Payroll Settings", icon: SlidersHorizontal  },
+      { href: "/shifts",           label: "Shifts",           icon: Clock              },
     ],
   },
   {

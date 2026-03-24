@@ -27,7 +27,6 @@ const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ElementType;
   { key: "organisation", label: "Organisation",       icon: Building,     description: "Name, country, timezone",       color: "text-emerald-600" },
   { key: "attendance",   label: "Attendance Rules",   icon: Clock,        description: "Late, overtime, work week",      color: "text-blue-600"    },
   { key: "hr",           label: "HR Settings",        icon: Users,        description: "Leave, payroll, employment",     color: "text-violet-600"  },
-  { key: "payroll",      label: "Payroll Config",     icon: Banknote,     description: "EPF, ETF, earnings & deductions", color: "text-green-600"  },
   { key: "holidays",     label: "Holiday Settings",   icon: Calendar,     description: "Public & gazetted holidays",     color: "text-amber-600"   },
   { key: "biometric",   label: "Biometric / ADMS",   icon: Fingerprint,  description: "ZKTeco ZK Push configuration",   color: "text-sky-600"     },
   { key: "mockdata",     label: "Mock Data",          icon: Database,     description: "Import & clear sample data",     color: "text-rose-600"    },
