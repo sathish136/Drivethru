@@ -3,20 +3,20 @@ import { useState, useEffect, useRef } from "react";
 import liveuLogo from "@/assets/liveu-logo.png";
 import drivethruLogo from "@/assets/drivethru-brand.svg";
 import {
-  LayoutDashboard,
-  Users,
-  CalendarDays,
-  CalendarRange,
-  Clock,
-  Building2,
-  Fingerprint,
-  Settings,
-  FileBarChart,
+  LayoutGrid,
+  UserRound,
+  ClipboardList,
+  CalendarCheck,
+  Timer,
+  MapPinned,
+  ScanLine,
+  Cog,
+  BarChart3,
   LogOut,
   Bell,
-  Banknote,
-  Activity,
-  UserCog,
+  Wallet,
+  ListChecks,
+  ShieldCheck,
   ChevronsLeft,
   ChevronsRight,
   Search,
@@ -27,7 +27,9 @@ import {
   MapPin,
   ArrowRight,
   User,
-  SlidersHorizontal,
+  Sliders,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -39,41 +41,41 @@ type NavGroup = { label: string; items: NavItem[] };
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Overview",
-    items: [{ href: "/", label: "Dashboard", icon: LayoutDashboard }],
+    items: [{ href: "/", label: "Dashboard", icon: LayoutGrid }],
   },
   {
     label: "Attendance",
     items: [
-      { href: "/attendance/today",   label: "Today's Attendance", icon: CalendarDays  },
-      { href: "/attendance/monthly", label: "Monthly Sheet",      icon: CalendarRange },
+      { href: "/attendance/today",   label: "Today's Attendance", icon: ClipboardList  },
+      { href: "/attendance/monthly", label: "Monthly Sheet",      icon: CalendarCheck  },
     ],
   },
   {
     label: "HR Management",
     items: [
-      { href: "/employees",        label: "Employees",        icon: Users              },
-      { href: "/payroll",          label: "Payroll",          icon: Banknote           },
-      { href: "/payroll-settings", label: "Payroll Settings", icon: SlidersHorizontal  },
-      { href: "/shifts",           label: "Shifts",           icon: Clock              },
+      { href: "/employees",        label: "Employees",        icon: UserRound },
+      { href: "/payroll",          label: "Payroll",          icon: Wallet    },
+      { href: "/payroll-settings", label: "Payroll Settings", icon: Sliders   },
+      { href: "/shifts",           label: "Shifts",           icon: Timer     },
     ],
   },
   {
     label: "Organization",
     items: [
-      { href: "/branches",  label: "Branches",          icon: Building2   },
-      { href: "/biometric", label: "Biometric Devices", icon: Fingerprint },
+      { href: "/branches",  label: "Branches",          icon: MapPinned },
+      { href: "/biometric", label: "Biometric Devices", icon: ScanLine  },
     ],
   },
   {
     label: "Analytics",
-    items: [{ href: "/reports", label: "Reports", icon: FileBarChart }],
+    items: [{ href: "/reports", label: "Reports", icon: BarChart3 }],
   },
   {
     label: "System",
     items: [
-      { href: "/users",         label: "User Management", icon: UserCog  },
-      { href: "/activity-logs", label: "Activity Logs",   icon: Activity },
-      { href: "/settings",      label: "Settings",        icon: Settings },
+      { href: "/users",         label: "User Management", icon: ShieldCheck },
+      { href: "/activity-logs", label: "Activity Logs",   icon: ListChecks  },
+      { href: "/settings",      label: "Settings",        icon: Cog         },
     ],
   },
 ];
@@ -98,7 +100,19 @@ type SearchResult = {
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  const [sidebarLight, setSidebarLight] = useState<boolean>(() => localStorage.getItem("sidebar_theme") === "light");
   const [logoUrl, setLogoUrl] = useState<string>(() => localStorage.getItem("org_logo") || drivethruLogo);
+
+  function toggleSidebarTheme() {
+    setSidebarLight(prev => {
+      const next = !prev;
+      localStorage.setItem("sidebar_theme", next ? "light" : "dark");
+      return next;
+    });
+  }
+
+  /* s(dark, light) — returns the right class based on sidebar theme */
+  const s = (dark: string, light: string) => sidebarLight ? light : dark;
   const [now, setNow] = useState(new Date());
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -311,14 +325,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* ── Sidebar ─────────────────────────────── */}
       <aside
         className={cn(
-          "bg-sidebar text-sidebar-foreground flex flex-col border-r border-white/8 shadow-xl z-10 shrink-0 h-full",
-          "transition-[width] duration-300 ease-in-out overflow-hidden",
+          "flex flex-col shadow-xl z-10 shrink-0 h-full transition-[width] duration-300 ease-in-out overflow-hidden",
+          sidebarLight
+            ? "bg-white text-gray-700 border-r border-gray-200"
+            : "bg-sidebar text-sidebar-foreground border-r border-white/8",
           collapsed ? "w-[60px]" : "w-[220px]"
         )}
       >
         {/* Brand + collapse toggle */}
         <div className={cn(
-          "flex items-center border-b border-white/8 shrink-0",
+          "flex items-center shrink-0",
+          sidebarLight ? "border-b border-gray-200" : "border-b border-white/8",
           collapsed ? "justify-center py-4 px-0" : "px-4 pt-5 pb-4 gap-3"
         )}>
           <div className="w-10 h-10 rounded-xl bg-sidebar-active flex items-center justify-center shadow overflow-hidden shrink-0">
@@ -330,25 +347,39 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           {!collapsed && (
             <>
               <div className="flex-1 min-w-0">
-                <span className="font-bold text-sm tracking-tight text-white block truncate">Drivethru</span>
-                <span className="text-[10px] text-white/50 block truncate">Attendance Management</span>
+                <span className={cn("font-bold text-sm tracking-tight block truncate", s("text-white", "text-gray-800"))}>Drivethru</span>
+                <span className={cn("text-[10px] block truncate", s("text-white/50", "text-gray-400"))}>Attendance Management</span>
               </div>
+              {/* Light/dark toggle */}
+              <button
+                onClick={toggleSidebarTheme}
+                className={cn("p-1 rounded-lg transition-colors shrink-0", s("hover:bg-white/10 text-white/40 hover:text-white", "hover:bg-gray-100 text-gray-400 hover:text-gray-700"))}
+                title={sidebarLight ? "Switch to dark sidebar" : "Switch to light sidebar"}
+              >
+                {sidebarLight ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
+              </button>
               <button
                 onClick={() => setCollapsed(true)}
-                className="p-1 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition-colors shrink-0"
+                className={cn("p-1 rounded-lg transition-colors shrink-0", s("hover:bg-white/10 text-white/40 hover:text-white", "hover:bg-gray-100 text-gray-400 hover:text-gray-700"))}
                 title="Collapse sidebar"
               >
                 <ChevronsLeft className="w-4 h-4" />
               </button>
             </>
           )}
+
         </div>
 
         {/* Expand button — collapsed only */}
         {collapsed && (
           <button
             onClick={() => setCollapsed(false)}
-            className="flex items-center justify-center py-3 hover:bg-white/10 text-white/40 hover:text-white transition-colors border-b border-white/8 shrink-0"
+            className={cn(
+              "flex items-center justify-center py-3 transition-colors shrink-0",
+              sidebarLight
+                ? "hover:bg-gray-100 text-gray-400 hover:text-gray-700 border-b border-gray-200"
+                : "hover:bg-white/10 text-white/40 hover:text-white border-b border-white/8"
+            )}
             title="Expand sidebar"
           >
             <ChevronsRight className="w-4 h-4" />
@@ -363,13 +394,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           {NAV_GROUPS.map((group) => (
             <div key={group.label}>
               {!collapsed && (
-                <p className="px-2 mb-1.5 text-[9px] font-bold uppercase tracking-widest text-white/35 select-none">
+                <p className={cn("px-2 mb-1.5 text-[9px] font-bold uppercase tracking-widest select-none", s("text-white/35", "text-gray-400"))}>
                   {group.label}
                 </p>
               )}
 
               {collapsed && (
-                <div className="my-2 border-t border-white/10" />
+                <div className={cn("my-2 border-t", s("border-white/10", "border-gray-200"))} />
               )}
 
               <div className={cn("space-y-0.5", collapsed && "space-y-1")}>
@@ -386,7 +417,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                         {isActive && (
                           <span className="pointer-events-none absolute z-[2]"
                             style={{ right: -8, top: -10, width: 10, height: 10,
-                              background: "hsl(var(--sidebar))", borderBottomLeftRadius: 10 }} />
+                              background: sidebarLight ? "#ffffff" : "hsl(var(--sidebar))", borderBottomLeftRadius: 10 }} />
                         )}
                         <Link
                           href={item.href}
@@ -394,19 +425,21 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                             "flex items-center justify-center h-9 rounded-xl transition-all duration-150",
                             isActive
                               ? "nav-active-tab-sm bg-sidebar-active shadow-md shadow-sidebar-active/30"
-                              : "w-full hover:bg-white/10"
+                              : cn("w-full", s("hover:bg-white/10", "hover:bg-gray-100"))
                           )}
                         >
                           <item.icon className={cn(
                             "w-[17px] h-[17px] shrink-0",
-                            isActive ? "text-white" : "text-white/45 group-hover/tip:text-white"
+                            isActive
+                              ? "text-white"
+                              : cn(s("text-white/45 group-hover/tip:text-white", "text-gray-400 group-hover/tip:text-gray-700"))
                           )} />
                         </Link>
                         {/* Concave corner — bottom */}
                         {isActive && (
                           <span className="pointer-events-none absolute z-[2]"
                             style={{ right: -8, bottom: -10, width: 10, height: 10,
-                              background: "hsl(var(--sidebar))", borderTopLeftRadius: 10 }} />
+                              background: sidebarLight ? "#ffffff" : "hsl(var(--sidebar))", borderTopLeftRadius: 10 }} />
                         )}
                         {/* Tooltip */}
                         <div className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50
@@ -427,7 +460,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                       {isActive && (
                         <span className="pointer-events-none absolute z-[2]"
                           style={{ right: -12, top: -12, width: 12, height: 12,
-                            background: "hsl(var(--sidebar))", borderBottomLeftRadius: 12 }} />
+                            background: sidebarLight ? "#ffffff" : "hsl(var(--sidebar))", borderBottomLeftRadius: 12 }} />
                       )}
                       <Link
                         href={item.href}
@@ -435,21 +468,23 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                           "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-150",
                           isActive
                             ? "nav-active-tab bg-sidebar-active text-white shadow-lg shadow-sidebar-active/25"
-                            : "text-white/55 hover:bg-white/8 hover:text-white"
+                            : cn(s("text-white/55 hover:bg-white/8 hover:text-white", "text-gray-500 hover:bg-gray-100 hover:text-gray-800"))
                         )}
                       >
                         <item.icon className={cn(
                           "w-[15px] h-[15px] shrink-0 transition-colors",
-                          isActive ? "text-white" : "text-white/45 group-hover:text-white"
+                          isActive
+                            ? "text-white"
+                            : cn(s("text-white/45 group-hover:text-white", "text-gray-400 group-hover:text-gray-700"))
                         )} />
                         <span className="flex-1 truncate">{item.label}</span>
-                        {isActive && <span className="w-1.5 h-1.5 rounded-full bg-white/70 shrink-0" />}
+                        {isActive && <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", s("bg-white/70", "bg-sidebar-active"))} />}
                       </Link>
                       {/* Concave corner — bottom */}
                       {isActive && (
                         <span className="pointer-events-none absolute z-[2]"
                           style={{ right: -12, bottom: -12, width: 12, height: 12,
-                            background: "hsl(var(--sidebar))", borderTopLeftRadius: 12 }} />
+                            background: sidebarLight ? "#ffffff" : "hsl(var(--sidebar))", borderTopLeftRadius: 12 }} />
                       )}
                     </div>
                   );
@@ -461,17 +496,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* ── User Profile Footer — always at bottom ── */}
         <div className={cn(
-          "border-t border-white/8 shrink-0",
+          "shrink-0",
+          sidebarLight ? "border-t border-gray-200" : "border-t border-white/8",
           collapsed ? "p-2" : "p-3"
         )}>
           {collapsed ? (
             <div className="flex flex-col items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-sidebar-active/40 text-white flex items-center justify-center text-[11px] font-bold border border-white/20">
+              <div className={cn("w-8 h-8 rounded-full bg-sidebar-active/40 flex items-center justify-center text-[11px] font-bold", s("text-white border border-white/20", "text-white border border-sidebar-active/30"))}>
                 {getInitials(userName)}
               </div>
               <button
                 onClick={handleLogout}
-                className="text-white/40 hover:text-red-400 transition-colors p-1 rounded-lg hover:bg-white/10"
+                className={cn("transition-colors p-1 rounded-lg hover:text-red-400", s("text-white/40 hover:bg-white/10", "text-gray-400 hover:bg-gray-100"))}
                 title="Log out"
               >
                 <LogOut className="w-3.5 h-3.5" />
@@ -481,18 +517,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <div className="space-y-1">
               {/* User info row */}
               <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl">
-                <div className="w-8 h-8 rounded-full bg-sidebar-active/40 text-white flex items-center justify-center text-[11px] font-bold border border-white/20 shrink-0">
+                <div className={cn("w-8 h-8 rounded-full bg-sidebar-active/40 flex items-center justify-center text-[11px] font-bold shrink-0", s("text-white border border-white/20", "text-white border border-sidebar-active/30"))}>
                   {getInitials(userName)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[12px] font-semibold text-white truncate leading-tight">{userName}</p>
-                  <p className="text-[10px] text-white/45 truncate leading-tight capitalize">{userRole} · {userEmail}</p>
+                  <p className={cn("text-[12px] font-semibold truncate leading-tight", s("text-white", "text-gray-800"))}>{userName}</p>
+                  <p className={cn("text-[10px] truncate leading-tight capitalize", s("text-white/45", "text-gray-400"))}>{userRole} · {userEmail}</p>
                 </div>
               </div>
               {/* Logout button */}
               <button
                 onClick={handleLogout}
-                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12px] font-medium text-white/50 hover:text-red-300 hover:bg-red-500/10 transition-all duration-150"
+                className={cn("w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12px] font-medium hover:text-red-400 hover:bg-red-500/10 transition-all duration-150", s("text-white/50", "text-gray-500"))}
               >
                 <LogOut className="w-3.5 h-3.5 shrink-0" />
                 <span>Sign Out</span>
