@@ -1,30 +1,16 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { payrollRecords, employees, attendanceRecords, branches } from "@workspace/db/schema";
+import { payrollRecords, employees, attendanceRecords, payrollSettings } from "@workspace/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 
 const router = Router();
 
-export const SALARY_SCALE: Record<string, number> = {
-  "Postmaster General": 150000,
-  "Deputy Postmaster General": 120000,
-  "Regional Postmaster": 80000,
-  "Sub Postmaster": 60000,
-  "Postal Supervisor": 55000,
-  "Senior Postal Officer": 50000,
-  "Postal Officer": 45000,
-  "Counter Clerk": 40000,
-  "Sorting Officer": 38000,
-  "Delivery Agent": 35000,
-  "Accounts Officer": 55000,
-  "HR Officer": 50000,
-  "IT Officer": 55000,
-  "PSB Officer": 48000,
-  "Driver": 38000,
-  "Security Officer": 35000,
-  "Clerical Assistant": 32000,
-  "Data Entry Operator": 35000,
-};
+async function getPayrollSettings() {
+  const [existing] = await db.select().from(payrollSettings);
+  if (existing) return { ...existing, salaryScale: JSON.parse(existing.salaryScale) as Record<string, number> };
+  const [created] = await db.insert(payrollSettings).values({}).returning();
+  return { ...created, salaryScale: JSON.parse(created.salaryScale) as Record<string, number> };
+}
 
 function calcAPIT(grossMonthly: number): number {
   const annual = grossMonthly * 12;
@@ -83,6 +69,8 @@ router.get("/employees-for-payroll", async (req, res) => {
     const { month, year, branchId } = req.query as Record<string, string>;
     if (!month || !year) return res.status(400).json({ message: "month and year required" });
 
+    const cfg = await getPayrollSettings();
+
     const allEmployees = await db.select({
       id: employees.id,
       employeeId: employees.employeeId,
@@ -111,13 +99,14 @@ router.get("/employees-for-payroll", async (req, res) => {
 
     const result = filteredByBranch.map(emp => ({
       ...emp,
-      basicSalary: SALARY_SCALE[emp.designation] ?? 40000,
+      basicSalary: cfg.salaryScale[emp.designation] ?? 40000,
       hasPayroll: payrollMap.has(emp.id),
       payrollStatus: payrollMap.get(emp.id)?.status ?? null,
       currentNetSalary: payrollMap.get(emp.id)?.netSalary ?? null,
       currentGrossSalary: payrollMap.get(emp.id)?.grossSalary ?? null,
     }));
 
+    const { branches } = await import("@workspace/db/schema");
     const branchList = await db.select().from(branches);
 
     res.json({ employees: result, branches: branchList });
@@ -136,6 +125,8 @@ router.post("/generate", async (req, res) => {
       employeeIds?: number[];
     };
     if (!month || !year) return res.status(400).json({ message: "month and year required" });
+
+    const cfg = await getPayrollSettings();
 
     let allEmps = await db.select().from(employees);
     allEmps = allEmps.filter(e => e.status === "active");
@@ -176,26 +167,29 @@ router.post("/generate", async (req, res) => {
       const holidayDays = empAtt.filter(a => a.status === "holiday").length;
       const totalOTHours = empAtt.reduce((s, a) => s + (a.overtimeHours || 0), 0);
 
-      const basicSalary = SALARY_SCALE[emp.designation] ?? 40000;
-      const transportAllowance = 5000;
-      const housingAllowance = basicSalary >= 80000 ? 10000 : basicSalary >= 50000 ? 7000 : 3000;
-      const otherAllowances = 1500;
+      const basicSalary = cfg.salaryScale[emp.designation] ?? 40000;
+      const transportAllowance = cfg.transportAllowance;
+      const housingAllowance =
+        basicSalary >= cfg.housingHighThreshold ? cfg.housingAllowanceHigh :
+        basicSalary >= cfg.housingMidThreshold ? cfg.housingAllowanceMid :
+        cfg.housingAllowanceLow;
+      const otherAllowances = cfg.otherAllowances;
 
       const dailyRate = basicSalary / wdCount;
       const hourlyRate = basicSalary / (wdCount * 8);
       const absenceDeduction = Math.round(dailyRate * absentDays);
-      const lateDeduction = Math.round(lateDays * 100);
+      const lateDeduction = Math.round(lateDays * cfg.lateDeductionPerInstance);
       const halfDayDeduction = Math.round(halfDays * (dailyRate / 2));
-      const overtimePay = Math.round(totalOTHours * hourlyRate * 1.5);
+      const overtimePay = Math.round(totalOTHours * hourlyRate * cfg.overtimeMultiplier);
 
       const grossSalary = Math.round(
         basicSalary + transportAllowance + housingAllowance + otherAllowances + overtimePay
         - absenceDeduction - lateDeduction - halfDayDeduction
       );
 
-      const epfEmployee = Math.round(grossSalary * 0.08);
-      const epfEmployer = Math.round(grossSalary * 0.12);
-      const etfEmployer = Math.round(grossSalary * 0.03);
+      const epfEmployee = Math.round(grossSalary * (cfg.epfEmployeePercent / 100));
+      const epfEmployer = Math.round(grossSalary * (cfg.epfEmployerPercent / 100));
+      const etfEmployer = Math.round(grossSalary * (cfg.etfEmployerPercent / 100));
       const apit = calcAPIT(grossSalary);
       const totalDeductions = epfEmployee + apit + lateDeduction + absenceDeduction + halfDayDeduction;
       const netSalary = grossSalary - epfEmployee - apit;

@@ -6,4 +6,5 @@ export * from "./biometric";
 export * from "./users";
 export * from "./settings";
 export * from "./payroll";
+export * from "./payroll-settings";
 export * from "./activity-logs";
