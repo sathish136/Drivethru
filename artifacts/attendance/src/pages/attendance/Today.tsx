@@ -1,19 +1,13 @@
 import { useState } from "react";
 import { Search, MapPin, Fingerprint } from "lucide-react";
-import { PageHeader, Card, Table, Th, Tr, Td, Badge, Button, Input, Select } from "@/components/ui";
-import { useTodayAttendance, usePunch } from "@/hooks/use-attendance";
+import { PageHeader, Card, Table, Th, Tr, Td, Badge, Input, Select } from "@/components/ui";
+import { useTodayAttendance } from "@/hooks/use-attendance";
 import { formatTime } from "@/lib/utils";
 
 export default function TodayAttendance() {
   const [branch, setBranch] = useState("all");
   const [search, setSearch] = useState("");
   const { data, isLoading } = useTodayAttendance();
-  const punch = usePunch();
-
-  const handlePunch = (empId: number, type: "in" | "out") => {
-    punch.mutate({ data: { employeeId: empId, type } });
-  };
-
   const allRecords = data?.records || [
     { id: 1, employeeId: 101, employeeCode: "EMP001", employeeName: "Alice Walker", branchName: "Head Office", status: "present", inTime1: "08:00", outTime1: null, source: "biometric" },
     { id: 2, employeeId: 102, employeeCode: "EMP002", employeeName: "Bob Smith", branchName: "Head Office", status: "absent", inTime1: null, outTime1: null, source: "system" },
@@ -66,7 +60,6 @@ export default function TodayAttendance() {
                 <Th>In Time</Th>
                 <Th>Out Time</Th>
                 <Th>Source</Th>
-                <Th className="text-right">Actions</Th>
               </Tr>
             </thead>
             <tbody>
@@ -106,26 +99,6 @@ export default function TodayAttendance() {
                     ) : (
                       <span className="text-xs text-muted-foreground bg-gray-100 px-2 py-1 rounded w-fit border border-gray-200">Manual</span>
                     )}
-                  </Td>
-                  <Td className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        disabled={!!r.inTime1 || punch.isPending}
-                        onClick={() => handlePunch(r.employeeId, "in")}
-                      >
-                        Punch In
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="secondary"
-                        disabled={!r.inTime1 || !!r.outTime1 || punch.isPending}
-                        onClick={() => handlePunch(r.employeeId, "out")}
-                      >
-                        Punch Out
-                      </Button>
-                    </div>
                   </Td>
                 </Tr>
               ))}
