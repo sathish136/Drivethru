@@ -407,7 +407,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 {group.items.map((item) => {
                   const isActive =
                     location === item.href ||
-                    (item.href !== "/" && location.startsWith(item.href));
+                    (item.href !== "/" && location.startsWith(item.href + "/"));
 
                   /* ── Collapsed item ── */
                   if (collapsed) {
