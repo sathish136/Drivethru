@@ -1,4 +1,4 @@
-import { pgTable, serial, real, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, real, text, integer, boolean, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -22,6 +22,10 @@ export const payrollSettings = pgTable("payroll_settings", {
   poyaOtMultiplier: real("poya_ot_multiplier").notNull().default(1.5),
   publicHolidayOtMultiplier: real("public_holiday_ot_multiplier").notNull().default(1.5),
   offDayOtMultiplier: real("off_day_ot_multiplier").notNull().default(1.5),
+
+  offSeasonEnabled: boolean("off_season_enabled").notNull().default(false),
+  offSeasonStart: text("off_season_start"),
+  offSeasonEnd: text("off_season_end"),
 
   salaryScale: text("salary_scale").notNull().default(JSON.stringify({
     "General Manager":       150000,

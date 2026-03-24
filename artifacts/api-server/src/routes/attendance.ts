@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { attendanceRecords, employees, branches, shifts } from "@workspace/db/schema";
-import { eq, and, gte, lte, sql } from "drizzle-orm";
+import { eq, and, gte, lte } from "drizzle-orm";
 import { calcWorkHours, getDaysInMonth, today } from "../lib/helpers.js";
 
 const router = Router();
@@ -10,9 +10,6 @@ async function enrichRecord(r: typeof attendanceRecords.$inferSelect) {
   const [emp] = await db.select({ name: employees.fullName, code: employees.employeeId })
     .from(employees).where(eq(employees.id, r.employeeId));
   const [br] = await db.select({ name: branches.name }).from(branches).where(eq(branches.id, r.branchId));
-  const [sh] = r.employeeId ? await db.select({ name: shifts.name }).from(shifts)
-    .leftJoin(employees, eq(employees.shiftId, shifts.id))
-    .where(eq(employees.id, r.employeeId)) : [null];
   return {
     ...r,
     employeeName: emp?.name || "Unknown",
@@ -29,13 +26,12 @@ router.get("/today", async (req, res) => {
     const todayStr = today();
     const branchId = req.query.branchId ? Number(req.query.branchId) : null;
 
-    let empQuery = db.select({
+    const allEmp = await db.select({
       emp: employees,
       branchName: branches.name,
     }).from(employees).leftJoin(branches, eq(employees.branchId, branches.id))
       .where(eq(employees.status, "active"));
 
-    const allEmp = await empQuery;
     const filtered = branchId ? allEmp.filter(r => r.emp.branchId === branchId) : allEmp;
 
     const records = await db.select().from(attendanceRecords)
@@ -64,6 +60,8 @@ router.get("/today", async (req, res) => {
         inTime2: null, outTime2: null, workHours2: null,
         totalHours: null, overtimeHours: null,
         shiftName: null, source: "system", remarks: null,
+        approvalStatus: null, approvedBy: null, approvalNote: null,
+        leaveType: null,
         createdAt: new Date().toISOString(),
       };
     });
@@ -93,13 +91,12 @@ router.get("/monthly-sheet", async (req, res) => {
     const startDate = `${y}-${String(m).padStart(2, "0")}-01`;
     const endDate = `${y}-${String(m).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`;
 
-    let empQuery = db.select({
+    const allEmp = await db.select({
       emp: employees,
       branchName: branches.name,
     }).from(employees).leftJoin(branches, eq(employees.branchId, branches.id))
       .where(eq(employees.status, "active"));
 
-    const allEmp = await empQuery;
     const filtered = branchId ? allEmp.filter(r => r.emp.branchId === Number(branchId)) : allEmp;
 
     const records = await db.select().from(attendanceRecords)
@@ -153,6 +150,7 @@ router.get("/monthly-sheet", async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
 });
 
+/* ── Manual punch — sets approvalStatus = "pending" ──────── */
 router.post("/punch", async (req, res) => {
   try {
     const { employeeId, type, time, remarks } = req.body;
@@ -166,7 +164,7 @@ router.post("/punch", async (req, res) => {
     if (!emp) { res.status(404).json({ message: "Employee not found", success: false }); return; }
 
     if (existing) {
-      const updates: any = { updatedAt: new Date() };
+      const updates: any = { updatedAt: new Date(), approvalStatus: "pending" };
       if (type === "in") {
         if (!existing.inTime1) updates.inTime1 = punchTime;
         else updates.inTime2 = punchTime;
@@ -192,6 +190,7 @@ router.post("/punch", async (req, res) => {
         date: todayStr,
         status: "present",
         source: "manual",
+        approvalStatus: "pending",
         remarks: remarks || null,
       };
       if (type === "in") newRec.inTime1 = punchTime;
@@ -199,6 +198,56 @@ router.post("/punch", async (req, res) => {
       const [created] = await db.insert(attendanceRecords).values(newRec).returning();
       res.json({ ...created, employeeName: emp.fullName, employeeCode: emp.employeeId, branchName: "", shiftName: null, createdAt: created.createdAt.toISOString() });
     }
+  } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
+});
+
+/* ── Pending manual punch approvals ───────────────────────── */
+router.get("/pending-approvals", async (req, res) => {
+  try {
+    const { branchId } = req.query;
+    const all = await db.select({
+      rec: attendanceRecords,
+      empName: employees.fullName,
+      empCode: employees.employeeId,
+      empDesignation: employees.designation,
+      branchName: branches.name,
+    }).from(attendanceRecords)
+      .leftJoin(employees, eq(attendanceRecords.employeeId, employees.id))
+      .leftJoin(branches, eq(attendanceRecords.branchId, branches.id));
+
+    let filtered = all.filter(r => r.rec.approvalStatus === "pending" && r.rec.source === "manual");
+    if (branchId) filtered = filtered.filter(r => r.rec.branchId === Number(branchId));
+
+    res.json(filtered.map(r => ({
+      ...r.rec,
+      employeeName: r.empName || "Unknown",
+      employeeCode: r.empCode || "",
+      designation: r.empDesignation || "",
+      branchName: r.branchName || "",
+      createdAt: r.rec.createdAt.toISOString(),
+    })));
+  } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
+});
+
+/* ── Approve / Reject manual punch ───────────────────────── */
+router.patch("/:id/approve", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { action, approvedBy, note } = req.body as {
+      action: "approved" | "rejected";
+      approvedBy?: number;
+      note?: string;
+    };
+
+    const [updated] = await db.update(attendanceRecords).set({
+      approvalStatus: action,
+      approvedBy: approvedBy ?? null,
+      approvalNote: note ?? null,
+      updatedAt: new Date(),
+    }).where(eq(attendanceRecords.id, id)).returning();
+
+    if (!updated) return res.status(404).json({ message: "Record not found" });
+    res.json({ success: true, record: updated });
   } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
 });
 
@@ -250,12 +299,14 @@ router.post("/", async (req, res) => {
     const workHours2 = calcWorkHours(body.inTime2, body.outTime2);
     const totalHours = workHours1 + workHours2;
 
+    const isManual = body.source === "manual" || !body.source;
     const [rec] = await db.insert(attendanceRecords).values({
       ...body,
       branchId: emp.branchId,
       workHours1: workHours1 || null,
       workHours2: workHours2 || null,
       totalHours: totalHours || null,
+      approvalStatus: isManual ? "pending" : null,
     }).returning();
 
     const [br] = await db.select().from(branches).where(eq(branches.id, emp.branchId));

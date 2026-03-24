@@ -1,0 +1,36 @@
+Changes Made in This Session
+#	Change	Detail
+1	Employee Name filter	Added a name search input to all 4 report tabs (Attendance, Monthly, Overtime, Payroll). Filters results live as you type.
+2	Single-line table rows	Added whitespace-nowrap to every table cell in all report tables so rows never break to a second line.
+Policy Gap Analysis
+What the system already has ✅
+Policy Requirement	Status
+EPF (8% employee, 12% employer) automated	✅ Done
+ETF (3% employer) automated	✅ Done
+APIT progressive tax (6%–30% tiers)	✅ Done
+15-minute grace period for late arrivals	✅ In schema
+30-minute OT threshold before OT starts	✅ ot_grace_minutes = 30
+Split shift support (Kitchen)	✅ Shift type exists
+Manager OT exemption	✅ OT exempt designations
+Manual punch entry	✅ /api/attendance/punch
+Night shift flag	✅ isNightShift in settings
+Lunch break deduction (1 hour standard)	✅ standardLunchMinutes = 60
+Cloud-based access, multi-admin login	✅ Web app, multi-user
+Monthly salary processing, allowances, deductions	✅ Done
+What is missing or incorrect ❌
+#	Policy Requirement	Current State	Required Change
+1	Late deduction = hourly rate × late minutes	Flat Rs. 100 per instance	Calculate deduction based on actual late minutes × hourly rate
+2	Incomplete hours deducted proportionally from salary	Only marks "late", no proportional salary cut	Deduct unworked minutes from salary at hourly rate
+3	Statutory holiday OT = Daily Rate × 2.0 (8 specific days)	Single 1.5× multiplier for all	Add holiday type field: Statutory (2.0×), Poya (1.5×), Public (1.5×)
+4	Poya day OT = Daily Rate × 1.5	Not distinguished from other holidays	Separate holiday categories in the system
+5	Annual Leave vs Casual Leave are separate categories	Single "leave" status only	Add leave type (Annual / Casual) to attendance and leave records
+6	Surf Instructors: no deduction if < 9 hours	All departments get late/incomplete deductions	Department-specific exemption from hour-completion deductions
+7	Half-day > 5 hours = OT for extra time	No OT calculated on half-day records	OT = hours worked − 5 on half-day records
+8	Weekly leave accrual: 1.5 days per week	Not tracked	Leave balance auto-accrual at 1.5 days/week
+9	Night Watcher OT capped at 3 hours	No cap on OT	Max OT hours setting per shift/department
+10	Managers: fixed allowance instead of OT pay	OT exempt exists but fixed allowance not linked	Replace OT pay with a fixed manager allowance in payroll
+11	Off-day work = Daily Rate × 1.5	Not a distinct calculation	Off-day attendance type with 1.5× compensation
+12	Off-season mode: no OT, manual day-offs	No off-season flag	Off-season period setting that disables standard OT
+13	Payslip generation per employee	No payslip download/print	Generate printable payslip per employee per month
+14	Manual punch requires management approval	Manual punch saves directly	Approval workflow for manual punches
+15	Early sign-in not counted as OT	Not enforced	Clip OT calculation to start no earlier than scheduled shift start

@@ -45,6 +45,9 @@ interface PayrollConfig {
   poyaOtMultiplier: number;
   publicHolidayOtMultiplier: number;
   offDayOtMultiplier: number;
+  offSeasonEnabled: boolean;
+  offSeasonStart: string;
+  offSeasonEnd: string;
   salaryScale: Record<string, number>; employeeOverrides: Record<string, number>;
 }
 const DEFAULTS: PayrollConfig = {
@@ -58,6 +61,9 @@ const DEFAULTS: PayrollConfig = {
   poyaOtMultiplier: 1.5,
   publicHolidayOtMultiplier: 1.5,
   offDayOtMultiplier: 1.5,
+  offSeasonEnabled: false,
+  offSeasonStart: "",
+  offSeasonEnd: "",
   salaryScale: { ...DEFAULT_SALARY_SCALE }, employeeOverrides: {},
 };
 
@@ -183,7 +189,14 @@ export default function PayrollSettings() {
             housingAllowanceLow: d.housingAllowanceLow, housingAllowanceMid: d.housingAllowanceMid,
             housingAllowanceHigh: d.housingAllowanceHigh, housingMidThreshold: d.housingMidThreshold,
             housingHighThreshold: d.housingHighThreshold, otherAllowances: d.otherAllowances,
-            lateDeductionPerInstance: d.lateDeductionPerInstance, overtimeMultiplier: d.overtimeMultiplier,
+            overtimeMultiplier: d.overtimeMultiplier ?? 1.5,
+            statutoryOtMultiplier: d.statutoryOtMultiplier ?? 2.0,
+            poyaOtMultiplier: d.poyaOtMultiplier ?? 1.5,
+            publicHolidayOtMultiplier: d.publicHolidayOtMultiplier ?? 1.5,
+            offDayOtMultiplier: d.offDayOtMultiplier ?? 1.5,
+            offSeasonEnabled: d.offSeasonEnabled ?? false,
+            offSeasonStart: d.offSeasonStart ?? "",
+            offSeasonEnd: d.offSeasonEnd ?? "",
             salaryScale: d.salaryScale && typeof d.salaryScale === "object" ? d.salaryScale : { ...DEFAULT_SALARY_SCALE },
             employeeOverrides: d.employeeOverrides && typeof d.employeeOverrides === "object" ? d.employeeOverrides : {},
           });
@@ -496,7 +509,7 @@ export default function PayrollSettings() {
                 <p className="text-xs text-muted-foreground">Fixed monthly amounts added on top of basic salary</p>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div>
                 <Label className="text-xs font-semibold">Transport Allowance (Rs.)</Label>
                 <Input type="number" min="0" value={cfg.transportAllowance}
@@ -508,12 +521,6 @@ export default function PayrollSettings() {
                 <Input type="number" min="0" value={cfg.otherAllowances}
                   onChange={e => set("otherAllowances", parseInt(e.target.value))} className="mt-1.5" />
                 <p className="text-[10px] text-muted-foreground mt-1">Miscellaneous fixed allowances</p>
-              </div>
-              <div>
-                <Label className="text-xs font-semibold">Overtime Rate Multiplier</Label>
-                <Input type="number" step="0.1" min="1" max="5" value={cfg.overtimeMultiplier}
-                  onChange={e => set("overtimeMultiplier", parseFloat(e.target.value))} className="mt-1.5" />
-                <p className="text-[10px] text-muted-foreground mt-1">e.g. 1.5× = 1.5× hourly rate per OT hour</p>
               </div>
             </div>
             <div className="mt-5">
@@ -561,25 +568,99 @@ export default function PayrollSettings() {
               </div>
               <div>
                 <p className="text-sm font-bold">Deduction Rules</p>
-                <p className="text-xs text-muted-foreground">Rules applied for attendance violations</p>
+                <p className="text-xs text-muted-foreground">Auto-calculated from attendance data during payroll generation</p>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="p-4 rounded-xl bg-muted/30 border border-border">
+              <p className="text-xs font-semibold mb-3">All deductions are proportional — calculated automatically</p>
+              <ul className="space-y-2 text-[11px] text-muted-foreground">
+                <li><strong className="text-foreground">Late Arrival:</strong> Actual late minutes × (Basic ÷ Working Days ÷ 8 ÷ 60)</li>
+                <li><strong className="text-foreground">Absence:</strong> (Basic ÷ Working Days) × Absent Days</li>
+                <li><strong className="text-foreground">Half-day:</strong> (Daily Rate ÷ 2) × Half-day Count</li>
+                <li><strong className="text-foreground">Incomplete Hours:</strong> Shortfall minutes × Minute Rate (exempt: Surf Instructors)</li>
+              </ul>
+              <p className="text-[10px] text-blue-600 mt-3 font-medium">Derived from attendance data — no manual configuration needed.</p>
+            </div>
+          </Card>
+
+          {/* OT & Holiday Multipliers */}
+          <Card className="p-5">
+            <div className="flex items-center gap-2 mb-5 pb-3 border-b border-border">
+              <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
+                <CalendarDays className="w-4 h-4 text-amber-600" />
+              </div>
               <div>
-                <Label className="text-xs font-semibold">Late Arrival Deduction (Rs. per instance)</Label>
-                <Input type="number" min="0" value={cfg.lateDeductionPerInstance}
-                  onChange={e => set("lateDeductionPerInstance", parseInt(e.target.value))} className="mt-1.5" />
-                <p className="text-[10px] text-muted-foreground mt-1">Deducted once for each late-arrival record in the month</p>
-              </div>
-              <div className="p-4 rounded-xl bg-muted/30 border border-border">
-                <p className="text-xs font-semibold mb-2">Auto-Calculated Deductions</p>
-                <ul className="space-y-1.5 text-[11px] text-muted-foreground">
-                  <li><strong className="text-foreground">Absence:</strong> (Basic ÷ Working Days) × Absent Days</li>
-                  <li><strong className="text-foreground">Half-day:</strong> (Daily Rate ÷ 2) × Half-day Count</li>
-                </ul>
-                <p className="text-[10px] text-blue-600 mt-2">Derived from attendance data, not configurable.</p>
+                <p className="text-sm font-bold">OT & Holiday Multipliers</p>
+                <p className="text-xs text-muted-foreground">Rate multipliers per overtime and holiday type</p>
               </div>
             </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { key: "overtimeMultiplier",         label: "Regular OT",      hint: "Normal working days" },
+                { key: "offDayOtMultiplier",          label: "Off Day Worked",  hint: "Employee's day off" },
+                { key: "poyaOtMultiplier",            label: "Poya Holiday",    hint: "Full moon / Poya days" },
+                { key: "publicHolidayOtMultiplier",   label: "Public Holiday",  hint: "Government holidays" },
+              ].map(({ key, label, hint }) => (
+                <div key={key}>
+                  <Label className="text-xs font-semibold">{label}</Label>
+                  <div className="relative mt-1.5">
+                    <Input type="number" step="0.1" min="1" max="5"
+                      value={(cfg as any)[key]}
+                      onChange={e => set(key as keyof PayrollConfig, parseFloat(e.target.value))}
+                      className="pr-8" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">×</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">{hint}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-xs text-amber-700">
+                <strong>Statutory holidays</strong> always use <strong>2.0×</strong> (Daily Rate × 2) as required by Sri Lanka Labour Law. Night Watchers OT is capped at 3 hours per day.
+              </p>
+            </div>
+          </Card>
+
+          {/* Off-Season Mode */}
+          <Card className="p-5">
+            <div className="flex items-center gap-2 mb-5 pb-3 border-b border-border">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                <ToggleLeft className="w-4 h-4 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold">Off-Season Mode</p>
+                <p className="text-xs text-muted-foreground">During off-season, standard OT is not calculated for any employee</p>
+              </div>
+              <button
+                onClick={() => set("offSeasonEnabled", !cfg.offSeasonEnabled)}
+                className={cn(
+                  "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none",
+                  cfg.offSeasonEnabled ? "bg-blue-600" : "bg-muted-foreground/30"
+                )}
+              >
+                <span className={cn(
+                  "inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform",
+                  cfg.offSeasonEnabled ? "translate-x-6" : "translate-x-1"
+                )} />
+              </button>
+            </div>
+            {cfg.offSeasonEnabled && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <Label className="text-xs font-semibold">Off-Season Start Date</Label>
+                  <Input type="date" value={cfg.offSeasonStart}
+                    onChange={e => set("offSeasonStart", e.target.value)} className="mt-1.5" />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">Off-Season End Date</Label>
+                  <Input type="date" value={cfg.offSeasonEnd}
+                    onChange={e => set("offSeasonEnd", e.target.value)} className="mt-1.5" />
+                </div>
+              </div>
+            )}
+            {!cfg.offSeasonEnabled && (
+              <p className="text-xs text-muted-foreground">Enable to set a date range during which overtime pay will not be calculated for any employee.</p>
+            )}
           </Card>
         </div>
       )}

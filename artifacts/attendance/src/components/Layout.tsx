@@ -31,6 +31,8 @@ import {
   Sun,
   Moon,
   BookOpen,
+  ClipboardCheck,
+  CalendarClock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -47,18 +49,20 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Attendance",
     items: [
-      { href: "/attendance/today",   label: "Today's Attendance", icon: ClipboardList  },
-      { href: "/attendance/monthly", label: "Monthly Sheet",      icon: CalendarCheck  },
+      { href: "/attendance/today",      label: "Today's Attendance", icon: ClipboardList   },
+      { href: "/attendance/monthly",    label: "Monthly Sheet",      icon: CalendarCheck   },
+      { href: "/attendance/approvals",  label: "Approvals",          icon: ClipboardCheck  },
     ],
   },
   {
     label: "HR Management",
     items: [
-      { href: "/employees",        label: "Employees",        icon: UserRound  },
-      { href: "/payroll",          label: "Payroll",          icon: Wallet     },
-      { href: "/payroll-settings", label: "Payroll Settings", icon: Sliders    },
-      { href: "/hr-settings",      label: "HR Settings",      icon: BookOpen   },
-      { href: "/shifts",           label: "Shifts",           icon: Timer      },
+      { href: "/employees",        label: "Employees",        icon: UserRound   },
+      { href: "/payroll",          label: "Payroll",          icon: Wallet      },
+      { href: "/payroll-settings", label: "Payroll Settings", icon: Sliders     },
+      { href: "/hr-settings",      label: "HR Settings",      icon: BookOpen    },
+      { href: "/shifts",           label: "Shifts",           icon: Timer       },
+      { href: "/leave-balances",   label: "Leave Balances",   icon: CalendarClock },
     ],
   },
   {

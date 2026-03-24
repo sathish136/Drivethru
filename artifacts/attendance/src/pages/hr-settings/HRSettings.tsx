@@ -23,7 +23,6 @@ interface DeptRule {
 interface HRConfig {
   requiredWorkMinutes: number;
   otGraceMinutes: number;
-  dailyRateDivisor: number;
   hoursPerDay: number;
   duplicatePunchFilterMinutes: number;
   standardLunchStartHour: number;
@@ -45,7 +44,6 @@ function blankDept(): DeptRule {
 const DEFAULTS: HRConfig = {
   requiredWorkMinutes: 540,
   otGraceMinutes: 30,
-  dailyRateDivisor: 30,
   hoursPerDay: 8,
   duplicatePunchFilterMinutes: 5,
   standardLunchStartHour: 13,
@@ -96,7 +94,6 @@ export default function HRSettings() {
           setCfg({
             requiredWorkMinutes: d.requiredWorkMinutes,
             otGraceMinutes: d.otGraceMinutes,
-            dailyRateDivisor: d.dailyRateDivisor,
             hoursPerDay: d.hoursPerDay,
             duplicatePunchFilterMinutes: d.duplicatePunchFilterMinutes,
             standardLunchStartHour: d.standardLunchStartHour,
@@ -226,7 +223,7 @@ export default function HRSettings() {
                 <p><strong>Current Policy Summary:</strong></p>
                 <p>Required work: <strong>{minutesToHoursLabel(cfg.requiredWorkMinutes)}</strong> per day.
                   OT kicks in after <strong>{minutesToHoursLabel(otStart)}</strong> ({minutesToHoursLabel(cfg.requiredWorkMinutes)} + {cfg.otGraceMinutes} min grace).
-                  Daily rate = Basic ÷ {cfg.dailyRateDivisor}. Hour rate = Daily ÷ {cfg.hoursPerDay}.
+                  Daily rate = Basic ÷ Actual Working Days in Month. Hour rate = Daily ÷ {cfg.hoursPerDay}.
                   Duplicate punches within <strong>{cfg.duplicatePunchFilterMinutes} min</strong> are filtered out.
                 </p>
               </div>
@@ -271,27 +268,20 @@ export default function HRSettings() {
                 <p className="text-xs text-muted-foreground">Used to convert basic salary into per-minute rate for OT and deduction calculations</p>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div>
-                <Label className="text-xs font-semibold">Daily Rate Divisor (days per month)</Label>
-                <Input type="number" min="1" max="31" value={cfg.dailyRateDivisor}
-                  onChange={e => set("dailyRateDivisor", parseInt(e.target.value) || 30)} className="mt-1.5" />
-                <p className="text-[10px] text-muted-foreground mt-1">Daily rate = Basic Salary ÷ this value</p>
-              </div>
-              <div>
-                <Label className="text-xs font-semibold">Hours Per Day</Label>
-                <Input type="number" min="1" max="24" value={cfg.hoursPerDay}
-                  onChange={e => set("hoursPerDay", parseInt(e.target.value) || 8)} className="mt-1.5" />
-                <p className="text-[10px] text-muted-foreground mt-1">Hour rate = Daily rate ÷ this value. Minute rate = Hour ÷ 60</p>
-              </div>
+            <div className="max-w-xs">
+              <Label className="text-xs font-semibold">Hours Per Day</Label>
+              <Input type="number" min="1" max="24" value={cfg.hoursPerDay}
+                onChange={e => set("hoursPerDay", parseInt(e.target.value) || 8)} className="mt-1.5" />
+              <p className="text-[10px] text-muted-foreground mt-1">Hourly rate = Daily rate ÷ this value. Minute rate = Hourly ÷ 60</p>
             </div>
             <div className="mt-4 p-4 rounded-xl bg-muted/30 border border-border text-xs space-y-1">
-              <p className="font-semibold mb-2 text-foreground">Rate Formula (read-only preview)</p>
-              <p className="text-muted-foreground font-mono">Daily rate &nbsp;&nbsp;&nbsp;= Basic ÷ {cfg.dailyRateDivisor}</p>
+              <p className="font-semibold mb-2 text-foreground">Rate Formula (read-only)</p>
+              <p className="text-muted-foreground font-mono">Daily rate &nbsp;&nbsp;&nbsp;= Basic ÷ Actual Working Days in Month</p>
               <p className="text-muted-foreground font-mono">Hourly rate &nbsp;= Daily ÷ {cfg.hoursPerDay}</p>
               <p className="text-muted-foreground font-mono">Minute rate = Hourly ÷ 60</p>
-              <p className="text-muted-foreground font-mono">OT amount &nbsp;&nbsp;= OT minutes × Minute rate</p>
+              <p className="text-muted-foreground font-mono">OT amount &nbsp;&nbsp;= OT minutes × Minute rate × Multiplier</p>
               <p className="text-muted-foreground font-mono">Short deduction = Incomplete minutes × Minute rate</p>
+              <p className="text-[10px] text-blue-600 mt-2 font-medium">Daily rate uses actual working days — it changes each month automatically.</p>
             </div>
           </Card>
 

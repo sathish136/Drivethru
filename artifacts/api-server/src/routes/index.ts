@@ -19,6 +19,7 @@ import salaryStructuresRouter from "./salary-structures.js";
 import hrSettingsRouter from "./hr-settings.js";
 import activityLogsRouter from "./activity-logs.js";
 import checkinImportRouter from "./checkin-import.js";
+import leaveBalancesRouter from "./leave-balances.js";
 
 const router: IRouter = Router();
 
@@ -42,5 +43,6 @@ router.use("/payroll-settings", payrollSettingsRouter);
 router.use("/salary-structures", salaryStructuresRouter);
 router.use("/hr-settings", hrSettingsRouter);
 router.use("/activity-logs", activityLogsRouter);
+router.use("/leave-balances", leaveBalancesRouter);
 
 export default router;

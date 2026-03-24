@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { payrollRecords, employees, attendanceRecords, payrollSettings, salaryStructures, employeeSalaryAssignments, holidays, systemSettings } from "@workspace/db/schema";
+import {
+  payrollRecords, employees, attendanceRecords, payrollSettings,
+  salaryStructures, employeeSalaryAssignments, holidays, shifts,
+} from "@workspace/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 
 const STATUTORY_NAMES = ["EPF – Employee", "EPF – Employer", "ETF"];
@@ -15,11 +18,6 @@ async function getPayrollSettings() {
     salaryScale: JSON.parse(row.salaryScale) as Record<string, number>,
     employeeOverrides: JSON.parse(row.employeeOverrides ?? "{}") as Record<string, number>,
   };
-}
-
-async function getHrSettings() {
-  const [row] = await db.select().from(systemSettings);
-  return row ?? null;
 }
 
 async function getMonthHolidays(year: number, month: number) {
@@ -46,6 +44,16 @@ function workingDaysInMonth(year: number, month: number): number {
     if (dow !== 0) count++;
   }
   return count;
+}
+
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function isDateInOffSeason(dateStr: string, start: string | null | undefined, end: string | null | undefined): boolean {
+  if (!start || !end) return false;
+  return dateStr >= start && dateStr <= end;
 }
 
 router.get("/", async (req, res) => {
@@ -191,6 +199,9 @@ router.post("/generate", async (req, res) => {
       holidayDateMap.set(h.date, h.type as "statutory" | "poya" | "public");
     }
 
+    const allShifts = await db.select().from(shifts);
+    const shiftMap = new Map(allShifts.map(s => [s.id, s]));
+
     const wdCount = workingDaysInMonth(year, month);
     const generated: any[] = [];
 
@@ -213,12 +224,18 @@ router.post("/generate", async (req, res) => {
       const isSurfInstructor = dept.includes("surf") || designation.includes("surf");
       const isNightWatcher = designation.includes("night watcher") || designation.includes("night watch");
 
+      const empShift = emp.shiftId ? shiftMap.get(emp.shiftId) : null;
+      const shiftStartMinutes = empShift?.startTime ? timeToMinutes(empShift.startTime) : 8 * 60;
+      const shiftEndMinutes   = empShift?.endTime   ? timeToMinutes(empShift.endTime)   : 17 * 60;
+      const shiftWorkMinutes  = shiftEndMinutes - shiftStartMinutes;
+
       const presentRecs    = empAtt.filter(a => a.status === "present" || a.status === "late");
       const lateRecs       = empAtt.filter(a => a.status === "late");
       const absentRecs     = empAtt.filter(a => a.status === "absent");
       const leaveRecs      = empAtt.filter(a => a.status === "leave");
       const halfDayRecs    = empAtt.filter(a => a.status === "half_day");
       const holidayRecs    = empAtt.filter(a => a.status === "holiday");
+      const offDayRecs     = empAtt.filter(a => a.status === "off_day");
       const presentDays    = presentRecs.length;
       const lateDays       = lateRecs.length;
       const absentDays     = absentRecs.length;
@@ -279,8 +296,7 @@ router.post("/generate", async (req, res) => {
       let totalLateMinutes = 0;
       for (const rec of lateRecs) {
         if (rec.inTime1) {
-          const [hh, mm] = rec.inTime1.split(":").map(Number);
-          const arrivalMinutes = hh * 60 + mm;
+          const arrivalMinutes = timeToMinutes(rec.inTime1);
           if (arrivalMinutes > LATE_CUTOFF_MINUTES) {
             totalLateMinutes += arrivalMinutes - LATE_CUTOFF_MINUTES;
           }
@@ -311,14 +327,22 @@ router.post("/generate", async (req, res) => {
         incompleteDeduction = Math.round(incompleteDeduction);
       }
 
-      /* ── Regular OT (non-holiday days) ────────────────── */
+      /* ── Off-season: skip standard OT if enabled ────────── */
+      const isOffSeason = cfg.offSeasonEnabled && empAtt.some(rec =>
+        isDateInOffSeason(rec.date, cfg.offSeasonStart, cfg.offSeasonEnd)
+      );
+
+      /* ── Regular OT (non-holiday days) ─────────────────── */
       let regularOtHours = 0;
       let holidayOtPay   = 0;
+      let offDayOtPay    = 0;
       let regularOtPay   = 0;
 
       for (const rec of empAtt) {
         const recHours = rec.totalHours ?? 0;
         const recOt    = rec.overtimeHours ?? 0;
+        const recInOffSeason = cfg.offSeasonEnabled &&
+          isDateInOffSeason(rec.date, cfg.offSeasonStart, cfg.offSeasonEnd);
 
         if (rec.status === "holiday") {
           const hType = holidayDateMap.get(rec.date) ?? "public";
@@ -329,17 +353,39 @@ router.post("/generate", async (req, res) => {
           if (recHours > 0) {
             holidayOtPay += Math.round(recHours * hourlyRate * mult);
           }
-        } else if (rec.status === "half_day") {
-          if (recHours > 5) {
-            const halfDayOt = recHours - 5;
-            const mult = isManager ? 0 : cfg.overtimeMultiplier;
-            regularOtHours += halfDayOt;
-            regularOtPay   += Math.round(halfDayOt * hourlyRate * mult);
+        } else if (rec.status === "off_day") {
+          /* Off-day worked: Daily Rate × offDayOtMultiplier */
+          if (recHours > 0) {
+            offDayOtPay += Math.round(dailyRate * (cfg.offDayOtMultiplier ?? 1.5));
           }
-        } else if (recOt > 0) {
+        } else if (rec.status === "half_day") {
+          if (!isManager && !recInOffSeason && recHours > 5) {
+            const halfDayOt = recHours - 5;
+            regularOtHours += halfDayOt;
+            regularOtPay   += Math.round(halfDayOt * hourlyRate * cfg.overtimeMultiplier);
+          }
+        } else if (recOt > 0 && !recInOffSeason) {
+          /* Clip OT: ensure OT starts no earlier than scheduled shift end */
           let ot = recOt;
-          if (isNightWatcher && ot > 2) ot = 2;
-          if (!isManager) {
+
+          /* Early sign-in clip: recalculate effective OT using shift schedule */
+          if (rec.inTime1 && empShift?.startTime && empShift?.endTime) {
+            const actualInMins = timeToMinutes(rec.inTime1);
+            const effectiveInMins = Math.max(actualInMins, shiftStartMinutes);
+            const outTime = rec.outTime1;
+            if (outTime) {
+              const outMins = timeToMinutes(outTime);
+              const effectiveWorkMins = Math.max(0, outMins - effectiveInMins);
+              const shiftWorkHours = shiftWorkMinutes / 60;
+              ot = Math.max(0, effectiveWorkMins / 60 - shiftWorkHours);
+              ot = Math.round(ot * 100) / 100;
+            }
+          }
+
+          /* Night Watcher: cap OT at 3 hours */
+          if (isNightWatcher && ot > 3) ot = 3;
+
+          if (!isManager && ot > 0) {
             regularOtHours += ot;
             regularOtPay   += Math.round(ot * hourlyRate * cfg.overtimeMultiplier);
           }
@@ -356,7 +402,7 @@ router.post("/generate", async (req, res) => {
 
       const grossSalary = Math.round(
         basicSalary + transportAllowance + housingAllowance + otherAllowances
-        + overtimePay + holidayOtPay
+        + overtimePay + holidayOtPay + offDayOtPay
         - absenceDeduction - lateDeduction - halfDayDeduction - incompleteDeduction
       );
 
@@ -366,10 +412,10 @@ router.post("/generate", async (req, res) => {
         etfEmployer = Math.round(grossSalary * (cfg.etfEmployerPercent / 100));
       }
 
-      const apit         = calcAPIT(grossSalary);
+      const apit          = calcAPIT(grossSalary);
       const otherDeductions = otherDeductionsFromStruct;
       const totalDeductions = epfEmployee + apit + lateDeduction + absenceDeduction + halfDayDeduction + incompleteDeduction + otherDeductions;
-      const netSalary    = grossSalary - epfEmployee - apit - otherDeductions;
+      const netSalary     = grossSalary - epfEmployee - apit - otherDeductions;
 
       const record = {
         employeeId: emp.id,
@@ -389,7 +435,7 @@ router.post("/generate", async (req, res) => {
         housingAllowance,
         otherAllowances,
         overtimePay,
-        holidayOtPay,
+        holidayOtPay: holidayOtPay + offDayOtPay,
         grossSalary,
         epfEmployee,
         epfEmployer,

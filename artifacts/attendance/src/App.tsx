@@ -18,6 +18,8 @@ import Payroll from "@/pages/payroll/Payroll";
 import PayrollSettings from "@/pages/payroll-settings/PayrollSettings";
 import ActivityLogs from "@/pages/activity-logs/ActivityLogs";
 import HRSettings from "@/pages/hr-settings/HRSettings";
+import Approvals from "@/pages/attendance/Approvals";
+import LeaveBalances from "@/pages/leave/LeaveBalances";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -41,6 +43,8 @@ function Router() {
       <Route path="/"><ProtectedRoute component={Dashboard} /></Route>
       <Route path="/attendance/today"><ProtectedRoute component={TodayAttendance} /></Route>
       <Route path="/attendance/monthly"><ProtectedRoute component={MonthlySheet} /></Route>
+      <Route path="/attendance/approvals"><ProtectedRoute component={Approvals} /></Route>
+      <Route path="/leave-balances"><ProtectedRoute component={LeaveBalances} /></Route>
       <Route path="/employees"><ProtectedRoute component={EmployeeList} /></Route>
       <Route path="/branches"><ProtectedRoute component={Branches} /></Route>
       <Route path="/shifts"><ProtectedRoute component={Shifts} /></Route>

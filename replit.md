@@ -32,19 +32,19 @@ Dark sidebar, clean white content area
 1. **Dashboard** - Real-time stats, branch-wise summary, recent attendance
 2. **Today's Attendance** - Live attendance status, punch in/out per employee
 3. **Monthly Sheet** - Excel-like grid (employees × days) with color-coded status
-4. **Shift Management** - Normal shift and split shift support
+4. **Attendance Approvals** - Review and approve/reject manually-entered punch records (`/attendance/approvals`)
+5. **Shift Management** - Normal shift and split shift support
    - Normal: In1→Out1=Total
    - Split: In1→Out1=H1 | In2→Out2=H2 | Total=H1+H2
-5. **Employee Management** - Full CRUD, biometric ID, branch assignment
-6. **Branch Management** - 3-level hierarchy (Head Office → Regional → Sub-branch)
-7. **Reports**
-   - Attendance Report (date range, branch, status filters)
-   - Monthly Report (employee-wise summary with attendance %)
-   - Overtime Report (OT hours by employee)
-8. **Biometric Devices** - ZKTeco ZK Push ADMS setup, device management, push logs
-9. **User Management** - Role-based access (super_admin, regional_admin, branch_admin, viewer)
-   - Branch-allocated access (users only see their assigned branches)
-10. **Settings** - Organization config, ZK Push setup, holiday management
+6. **Employee Management** - Full CRUD, biometric ID, branch assignment
+7. **Branch Management** - 3-level hierarchy (Head Office → Regional → Sub-branch)
+8. **Payroll Settings** - Statutory contributions, OT multipliers per type (regular, off-day, poya, public holiday), off-season mode, housing tiers, allowances
+9. **HR Settings** - Work time policy, OT grace, deduplication, OT-exempt designations, department rules, lunch rules
+10. **Leave Balances** - Annual & casual leave tracking, 1.5 days/week accrual, manual override (`/leave-balances`)
+11. **Reports** - Attendance, monthly, overtime reports
+12. **Biometric Devices** - ZKTeco ZK Push ADMS setup, device management, push logs
+13. **User Management** - Role-based access (super_admin, regional_admin, branch_admin, viewer)
+14. **Settings** - Organization config, ZK Push setup, holiday management
 
 ### Attendance Status Colors
 - Present (P): green
