@@ -612,15 +612,25 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                     <Label className="text-xs font-semibold mb-1.5 block">Department <span className="text-red-500">*</span></Label>
                     <Select value={form.department} onChange={e => set("department", e.target.value)}>
                       <option value="">— Select Department —</option>
-                      {DEPT_LIST.map(d => <option key={d} value={d}>{d}</option>)}
+                      {(deptOptions.length > 0 ? deptOptions : DEPT_LIST).map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
                     </Select>
+                    {deptOptions.length === 0 && (
+                      <p className="text-[10px] text-amber-600 mt-1">No departments found. Add them in the Departments tab first.</p>
+                    )}
                   </div>
                   <div>
                     <Label className="text-xs font-semibold mb-1.5 block">Designation <span className="text-red-500">*</span></Label>
                     <Select value={form.designation} onChange={e => set("designation", e.target.value)}>
                       <option value="">— Select Designation —</option>
-                      {DESIGNATION_LIST.map(d => <option key={d} value={d}>{d}</option>)}
+                      {(desigOptions.length > 0 ? desigOptions : DESIGNATION_LIST).map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
                     </Select>
+                    {desigOptions.length === 0 && (
+                      <p className="text-[10px] text-amber-600 mt-1">No designations found. Add them in the Designations tab first.</p>
+                    )}
                   </div>
                   <div>
                     <Label className="text-xs font-semibold mb-1.5 block">Branch <span className="text-red-500">*</span></Label>
@@ -986,6 +996,8 @@ export default function Employees() {
 
   const { data: branchRes } = useListBranches();
   const branches: any[] = branchRes || [];
+  const { data: deptData } = useGet(["departments"], "/departments");
+  const allDeptNames: string[] = Array.isArray(deptData) ? deptData.filter((d: any) => d.isActive).map((d: any) => d.name) : [];
 
   const regionalBranches = branches.filter((b: any) => b.type === "regional");
   const subBranchesOfSelected = branches.filter(
@@ -1131,7 +1143,9 @@ export default function Employees() {
             </Select>
             <Select value={filterDept} onChange={e => setFilterDept(e.target.value)} className="h-8 text-xs w-40">
               <option value="">All Departments</option>
-              {DEPT_LIST.map(d => <option key={d} value={d}>{d}</option>)}
+              {(allDeptNames.length > 0 ? allDeptNames : DEPT_LIST).map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
             </Select>
             <Select value={filterType} onChange={e => setFilterType(e.target.value)} className="h-8 text-xs w-28">
               <option value="">All Types</option>
