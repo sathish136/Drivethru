@@ -173,14 +173,11 @@ export default function Login() {
               style={{ width:560, height:560, top:"42%", left:"50%", transform:"translate(-50%,-50%)",
                 border:"1px solid rgba(255,255,255,.07)" }} />
 
-            {/* Floating logo card */}
-            <div className="float-shape absolute right-[10%] top-[16%] rounded-3xl flex items-center justify-center"
-              style={{ width:100, height:100,
-                background:"rgba(255,255,255,.18)", backdropFilter:"blur(12px)",
-                border:"1.5px solid rgba(255,255,255,.35)", transform:"rotate(10deg)",
-                boxShadow:"0 12px 40px rgba(0,0,0,.12)" }}>
-              <img src={drivethruLogo} alt="Drivethru" style={{ width:56, height:56, objectFit:"contain", transform:"rotate(-10deg)" }} />
-            </div>
+            {/* Floating decorative card */}
+            <div className="float-shape absolute right-[10%] top-[16%] rounded-3xl"
+              style={{ width:90, height:90,
+                background:"rgba(255,255,255,.12)", backdropFilter:"blur(10px)",
+                border:"1.5px solid rgba(255,255,255,.25)", transform:"rotate(10deg)" }} />
             <div className="float-shape2 absolute left-[10%] bottom-[22%] rounded-2xl"
               style={{ width:56, height:56,
                 background:"rgba(255,255,255,.08)",
