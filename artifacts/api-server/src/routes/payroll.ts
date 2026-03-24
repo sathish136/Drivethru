@@ -7,9 +7,12 @@ const router = Router();
 
 async function getPayrollSettings() {
   const [existing] = await db.select().from(payrollSettings);
-  if (existing) return { ...existing, salaryScale: JSON.parse(existing.salaryScale) as Record<string, number> };
-  const [created] = await db.insert(payrollSettings).values({}).returning();
-  return { ...created, salaryScale: JSON.parse(created.salaryScale) as Record<string, number> };
+  const row = existing ?? (await db.insert(payrollSettings).values({}).returning())[0];
+  return {
+    ...row,
+    salaryScale: JSON.parse(row.salaryScale) as Record<string, number>,
+    employeeOverrides: JSON.parse(row.employeeOverrides ?? "{}") as Record<string, number>,
+  };
 }
 
 function calcAPIT(grossMonthly: number): number {
@@ -99,7 +102,8 @@ router.get("/employees-for-payroll", async (req, res) => {
 
     const result = filteredByBranch.map(emp => ({
       ...emp,
-      basicSalary: cfg.salaryScale[emp.designation] ?? 40000,
+      basicSalary: cfg.employeeOverrides[String(emp.id)] ?? cfg.salaryScale[emp.designation] ?? 40000,
+      hasOverride: cfg.employeeOverrides[String(emp.id)] !== undefined,
       hasPayroll: payrollMap.has(emp.id),
       payrollStatus: payrollMap.get(emp.id)?.status ?? null,
       currentNetSalary: payrollMap.get(emp.id)?.netSalary ?? null,
@@ -167,7 +171,7 @@ router.post("/generate", async (req, res) => {
       const holidayDays = empAtt.filter(a => a.status === "holiday").length;
       const totalOTHours = empAtt.reduce((s, a) => s + (a.overtimeHours || 0), 0);
 
-      const basicSalary = cfg.salaryScale[emp.designation] ?? 40000;
+      const basicSalary = cfg.employeeOverrides[String(emp.id)] ?? cfg.salaryScale[emp.designation] ?? 40000;
       const transportAllowance = cfg.transportAllowance;
       const housingAllowance =
         basicSalary >= cfg.housingHighThreshold ? cfg.housingAllowanceHigh :

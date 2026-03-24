@@ -41,6 +41,8 @@ export const payrollSettings = pgTable("payroll_settings", {
     "Data Entry Operator": 35000,
   })),
 
+  employeeOverrides: text("employee_overrides").notNull().default("{}"),
+
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
