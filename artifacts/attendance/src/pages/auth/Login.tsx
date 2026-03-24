@@ -198,15 +198,9 @@ export default function Login() {
           <div className="relative z-10 flex flex-col h-full px-12 py-10">
 
             {/* Brand */}
-            <div className={`flex items-center gap-3 ${mounted ? "fu" : "opacity-0"}`}>
-              <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm"
-                style={{ border:"1px solid rgba(255,255,255,.3)" }}>
-                <img src={drivethruLogo} alt="Drivethru" className="w-7 h-7 object-contain" />
-              </div>
-              <div>
-                <p className="text-white font-bold text-[15px] tracking-tight leading-none">Drivethru</p>
-                <p className="text-white/55 text-[10px] mt-0.5 tracking-widest uppercase">Attendance Management</p>
-              </div>
+            <div className={`flex items-center gap-2 ${mounted ? "fu" : "opacity-0"}`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-white/40 inline-block" />
+              <p className="text-white/70 font-semibold text-[13px] tracking-widest uppercase">Drivethru · Attendance Management</p>
             </div>
 
             {/* Hero */}
