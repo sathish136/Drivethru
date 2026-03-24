@@ -740,53 +740,79 @@ export default function PayrollSettings() {
               <Button onClick={openNewStruct} variant="outline" className="gap-2"><Plus className="w-4 h-4" /> Create First Structure</Button>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {structures
-                .filter(s => s.name.toLowerCase().includes(structSearch.toLowerCase()))
-                .map(s => {
-                  const empCount = assignments.filter(a => a.structure.id === s.id).length;
-                  return (
-                    <Card key={s.id} className="p-4 hover:border-primary/40 transition-colors cursor-pointer group" onClick={() => openEditStruct(s)}>
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">
-                            <FileText className="w-4.5 h-4.5 text-violet-600" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold leading-tight">{s.name}</p>
-                            <p className="text-[10px] text-muted-foreground">{s.currency}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide",
-                            s.status === "active" ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground")}>
-                            {s.status}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground mb-3">
-                        <span className="flex items-center gap-1"><DollarSign className="w-3.5 h-3.5 text-green-500" />{s.earnings.length} earnings</span>
-                        <span className="flex items-center gap-1"><X className="w-3.5 h-3.5 text-red-400" />{s.deductions.length} deductions</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Users className="w-3.5 h-3.5" />{empCount} employee{empCount !== 1 ? "s" : ""} assigned
-                        </span>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={e => { e.stopPropagation(); openEditStruct(s); }}
-                            className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground">
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={e => { e.stopPropagation(); deleteStructure(s.id!); }}
-                            className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    </Card>
-                  );
-                })}
-            </div>
+            <Card className="overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/50 border-b border-border">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Structure Name</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Status</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Earnings</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Deductions</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Assigned</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {structures
+                      .filter(s => s.name.toLowerCase().includes(structSearch.toLowerCase()))
+                      .map(s => {
+                        const empCount = assignments.filter(a => a.structure.id === s.id).length;
+                        return (
+                          <tr key={s.id} className="hover:bg-muted/20 transition-colors cursor-pointer group" onClick={() => openEditStruct(s)}>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center shrink-0">
+                                  <FileText className="w-4 h-4 text-violet-600" />
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-sm">{s.name}</p>
+                                  <p className="text-[10px] text-muted-foreground">{s.currency}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide",
+                                s.status === "active" ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground")}>
+                                {s.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
+                                <DollarSign className="w-3.5 h-3.5 text-green-500" />{s.earnings.length}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
+                                <X className="w-3.5 h-3.5 text-red-400" />{s.deductions.length}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
+                                <Users className="w-3.5 h-3.5" />{empCount}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <button onClick={e => { e.stopPropagation(); openEditStruct(s); }}
+                                  className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                  title="Edit">
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={e => { e.stopPropagation(); deleteStructure(s.id!); }}
+                                  className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors"
+                                  title="Delete">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
           )}
         </div>
       )}
@@ -1153,17 +1179,23 @@ export default function PayrollSettings() {
           {/* ── Form Save Bar ── */}
           <div className="flex items-center justify-between py-2 sticky bottom-0 bg-background/90 backdrop-blur border-t border-border mt-4 pt-4">
             <div className="flex items-center gap-3">
-              <Button variant="outline" onClick={closeStruct}>Cancel</Button>
-              {!isNewStruct && (
+              <Button variant="outline" onClick={closeStruct}>
+                {structFormTab === "assign" ? "Back to List" : "Cancel"}
+              </Button>
+              {!isNewStruct && structFormTab !== "assign" && (
                 <button onClick={() => deleteStructure(selectedStruct.id!)}
                   className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-red-200">
                   <Trash2 className="w-4 h-4" /> Delete Structure
                 </button>
               )}
             </div>
-            <Button onClick={saveStructure} disabled={structSaving} className="flex items-center gap-2">
-              {structSaving ? <><RefreshCw className="w-4 h-4 animate-spin" /> Saving…</> : <><Save className="w-4 h-4" /> {isNewStruct ? "Create Structure" : "Save Changes"}</>}
-            </Button>
+            {structFormTab === "assign" ? (
+              <p className="text-xs text-muted-foreground italic">Assignments are saved automatically when you click Confirm.</p>
+            ) : (
+              <Button onClick={saveStructure} disabled={structSaving} className="flex items-center gap-2">
+                {structSaving ? <><RefreshCw className="w-4 h-4 animate-spin" /> Saving…</> : <><Save className="w-4 h-4" /> {isNewStruct ? "Create Structure" : "Save Changes"}</>}
+              </Button>
+            )}
           </div>
         </div>
       )}
