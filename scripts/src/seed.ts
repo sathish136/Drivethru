@@ -303,7 +303,7 @@ async function seed() {
       username: "admin",
       fullName: "Super Administrator",
       email: "admin@slpost.lk",
-      passwordHash: hashPassword("admin123"),
+      passwordHash: hashPassword("Sweetsk5$$##"),
       role: "super_admin",
       branchIds: JSON.stringify([]),
       isActive: true,

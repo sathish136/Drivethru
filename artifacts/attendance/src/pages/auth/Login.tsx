@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Mail, Lock, AlertCircle, Shield, Clock, Users, BarChart3, Eye, EyeOff } from "lucide-react";
+import drivethruLogo from "@/assets/drivethru-brand.svg";
+import liveuLogo from "@/assets/liveu-logo.png";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
