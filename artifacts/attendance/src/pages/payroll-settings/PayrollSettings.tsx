@@ -204,8 +204,6 @@ export default function PayrollSettings() {
       .finally(() => setStructsLoading(false));
   }, []);
 
-  useEffect(() => { if (tab === "structures") loadStructures(); }, [tab]);
-
   /* ─── Load assignments ─── */
   const loadAssignments = useCallback(() => {
     fetch(apiUrl("/salary-structures/assignments/all"))
@@ -213,6 +211,8 @@ export default function PayrollSettings() {
       .then(d => { if (Array.isArray(d)) setAssignments(d); })
       .catch(() => {});
   }, []);
+
+  useEffect(() => { if (tab === "structures") { loadStructures(); loadAssignments(); } }, [tab]);
 
   useEffect(() => {
     if (structFormTab === "assign" && selectedStruct?.id) {
