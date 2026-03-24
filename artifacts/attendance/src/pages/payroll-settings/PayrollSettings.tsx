@@ -351,7 +351,9 @@ export default function PayrollSettings() {
   async function confirmAssign(empId: number) {
     if (!selectedStruct?.id) return;
     setAssignSaving(true);
-    const basicAmt = parseFloat(assignBasic) || 0;
+    const basicAmt = selectedStruct.earnings.find(e => e.component === "Basic")?.amount
+      ?? selectedStruct.earnings[0]?.amount
+      ?? 0;
     const today = assignDate || new Date().toISOString().slice(0, 10);
     try {
       await fetch(apiUrl("/salary-structures/assignments"), {
@@ -1110,28 +1112,15 @@ export default function PayrollSettings() {
                             </td>
                             <td className="px-4 py-3">
                               {isAssigning ? (
-                                <div className="flex flex-col gap-1.5">
-                                  <div className="flex items-center gap-1">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      placeholder="Basic salary (LKR)"
-                                      value={assignBasic}
-                                      onChange={e => setAssignBasic(e.target.value)}
-                                      className="h-7 w-36 rounded border border-border px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                                      autoFocus
-                                    />
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <button onClick={() => confirmAssign(emp.id)} disabled={assignSaving || !assignBasic}
-                                      className="flex items-center gap-1 px-2 py-1 rounded bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50">
-                                      {assignSaving ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Confirm
-                                    </button>
-                                    <button onClick={() => setAssigningEmpId(null)}
-                                      className="px-2 py-1 rounded bg-muted text-muted-foreground text-xs hover:bg-muted/80">
-                                      Cancel
-                                    </button>
-                                  </div>
+                                <div className="flex items-center gap-1.5">
+                                  <button onClick={() => confirmAssign(emp.id)} disabled={assignSaving}
+                                    className="flex items-center gap-1 px-2 py-1 rounded bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50">
+                                    {assignSaving ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Confirm
+                                  </button>
+                                  <button onClick={() => setAssigningEmpId(null)}
+                                    className="px-2 py-1 rounded bg-muted text-muted-foreground text-xs hover:bg-muted/80">
+                                    Cancel
+                                  </button>
                                 </div>
                               ) : (
                                 <div className="flex items-center justify-center gap-1">
