@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Mail, Lock, AlertCircle, Shield, Clock, Users, BarChart3, Eye, EyeOff } from "lucide-react";
-import liveuLogo from "@/assets/liveu-logo.png";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const LOGO = "https://collective.ruhr/wp-content/uploads/2018/07/logo_drivethru_surfcamps.png";
 
 const features = [
   { icon: Clock,    title: "Real-time Attendance",  desc: "Live biometric tracking across all branches" },
@@ -136,12 +137,12 @@ export default function Login() {
               <div className="relative">
                 <div className="anim-pulse-ring absolute inset-0 rounded-full"
                   style={{ background: "hsl(119 41% 54% / .4)" }} />
-                <img src={liveuLogo} alt="Liveu Pvr Ltd" className="w-12 h-12 rounded-full relative object-cover"
+                <img src={LOGO} alt="Drivethru" className="w-12 h-12 rounded-full relative object-contain bg-white p-0.5"
                   style={{ boxShadow: "0 0 20px hsl(119 41% 54% / .5)" }} />
               </div>
               <div>
-                <p className="font-bold text-white text-base tracking-tight leading-none">PostHRMS</p>
-                <p className="text-white/40 text-[11px] mt-0.5">Sri Lanka Post · Colombo District</p>
+                <p className="font-bold text-white text-base tracking-tight leading-none">Drivethru</p>
+                <p className="text-white/40 text-[11px] mt-0.5">Attendance Management System</p>
               </div>
             </div>
 
@@ -157,7 +158,7 @@ export default function Login() {
                 Platform
               </h1>
               <p className="mt-4 text-white/45 text-[14px] leading-relaxed max-w-xs">
-                Unified attendance, HR, and payroll management for Sri Lanka Post — Colombo District offices, powered by ZKTeco biometrics.
+                Unified attendance, HR, and payroll management for Drivethru — powered by ZKTeco biometrics.
               </p>
 
               {/* Feature list */}
@@ -193,16 +194,17 @@ export default function Login() {
 
             {/* Mobile brand */}
             <div className="flex lg:hidden items-center gap-3 mb-8 justify-center">
-              <img src={liveuLogo} alt="Liveu Pvr Ltd" className="w-10 h-10 rounded-full object-cover"
+              <img src={LOGO} alt="Drivethru" className="w-10 h-10 rounded-full object-contain bg-white p-0.5"
                 style={{ boxShadow: "0 2px 10px hsl(119 41% 54% / .4)" }} />
-              <p className="font-bold text-gray-900 text-lg">PostHRMS</p>
+              <p className="font-bold text-gray-900 text-lg">Drivethru</p>
             </div>
 
             {/* Form card */}
             <div className="bg-white rounded-2xl shadow-xl shadow-black/8 p-8 border border-gray-100/80">
-              <div className="mb-7">
-                <h2 className="text-[22px] font-bold text-gray-900 tracking-tight">Welcome back</h2>
-                <p className="text-gray-400 text-sm mt-1">Sri Lanka Post · Colombo District</p>
+              <div className="mb-7 flex flex-col items-center text-center">
+                <img src={LOGO} alt="Drivethru" className="w-16 h-16 object-contain mb-4" />
+                <h2 className="text-[22px] font-bold text-gray-900 tracking-tight">Welcome Back</h2>
+                <p className="text-gray-400 text-sm mt-1">Drivethru</p>
                 <p className="text-gray-400 text-xs mt-0.5">Sign in to access your dashboard</p>
               </div>
 
@@ -271,14 +273,14 @@ export default function Login() {
               </form>
 
               <div className="mt-6 pt-5 border-t border-gray-100 flex items-center justify-center gap-2">
-                <img src={liveuLogo} alt="Liveu Pvr Ltd" className="w-5 h-5 rounded-full object-cover" />
-                <p className="text-[11px] text-gray-400">Powered by <span className="font-semibold text-gray-500">Liveu Pvr Ltd</span> · ZKTeco Integrated</p>
+                <img src={LOGO} alt="Drivethru" className="w-5 h-5 rounded-full object-contain bg-white" />
+                <p className="text-[11px] text-gray-400">Powered by <span className="font-semibold text-gray-500">Drivethru</span> · ZKTeco Integrated</p>
               </div>
             </div>
 
             {/* Bottom note */}
             <p className="text-center text-[11px] text-gray-400 mt-5">
-              Sri Lanka Post · Colombo District © {new Date().getFullYear()} · PostHRMS v2.0
+              Drivethru © {new Date().getFullYear()} · Attendance Management v2.0
             </p>
           </div>
         </div>
