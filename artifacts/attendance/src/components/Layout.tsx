@@ -321,20 +321,26 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           "flex items-center border-b border-white/8 shrink-0",
           collapsed ? "justify-center py-4 px-0" : "px-4 pt-5 pb-4 gap-3"
         )}>
-          <div className="w-8 h-8 rounded-xl bg-sidebar-active flex items-center justify-center shadow overflow-hidden shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-sidebar-active flex items-center justify-center shadow overflow-hidden shrink-0">
             {logoUrl
-              ? <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-0.5" />
+              ? <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-1" />
               : <span className="font-extrabold text-sm text-white">P</span>}
           </div>
 
           {!collapsed && (
-            <button
-              onClick={() => setCollapsed(true)}
-              className="ml-auto p-1 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition-colors shrink-0"
-              title="Collapse sidebar"
-            >
-              <ChevronsLeft className="w-4 h-4" />
-            </button>
+            <>
+              <div className="flex-1 min-w-0">
+                <span className="font-bold text-sm tracking-tight text-white block truncate">Post Office</span>
+                <span className="text-[10px] text-white/50 block truncate">Attendance Management</span>
+              </div>
+              <button
+                onClick={() => setCollapsed(true)}
+                className="p-1 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition-colors shrink-0"
+                title="Collapse sidebar"
+              >
+                <ChevronsLeft className="w-4 h-4" />
+              </button>
+            </>
           )}
         </div>
 
