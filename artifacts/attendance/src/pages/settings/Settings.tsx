@@ -75,6 +75,25 @@ export default function Settings() {
   const [mockClearing,  setMockClearing]  = useState(false);
   const [mockMsg, setMockMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  const [checkinFile, setCheckinFile] = useState<File | null>(null);
+  const [checkinImporting, setCheckinImporting] = useState(false);
+  const [checkinMsg, setCheckinMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const checkinInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleCheckinImport() {
+    if (!checkinFile) return;
+    setCheckinImporting(true); setCheckinMsg(null);
+    try {
+      const form = new FormData();
+      form.append("file", checkinFile);
+      const r = await fetch(apiUrl("/checkin-import/import"), { method: "POST", body: form });
+      const d = await r.json();
+      setCheckinMsg({ type: d.success ? "success" : "error", text: d.message });
+      if (d.success) setCheckinFile(null);
+    } catch { setCheckinMsg({ type: "error", text: "Upload failed. Check server connection." }); }
+    setCheckinImporting(false);
+  }
+
   async function handleImportMock() {
     if (!confirm("This will import sample data (branches, departments, designations, employees, holidays). Continue?")) return;
     setMockImporting(true); setMockMsg(null);
@@ -677,6 +696,72 @@ export default function Settings() {
                   <Download className="w-3.5 h-3.5" />
                   {mockImporting ? "Importing..." : "Import Sample Data"}
                 </Button>
+              </div>
+            </Card>
+
+            {/* Check-in Excel Import */}
+            <Card className="p-5 border-blue-200 bg-blue-50/20">
+              <div className="flex items-center gap-2 mb-3 pb-3 border-b border-blue-100">
+                <Upload className="w-4 h-4 text-blue-600" />
+                <span className="text-sm font-bold">Import Employee Check-in Data</span>
+                <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-mono">.xlsx</span>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Upload an employee check-in Excel file (.xlsx) exported from your biometric / HR system.
+                The system will parse IN/OUT logs, group them by employee and date, and create attendance records automatically.
+                New employees found in the file will be added to the database.
+              </p>
+
+              {checkinMsg && (
+                <div className={cn(
+                  "flex items-start gap-3 px-4 py-3 rounded-xl border text-sm mb-4",
+                  checkinMsg.type === "success"
+                    ? "bg-green-50 border-green-200 text-green-800"
+                    : "bg-red-50 border-red-200 text-red-800"
+                )}>
+                  {checkinMsg.type === "success"
+                    ? <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
+                    : <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />}
+                  <span>{checkinMsg.text}</span>
+                  <button className="ml-auto text-xs opacity-60 hover:opacity-100 shrink-0" onClick={() => setCheckinMsg(null)}>✕</button>
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-3 items-start">
+                <div
+                  className={cn(
+                    "flex-1 border-2 border-dashed rounded-lg px-4 py-3 cursor-pointer text-xs text-muted-foreground hover:border-blue-400 hover:bg-blue-50 transition-colors",
+                    checkinFile ? "border-blue-400 bg-blue-50 text-blue-700" : "border-border"
+                  )}
+                  onClick={() => checkinInputRef.current?.click()}
+                >
+                  <input
+                    ref={checkinInputRef}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="hidden"
+                    onChange={e => setCheckinFile(e.target.files?.[0] ?? null)}
+                  />
+                  {checkinFile
+                    ? <span className="flex items-center gap-2 font-medium"><CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />{checkinFile.name}</span>
+                    : <span>Click to select an Excel file (.xlsx)…</span>
+                  }
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  {checkinFile && (
+                    <Button variant="outline" className="text-xs h-9 px-3" onClick={() => { setCheckinFile(null); if (checkinInputRef.current) checkinInputRef.current.value = ""; }}>
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                  <Button
+                    className="flex items-center gap-2 text-xs h-9 bg-blue-600 hover:bg-blue-700 text-white"
+                    onClick={handleCheckinImport}
+                    disabled={!checkinFile || checkinImporting}
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    {checkinImporting ? "Importing..." : "Import"}
+                  </Button>
+                </div>
               </div>
             </Card>
 
