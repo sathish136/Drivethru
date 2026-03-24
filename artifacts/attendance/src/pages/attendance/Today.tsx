@@ -6,6 +6,7 @@ import { formatTime } from "@/lib/utils";
 
 export default function TodayAttendance() {
   const [branch, setBranch] = useState("all");
+  const [search, setSearch] = useState("");
   const { data, isLoading } = useTodayAttendance();
   const punch = usePunch();
 
@@ -13,10 +14,18 @@ export default function TodayAttendance() {
     punch.mutate({ data: { employeeId: empId, type } });
   };
 
-  const records = data?.records || [
+  const allRecords = data?.records || [
     { id: 1, employeeId: 101, employeeCode: "EMP001", employeeName: "Alice Walker", branchName: "Head Office", status: "present", inTime1: "08:00", outTime1: null, source: "biometric" },
     { id: 2, employeeId: 102, employeeCode: "EMP002", employeeName: "Bob Smith", branchName: "Head Office", status: "absent", inTime1: null, outTime1: null, source: "system" },
   ];
+
+  const records = allRecords.filter((r: any) => {
+    const matchesBranch = branch === "all" || String(r.branchId) === branch;
+    const matchesSearch = !search ||
+      r.employeeName?.toLowerCase().includes(search.toLowerCase()) ||
+      r.employeeCode?.toLowerCase().includes(search.toLowerCase());
+    return matchesBranch && matchesSearch;
+  });
 
   return (
     <div className="space-y-6">
@@ -28,7 +37,12 @@ export default function TodayAttendance() {
       <Card className="p-4 flex flex-col md:flex-row gap-4 items-center bg-white/50">
         <div className="relative flex-1 w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search employee..." className="pl-9" />
+          <Input
+            placeholder="Search by name or employee code..."
+            className="pl-9"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
         </div>
         <div className="flex gap-4 w-full md:w-auto">
           <Select value={branch} onChange={e => setBranch(e.target.value)} className="min-w-[180px]">
@@ -56,7 +70,13 @@ export default function TodayAttendance() {
               </Tr>
             </thead>
             <tbody>
-              {records.map((r: any) => (
+              {records.length === 0 ? (
+                <Tr>
+                  <Td colSpan={7} className="text-center py-10 text-muted-foreground">
+                    No records match your search.
+                  </Td>
+                </Tr>
+              ) : records.map((r: any) => (
                 <Tr key={r.id}>
                   <Td>
                     <div className="font-semibold text-foreground">{r.employeeName}</div>
