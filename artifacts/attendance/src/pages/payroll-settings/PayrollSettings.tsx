@@ -83,8 +83,21 @@ function blankComponent(): SalaryComponent {
   return { _id: uid(), component: "", abbr: "", amount: 0, dependsOn: "", isTaxApplicable: false, amountBasedOn: "", formula: "" };
 }
 function blankVariablePay(): VariablePayItem { return { _id: uid(), salaryComponent: "", amount: 0 }; }
+
+const STATUTORY_DEFS = [
+  { component: "EPF – Employee", abbr: "EPF_EE", pct: 8,  formula: "basic * 0.08" },
+  { component: "EPF – Employer", abbr: "EPF_ER", pct: 12, formula: "basic * 0.12" },
+  { component: "ETF",            abbr: "ETF",    pct: 3,  formula: "basic * 0.03" },
+];
+const STATUTORY_NAMES = STATUTORY_DEFS.map(d => d.component);
+
 function blankStructure(): SalaryStructure {
-  return { name: "", currency: "LKR", status: "active", earnings: [blankComponent()], deductions: [blankComponent()], variablePay: [] };
+  return {
+    name: "", currency: "LKR", status: "active",
+    earnings: [{ _id: uid(), component: "Basic", abbr: "BA", amount: 0, dependsOn: "", isTaxApplicable: false, amountBasedOn: "Basic Salary", formula: "" }],
+    deductions: STATUTORY_DEFS.map(d => ({ _id: uid(), component: d.component, abbr: d.abbr, amount: 0, dependsOn: "", isTaxApplicable: false, amountBasedOn: "Basic Salary", formula: d.formula })),
+    variablePay: [],
+  };
 }
 
 type MainTab = "general" | "fitment" | "structures";
@@ -861,201 +874,130 @@ export default function PayrollSettings() {
           )}
 
           {/* ── Earnings & Deductions ── */}
-          {structFormTab === "components" && (
-            <div className="space-y-5">
-              {/* ─ Earnings ─ */}
-              <Card className="overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-green-50/40">
-                  <div className="flex items-center gap-2">
+          {structFormTab === "components" && (() => {
+            const statutory = selectedStruct.deductions.filter(d => STATUTORY_NAMES.includes(d.component));
+            const others    = selectedStruct.deductions.filter(d => !STATUTORY_NAMES.includes(d.component));
+            const basicAmt  = selectedStruct.earnings.find(e => e.component === "Basic")?.amount ?? selectedStruct.earnings[0]?.amount ?? 0;
+            return (
+              <div className="space-y-5">
+
+                {/* ─ Earnings ─ */}
+                <Card className="overflow-hidden">
+                  <div className="flex items-center gap-2 px-5 py-3 border-b border-border bg-green-50/40">
                     <DollarSign className="w-4 h-4 text-green-600" />
                     <span className="text-sm font-bold text-green-900">Earnings</span>
                     <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded-full">{selectedStruct.earnings.length}</span>
                   </div>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/30">
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-8">No.</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground min-w-[160px]">Component <span className="text-red-500">*</span></th>
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-24">Abbr</th>
-                        <th className="px-3 py-2 text-right text-[11px] font-semibold text-muted-foreground w-28">Amount ({selectedStruct.currency})</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground min-w-[130px]">Depends On</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-20">Tax Applicable</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground min-w-[130px]">Amount Based On</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground min-w-[160px]">Formula</th>
-                        <th className="px-3 py-2 w-10"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {selectedStruct.earnings.map((row, idx) => (
-                        <ComponentRow key={row._id} row={row} index={idx}
-                          onChange={patch => updateEarning(row._id, patch)}
-                          onRemove={() => removeEarning(row._id)} />
-                      ))}
-                      {selectedStruct.earnings.length === 0 && (
-                        <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-muted-foreground">No earnings added. Click "Add Row" to add one.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="px-5 py-3 border-t border-border">
-                  <button onClick={addEarning} className="flex items-center gap-2 text-sm text-primary font-medium hover:underline">
-                    <Plus className="w-4 h-4" /> Add Row
-                  </button>
-                </div>
-              </Card>
+                  <div className="divide-y divide-border">
+                    {selectedStruct.earnings.map((row, idx) => (
+                      <div key={row._id} className="flex items-center gap-3 px-4 py-2.5">
+                        <span className="text-xs text-muted-foreground w-5 shrink-0">{idx + 1}</span>
+                        <Input
+                          value={row.component}
+                          onChange={e => updateEarning(row._id, { component: e.target.value })}
+                          placeholder="Component name (e.g. Basic)"
+                          className="h-8 text-sm flex-1"
+                        />
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-muted-foreground shrink-0">{selectedStruct.currency}</span>
+                          <Input
+                            type="number" min="0"
+                            value={row.amount}
+                            onChange={e => updateEarning(row._id, { amount: parseFloat(e.target.value) || 0 })}
+                            className="h-8 text-sm text-right w-32"
+                          />
+                        </div>
+                        <button onClick={() => removeEarning(row._id)} className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                    {selectedStruct.earnings.length === 0 && (
+                      <div className="px-4 py-8 text-center text-sm text-muted-foreground">No earnings added. Click "Add Earning" below.</div>
+                    )}
+                  </div>
+                  <div className="px-5 py-3 border-t border-border">
+                    <button onClick={addEarning} className="flex items-center gap-2 text-sm text-primary font-medium hover:underline">
+                      <Plus className="w-4 h-4" /> Add Earning
+                    </button>
+                  </div>
+                </Card>
 
-              {/* ─ Deductions ─ */}
-              <Card className="overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-red-50/40">
-                  <div className="flex items-center gap-2">
+                {/* ─ Deductions ─ */}
+                <Card className="overflow-hidden">
+                  <div className="flex items-center gap-2 px-5 py-3 border-b border-border bg-red-50/40">
                     <X className="w-4 h-4 text-red-500" />
                     <span className="text-sm font-bold text-red-900">Deductions</span>
                     <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded-full">{selectedStruct.deductions.length}</span>
                   </div>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/30">
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-8">No.</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground min-w-[160px]">Component <span className="text-red-500">*</span></th>
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-24">Abbr</th>
-                        <th className="px-3 py-2 text-right text-[11px] font-semibold text-muted-foreground w-28">Amount ({selectedStruct.currency})</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground min-w-[130px]">Depends On</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-20">Tax Applicable</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground min-w-[130px]">Amount Based On</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground min-w-[160px]">Formula</th>
-                        <th className="px-3 py-2 w-10"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {selectedStruct.deductions.map((row, idx) => (
-                        <ComponentRow key={row._id} row={row} index={idx}
-                          onChange={patch => updateDeduction(row._id, patch)}
-                          onRemove={() => removeDeduction(row._id)} />
-                      ))}
-                      {selectedStruct.deductions.length === 0 && (
-                        <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-muted-foreground">No deductions added. Click "Add Row" to add one.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="px-5 py-3 border-t border-border">
-                  <button onClick={addDeduction} className="flex items-center gap-2 text-sm text-primary font-medium hover:underline">
-                    <Plus className="w-4 h-4" /> Add Row
-                  </button>
-                </div>
-              </Card>
 
-              {/* ─ Variable Pay ─ */}
-              <Card className="overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-amber-50/40">
-                  <div className="flex items-center gap-2">
-                    <ToggleLeft className="w-4 h-4 text-amber-600" />
-                    <span className="text-sm font-bold text-amber-900">Variable Pay</span>
-                    <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-full">{selectedStruct.variablePay.length}</span>
+                  {/* Statutory rows */}
+                  <div className="px-4 py-1.5 bg-muted/30 border-b border-border">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Statutory (Fixed)</span>
                   </div>
-                </div>
-                <div className="overflow-x-auto">
-                  {selectedStruct.variablePay.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-10 gap-2 text-muted-foreground">
-                      <LayoutList className="w-8 h-8 text-muted-foreground/30" />
-                      <span className="text-sm">No Data</span>
-                    </div>
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-border bg-muted/30">
-                          <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-8">No.</th>
-                          <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">Salary Component</th>
-                          <th className="px-3 py-2 text-right text-[11px] font-semibold text-muted-foreground w-28">Amount ({selectedStruct.currency})</th>
-                          <th className="px-3 py-2 w-10"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
-                        {selectedStruct.variablePay.map((row, idx) => (
-                          <tr key={row._id} className="hover:bg-muted/20">
-                            <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
-                            <td className="px-3 py-1.5">
-                              <Input value={row.salaryComponent} onChange={e => updateVariablePay(row._id, { salaryComponent: e.target.value })}
-                                placeholder="e.g. Performance Bonus" className="h-8 text-sm" />
-                            </td>
-                            <td className="px-3 py-1.5">
-                              <Input type="number" min="0" value={row.amount} onChange={e => updateVariablePay(row._id, { amount: parseFloat(e.target.value) || 0 })}
-                                className="h-8 text-sm text-right" />
-                            </td>
-                            <td className="px-3 py-1.5 text-center">
-                              <button onClick={() => removeVariablePay(row._id)} className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-                <div className="px-5 py-3 border-t border-border">
-                  <button onClick={addVariablePay} className="flex items-center gap-2 text-sm text-primary font-medium hover:underline">
-                    <Plus className="w-4 h-4" /> Add Row
-                  </button>
-                </div>
-              </Card>
+                  <div className="divide-y divide-border">
+                    {STATUTORY_DEFS.map((def, idx) => {
+                      const existing = statutory.find(d => d.component === def.component);
+                      const computed = +(basicAmt * def.pct / 100).toFixed(2);
+                      return (
+                        <div key={def.component} className="flex items-center gap-3 px-4 py-3">
+                          <span className="text-xs text-muted-foreground w-5 shrink-0">{idx + 1}</span>
+                          <span className="text-sm font-medium flex-1">{def.component}</span>
+                          <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded-full shrink-0">{def.pct}%</span>
+                          <div className="flex items-center gap-1.5 w-44 justify-end">
+                            <span className="text-xs text-muted-foreground">{selectedStruct.currency}</span>
+                            <span className="text-sm font-mono text-muted-foreground w-24 text-right">
+                              {basicAmt > 0 ? computed.toLocaleString() : "—"}
+                            </span>
+                          </div>
+                          <div className="w-7 shrink-0" />
+                        </div>
+                      );
+                    })}
+                  </div>
 
-              {/* ─ Condition & Formula Help ─ */}
-              <div>
-                <button onClick={() => setShowFormulaHelp(h => !h)}
-                  className="flex items-center gap-2 text-sm text-primary hover:underline font-medium">
-                  <HelpCircle className="w-4 h-4" /> Condition and Formula Help
-                </button>
-                {showFormulaHelp && (
-                  <Card className="mt-3 p-5 bg-blue-50/30 border-blue-200">
-                    <p className="text-sm font-bold text-blue-900 mb-3">Formula & Condition Reference</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                      <div>
-                        <p className="font-semibold text-blue-800 mb-2">Available Variables</p>
-                        <div className="space-y-1 font-mono bg-blue-50 rounded-lg p-3 border border-blue-200">
-                          {[
-                            ["basic", "Employee's basic salary"],
-                            ["gross", "Gross salary (computed)"],
-                            ["working_days", "Total working days in month"],
-                            ["present_days", "Days employee was present"],
-                            ["absent_days", "Days employee was absent"],
-                            ["late_days", "Number of late arrivals"],
-                            ["overtime_hours", "Total overtime hours"],
-                          ].map(([k, v]) => (
-                            <div key={k} className="flex gap-3">
-                              <span className="text-blue-700 font-bold w-28 shrink-0">{k}</span>
-                              <span className="text-blue-600">{v}</span>
-                            </div>
-                          ))}
+                  {/* Other deductions */}
+                  <div className="px-4 py-1.5 bg-muted/30 border-t border-b border-border">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Other Deductions</span>
+                  </div>
+                  <div className="divide-y divide-border">
+                    {others.map((row, idx) => (
+                      <div key={row._id} className="flex items-center gap-3 px-4 py-2.5">
+                        <span className="text-xs text-muted-foreground w-5 shrink-0">{idx + 1}</span>
+                        <Input
+                          value={row.component}
+                          onChange={e => updateDeduction(row._id, { component: e.target.value })}
+                          placeholder="Deduction name (e.g. Loan)"
+                          className="h-8 text-sm flex-1"
+                        />
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-muted-foreground shrink-0">{selectedStruct.currency}</span>
+                          <Input
+                            type="number" min="0"
+                            value={row.amount}
+                            onChange={e => updateDeduction(row._id, { amount: parseFloat(e.target.value) || 0 })}
+                            className="h-8 text-sm text-right w-32"
+                          />
                         </div>
+                        <button onClick={() => removeDeduction(row._id)} className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
-                      <div>
-                        <p className="font-semibold text-blue-800 mb-2">Formula Examples</p>
-                        <div className="space-y-2 text-blue-700 bg-blue-50 rounded-lg p-3 border border-blue-200">
-                          {[
-                            ["basic * 0.10", "10% of basic salary"],
-                            ["basic / working_days * present_days", "Pro-rated by attendance"],
-                            ["overtime_hours * (basic / (working_days * 8)) * 1.5", "Overtime pay formula"],
-                            ["gross * 0.08", "8% of gross salary"],
-                            ["if(late_days > 3, 500, 0)", "Conditional deduction"],
-                          ].map(([formula, desc]) => (
-                            <div key={formula} className="flex flex-col gap-0.5">
-                              <code className="text-[11px] font-mono bg-blue-100 px-2 py-0.5 rounded">{formula}</code>
-                              <span className="text-[10px] text-blue-600 pl-1">{desc}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                )}
+                    ))}
+                    {others.length === 0 && (
+                      <div className="px-4 py-6 text-center text-sm text-muted-foreground">No other deductions. Click "Add Deduction" to add one.</div>
+                    )}
+                  </div>
+                  <div className="px-5 py-3 border-t border-border">
+                    <button onClick={addDeduction} className="flex items-center gap-2 text-sm text-primary font-medium hover:underline">
+                      <Plus className="w-4 h-4" /> Add Deduction
+                    </button>
+                  </div>
+                </Card>
+
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ── Assign to Employee ── */}
           {structFormTab === "assign" && selectedStruct?.id && (
