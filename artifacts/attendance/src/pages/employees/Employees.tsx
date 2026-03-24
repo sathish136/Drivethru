@@ -345,7 +345,8 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
   const DRAWER_TABS = [
     { key: "personal", label: "Personal", icon: UserCircle, step: 1 },
     { key: "professional", label: "Professional", icon: Briefcase, step: 2 },
-    { key: "documents", label: "Documents", icon: FileText, step: 3 },
+    { key: "payroll", label: "Payroll", icon: BadgeIndianRupee, step: 3 },
+    { key: "documents", label: "Documents", icon: FileText, step: 4 },
   ] as const;
 
   return (
@@ -512,21 +513,25 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                 <div className="grid grid-cols-2 gap-4 p-4">
                   <div>
                     <Label className="text-xs font-semibold mb-1.5 block">
-                      Aadhar Number
-                      <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">(Indian nationals only)</span>
+                      NIC Number
+                      <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">(National Identity Card)</span>
                     </Label>
                     <div className="relative">
                       <IdCard className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <Input className="pl-8 font-mono tracking-wider" placeholder="XXXX XXXX XXXX" value={form.aadharNumber} onChange={e => set("aadharNumber", e.target.value)} maxLength={14} />
+                      <Input className="pl-8 font-mono tracking-wider" placeholder="e.g. 199012345678" value={form.nicNumber} onChange={e => set("nicNumber", e.target.value)} maxLength={12} />
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">Leave blank for Sri Lankan or other non-Indian staff.</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">Sri Lankan National Identity Card number (9 or 12 digits).</p>
                   </div>
                   <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">PAN Number</Label>
+                    <Label className="text-xs font-semibold mb-1.5 block">
+                      Passport No.
+                      <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">(If applicable)</span>
+                    </Label>
                     <div className="relative">
                       <CreditCard className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <Input className="pl-8 font-mono tracking-wider uppercase" placeholder="ABCDE1234F" value={form.panNumber} onChange={e => set("panNumber", e.target.value.toUpperCase())} maxLength={10} />
+                      <Input className="pl-8 font-mono tracking-wider uppercase" placeholder="e.g. N1234567" value={form.panNumber} onChange={e => set("panNumber", e.target.value.toUpperCase())} maxLength={15} />
                     </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">Optional — for non-citizen or foreign staff only.</p>
                   </div>
                 </div>
               </div>
@@ -647,6 +652,66 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {tab === "payroll" && (
+            <div className="space-y-5">
+              {/* Salary */}
+              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
+                  <BadgeIndianRupee className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Salary Details</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4 p-4">
+                  <div className="col-span-2">
+                    <Label className="text-xs font-semibold mb-1.5 block">Basic Salary (LKR)</Label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input type="number" className="pl-8" placeholder="e.g. 45000" value={form.basicSalary} onChange={e => set("basicSalary", e.target.value)} />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">Monthly basic salary in Sri Lankan Rupees (LKR).</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* EPF / ETF */}
+              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
+                  <Shield className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Provident Fund Details</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4 p-4">
+                  <div>
+                    <Label className="text-xs font-semibold mb-1.5 block">EPF Number</Label>
+                    <div className="relative">
+                      <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input className="pl-8 font-mono" placeholder="Employees' Provident Fund No." value={form.epfNumber} onChange={e => set("epfNumber", e.target.value)} />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">EPF — Employees' Provident Fund number.</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold mb-1.5 block">ETF Number</Label>
+                    <div className="relative">
+                      <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input className="pl-8 font-mono" placeholder="Employees' Trust Fund No." value={form.etfNumber} onChange={e => set("etfNumber", e.target.value)} />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">ETF — Employees' Trust Fund number.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary */}
+              {(form.basicSalary || form.epfNumber || form.etfNumber) && (
+                <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+                  <p className="text-xs font-semibold text-green-800 mb-2">Payroll Summary</p>
+                  <div className="space-y-1 text-xs text-green-700">
+                    {form.basicSalary && <div className="flex justify-between"><span>Basic Salary</span><span className="font-mono font-bold">LKR {parseFloat(form.basicSalary).toLocaleString("en-LK")}</span></div>}
+                    {form.epfNumber && <div className="flex justify-between"><span>EPF No.</span><span className="font-mono">{form.epfNumber}</span></div>}
+                    {form.etfNumber && <div className="flex justify-between"><span>ETF No.</span><span className="font-mono">{form.etfNumber}</span></div>}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1036,19 +1101,19 @@ export default function Employees() {
     return list.filter((e: any) =>
       empDisplayName(e).toLowerCase().includes(s) ||
       e.employeeId.toLowerCase().includes(s) ||
-      (e.aadharNumber || "").replace(/\s/g,"").includes(s.replace(/\s/g,"")) ||
+      (e.nicNumber || "").toLowerCase().includes(s) ||
       (e.panNumber || "").toLowerCase().includes(s) ||
       (e.email || "").toLowerCase().includes(s)
     );
   }, [allEmployees, search, filterBranchId, regionalBranchIds]);
 
   function exportCSV() {
-    const headers = ["Employee ID","First Name","Last Name","Gender","Designation","Department","Branch","Type","Status","Phone","Email","Aadhar","PAN","Joining Date"];
+    const headers = ["Employee ID","First Name","Last Name","Gender","Designation","Department","Branch","Type","Status","Phone","Email","NIC Number","Passport No.","Basic Salary (LKR)","EPF No.","ETF No.","Joining Date"];
     const rows = employees.map((e: any) => [
       e.employeeId, e.firstName || "", e.lastName || e.fullName || "",
       e.gender, e.designation, e.department,
       e.branchName, e.employeeType, e.status, e.phone, e.email,
-      e.aadharNumber || "", e.panNumber || "", e.joiningDate
+      e.nicNumber || "", e.panNumber || "", e.basicSalary || "", e.epfNumber || "", e.etfNumber || "", e.joiningDate
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(",")).join("\n");
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
@@ -1109,7 +1174,7 @@ export default function Employees() {
           <Card className="p-3 flex flex-wrap gap-2 items-center">
             <div className="relative flex-1 min-w-[180px]">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-              <Input placeholder="Search name, ID, Aadhar, PAN, email..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-8 text-xs" />
+              <Input placeholder="Search name, ID, NIC, email..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-8 text-xs" />
             </div>
             <Select
               value={filterRegionalId}
@@ -1172,7 +1237,7 @@ export default function Employees() {
                 <table className="w-full text-xs">
                   <thead className="bg-muted/50 sticky top-0">
                     <tr>
-                      {["Emp ID","Name","Designation / Dept","Branch","Type","Aadhar / PAN","Status","Actions"].map(h => (
+                      {["Emp ID","Name","Designation / Dept","Branch","Type","NIC / Passport","Status","Actions"].map(h => (
                         <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -1210,7 +1275,7 @@ export default function Employees() {
                           </span>
                         </td>
                         <td className="px-3 py-2.5 font-mono text-muted-foreground text-xs">
-                          <div>{emp.aadharNumber || "—"}</div>
+                          <div>{emp.nicNumber || "—"}</div>
                           {emp.panNumber && <div className="text-primary">{emp.panNumber}</div>}
                         </td>
                         <td className="px-3 py-2.5">
