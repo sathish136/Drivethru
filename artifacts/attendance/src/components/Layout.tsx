@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import liveuLogo from "@/assets/liveu-logo.png";
-import drivethruLogo from "@/assets/drivethru-logo.png";
+import drivethruLogo from "@/assets/postoffice-logo.png";
 import {
   LayoutDashboard,
   Users,
@@ -328,19 +328,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
 
           {!collapsed && (
-            <>
-              <div className="flex-1 min-w-0">
-                <span className="font-bold text-sm tracking-tight text-white block truncate">Post Office</span>
-                <span className="text-[10px] text-white/50 block truncate">Attendance Management</span>
-              </div>
-              <button
-                onClick={() => setCollapsed(true)}
-                className="p-1 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition-colors shrink-0"
-                title="Collapse sidebar"
-              >
-                <ChevronsLeft className="w-4 h-4" />
-              </button>
-            </>
+            <button
+              onClick={() => setCollapsed(true)}
+              className="ml-auto p-1 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition-colors shrink-0"
+              title="Collapse sidebar"
+            >
+              <ChevronsLeft className="w-4 h-4" />
+            </button>
           )}
         </div>
 

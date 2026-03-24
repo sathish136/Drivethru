@@ -145,7 +145,7 @@ function AttendanceReport() {
                     <td className="px-3 py-2 font-mono text-muted-foreground">{r.employeeCode}</td>
                     <td className="px-3 py-2 font-medium whitespace-nowrap">{r.employeeName}</td>
                     <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.branchName}</td>
-                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">—</td>
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{(r as any).designation || "—"}</td>
                     <td className="px-3 py-2">
                       <span className={cn("px-2 py-0.5 rounded text-xs font-medium uppercase", STATUS_COLORS[r.status] || "bg-gray-100")}>
                         {r.status.replace("_", " ")}

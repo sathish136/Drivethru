@@ -13,6 +13,8 @@ router.get("/attendance", async (req, res) => {
       rec: attendanceRecords,
       empName: employees.fullName,
       empCode: employees.employeeId,
+      empDesignation: employees.designation,
+      empDepartment: employees.department,
       branchName: branches.name,
     }).from(attendanceRecords)
       .leftJoin(employees, eq(attendanceRecords.employeeId, employees.id))
@@ -44,6 +46,8 @@ router.get("/attendance", async (req, res) => {
         ...r.rec,
         employeeName: r.empName || "",
         employeeCode: r.empCode || "",
+        designation: r.empDesignation || "",
+        department: r.empDepartment || "",
         branchName: r.branchName || "",
         shiftName: null,
         createdAt: r.rec.createdAt.toISOString(),
