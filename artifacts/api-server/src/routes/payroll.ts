@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { payrollRecords, employees, attendanceRecords, payrollSettings, salaryStructures, employeeSalaryAssignments } from "@workspace/db/schema";
+import { payrollRecords, employees, attendanceRecords, payrollSettings, salaryStructures, employeeSalaryAssignments, holidays, systemSettings } from "@workspace/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 
 const STATUTORY_NAMES = ["EPF – Employee", "EPF – Employer", "ETF"];
@@ -15,6 +15,17 @@ async function getPayrollSettings() {
     salaryScale: JSON.parse(row.salaryScale) as Record<string, number>,
     employeeOverrides: JSON.parse(row.employeeOverrides ?? "{}") as Record<string, number>,
   };
+}
+
+async function getHrSettings() {
+  const [row] = await db.select().from(systemSettings);
+  return row ?? null;
+}
+
+async function getMonthHolidays(year: number, month: number) {
+  const allHolidays = await db.select().from(holidays);
+  const prefix = `${year}-${String(month).padStart(2, "0")}`;
+  return allHolidays.filter(h => h.date.startsWith(prefix));
 }
 
 function calcAPIT(grossMonthly: number): number {
@@ -42,7 +53,6 @@ router.get("/", async (req, res) => {
     const { month, year, branchId, status } = req.query as Record<string, string>;
     if (!month || !year) return res.status(400).json({ message: "month and year required" });
 
-    // Only fetch payroll for employees who have a salary structure assigned
     const assignedEmployeeRows = await db.select({ employeeId: employeeSalaryAssignments.employeeId }).from(employeeSalaryAssignments);
     const assignedEmployeeIds = new Set(assignedEmployeeRows.map(r => r.employeeId));
 
@@ -81,7 +91,6 @@ router.get("/employees-for-payroll", async (req, res) => {
 
     const cfg = await getPayrollSettings();
 
-    // Only include employees who have a salary structure assigned
     const assignedRows = await db.select({ employeeId: employeeSalaryAssignments.employeeId }).from(employeeSalaryAssignments);
     const assignedIds = new Set(assignedRows.map(r => r.employeeId));
 
@@ -161,7 +170,6 @@ router.post("/generate", async (req, res) => {
       .where(inArray(attendanceRecords.employeeId, empIds));
     const filteredAtt = allAtt.filter(a => a.date.startsWith(datePrefix));
 
-    // Load salary structure assignments for these employees
     const assignmentRows = await db
       .select({ assignment: employeeSalaryAssignments, structure: salaryStructures })
       .from(employeeSalaryAssignments)
@@ -177,6 +185,12 @@ router.post("/generate", async (req, res) => {
       });
     }
 
+    const monthHolidays = await getMonthHolidays(year, month);
+    const holidayDateMap = new Map<string, "statutory" | "poya" | "public">();
+    for (const h of monthHolidays) {
+      holidayDateMap.set(h.date, h.type as "statutory" | "poya" | "public");
+    }
+
     const wdCount = workingDaysInMonth(year, month);
     const generated: any[] = [];
 
@@ -188,15 +202,29 @@ router.post("/generate", async (req, res) => {
       )
     );
 
+    const LATE_CUTOFF_MINUTES = 8 * 60 + 15;
+
     for (const emp of targetEmps) {
       const empAtt = filteredAtt.filter(a => a.employeeId === emp.id);
-      const presentDays = empAtt.filter(a => a.status === "present").length;
-      const lateDays = empAtt.filter(a => a.status === "late").length;
-      const absentDays = empAtt.filter(a => a.status === "absent").length;
-      const leaveDays = empAtt.filter(a => a.status === "leave").length;
-      const halfDays = empAtt.filter(a => a.status === "half_day").length;
-      const holidayDays = empAtt.filter(a => a.status === "holiday").length;
-      const totalOTHours = empAtt.reduce((s, a) => s + (a.overtimeHours || 0), 0);
+      const dept = (emp.department ?? "").toLowerCase();
+      const designation = (emp.designation ?? "").toLowerCase();
+
+      const isManager = designation.includes("manager") || designation.includes("gm") || designation.includes("general manager");
+      const isSurfInstructor = dept.includes("surf") || designation.includes("surf");
+      const isNightWatcher = designation.includes("night watcher") || designation.includes("night watch");
+
+      const presentRecs    = empAtt.filter(a => a.status === "present" || a.status === "late");
+      const lateRecs       = empAtt.filter(a => a.status === "late");
+      const absentRecs     = empAtt.filter(a => a.status === "absent");
+      const leaveRecs      = empAtt.filter(a => a.status === "leave");
+      const halfDayRecs    = empAtt.filter(a => a.status === "half_day");
+      const holidayRecs    = empAtt.filter(a => a.status === "holiday");
+      const presentDays    = presentRecs.length;
+      const lateDays       = lateRecs.length;
+      const absentDays     = absentRecs.length;
+      const leaveDays      = leaveRecs.length;
+      const halfDaysCount  = halfDayRecs.length;
+      const holidayDays    = holidayRecs.length;
 
       const structData = structureMap.get(emp.id);
 
@@ -210,11 +238,9 @@ router.post("/generate", async (req, res) => {
       let otherDeductionsFromStruct = 0;
 
       if (structData) {
-        // Use the assigned salary structure
         const basicEarning = structData.earnings.find((e: any) => e.component === "Basic");
         basicSalary = structData.basicAmount || basicEarning?.amount || 0;
 
-        // Map non-basic earnings into allowance buckets
         const nonBasicEarnings = structData.earnings.filter((e: any) => e.component !== "Basic");
         transportAllowance = 0;
         housingAllowance = 0;
@@ -226,16 +252,13 @@ router.post("/generate", async (req, res) => {
           else otherAllowances += e.amount || 0;
         }
 
-        // EPF/ETF calculated from basic salary per structure
         epfEmployee = Math.round(basicSalary * 0.08);
         epfEmployer = Math.round(basicSalary * 0.12);
         etfEmployer = Math.round(basicSalary * 0.03);
 
-        // Sum any custom (non-statutory) deductions
         const customDeds = structData.deductions.filter((d: any) => !STATUTORY_NAMES.includes(d.component));
         otherDeductionsFromStruct = customDeds.reduce((s: number, d: any) => s + (d.amount || 0), 0);
       } else {
-        // Fall back to global payroll settings
         basicSalary = cfg.employeeOverrides[String(emp.id)] ?? cfg.salaryScale[emp.designation] ?? 40000;
         transportAllowance = cfg.transportAllowance;
         housingAllowance =
@@ -243,34 +266,110 @@ router.post("/generate", async (req, res) => {
           basicSalary >= cfg.housingMidThreshold ? cfg.housingAllowanceMid :
           cfg.housingAllowanceLow;
         otherAllowances = cfg.otherAllowances;
-        epfEmployee = 0; // will be computed after gross
+        epfEmployee = 0;
         epfEmployer = 0;
         etfEmployer = 0;
       }
 
-      const dailyRate = basicSalary / wdCount;
-      const hourlyRate = basicSalary / (wdCount * 8);
+      const dailyRate   = basicSalary / wdCount;
+      const hourlyRate  = basicSalary / (wdCount * 8);
+      const minuteRate  = hourlyRate / 60;
+
+      /* ── Late deduction: lateMinutes × minuteRate ──────── */
+      let totalLateMinutes = 0;
+      for (const rec of lateRecs) {
+        if (rec.inTime1) {
+          const [hh, mm] = rec.inTime1.split(":").map(Number);
+          const arrivalMinutes = hh * 60 + mm;
+          if (arrivalMinutes > LATE_CUTOFF_MINUTES) {
+            totalLateMinutes += arrivalMinutes - LATE_CUTOFF_MINUTES;
+          }
+        } else {
+          totalLateMinutes += 15;
+        }
+      }
+      const lateDeduction = Math.round(totalLateMinutes * minuteRate);
+
+      /* ── Absence deduction ─────────────────────────────── */
       const absenceDeduction = Math.round(dailyRate * absentDays);
-      const lateDeduction = Math.round(lateDays * cfg.lateDeductionPerInstance);
-      const halfDayDeduction = Math.round(halfDays * (dailyRate / 2));
-      const overtimePay = Math.round(totalOTHours * hourlyRate * cfg.overtimeMultiplier);
+
+      /* ── Half-day deduction ────────────────────────────── */
+      const halfDayDeduction = Math.round(halfDaysCount * (dailyRate / 2));
+
+      /* ── Incomplete hours deduction (non-exempt only) ──── */
+      let incompleteDeduction = 0;
+      if (!isSurfInstructor) {
+        const requiredHoursPerDay = 8;
+        for (const rec of [...presentRecs, ...halfDayRecs]) {
+          const hours = rec.totalHours ?? 0;
+          const required = rec.status === "half_day" ? 4 : requiredHoursPerDay;
+          if (hours < required && hours > 0) {
+            const shortfallMinutes = Math.round((required - hours) * 60);
+            incompleteDeduction += Math.round(shortfallMinutes * minuteRate);
+          }
+        }
+        incompleteDeduction = Math.round(incompleteDeduction);
+      }
+
+      /* ── Regular OT (non-holiday days) ────────────────── */
+      let regularOtHours = 0;
+      let holidayOtPay   = 0;
+      let regularOtPay   = 0;
+
+      for (const rec of empAtt) {
+        const recHours = rec.totalHours ?? 0;
+        const recOt    = rec.overtimeHours ?? 0;
+
+        if (rec.status === "holiday") {
+          const hType = holidayDateMap.get(rec.date) ?? "public";
+          const mult =
+            hType === "statutory" ? (cfg.statutoryOtMultiplier ?? 2.0) :
+            hType === "poya"      ? (cfg.poyaOtMultiplier ?? 1.5) :
+                                    (cfg.publicHolidayOtMultiplier ?? 1.5);
+          if (recHours > 0) {
+            holidayOtPay += Math.round(recHours * hourlyRate * mult);
+          }
+        } else if (rec.status === "half_day") {
+          if (recHours > 5) {
+            const halfDayOt = recHours - 5;
+            const mult = isManager ? 0 : cfg.overtimeMultiplier;
+            regularOtHours += halfDayOt;
+            regularOtPay   += Math.round(halfDayOt * hourlyRate * mult);
+          }
+        } else if (recOt > 0) {
+          let ot = recOt;
+          if (isNightWatcher && ot > 2) ot = 2;
+          if (!isManager) {
+            regularOtHours += ot;
+            regularOtPay   += Math.round(ot * hourlyRate * cfg.overtimeMultiplier);
+          }
+        }
+      }
+
+      /* ── Manager gets fixed allowance instead of OT ───── */
+      let managerFixedAllowance = 0;
+      if (isManager) {
+        managerFixedAllowance = Math.round(basicSalary * 0.1);
+      }
+
+      const overtimePay = isManager ? managerFixedAllowance : regularOtPay;
 
       const grossSalary = Math.round(
-        basicSalary + transportAllowance + housingAllowance + otherAllowances + overtimePay
-        - absenceDeduction - lateDeduction - halfDayDeduction
+        basicSalary + transportAllowance + housingAllowance + otherAllowances
+        + overtimePay + holidayOtPay
+        - absenceDeduction - lateDeduction - halfDayDeduction - incompleteDeduction
       );
 
-      // For non-structure employees, calculate EPF/ETF from gross
       if (!structData) {
         epfEmployee = Math.round(grossSalary * (cfg.epfEmployeePercent / 100));
         epfEmployer = Math.round(grossSalary * (cfg.epfEmployerPercent / 100));
         etfEmployer = Math.round(grossSalary * (cfg.etfEmployerPercent / 100));
       }
 
-      const apit = calcAPIT(grossSalary);
+      const apit         = calcAPIT(grossSalary);
       const otherDeductions = otherDeductionsFromStruct;
-      const totalDeductions = epfEmployee + apit + lateDeduction + absenceDeduction + halfDayDeduction + otherDeductions;
-      const netSalary = grossSalary - epfEmployee - apit - otherDeductions;
+      const totalDeductions = epfEmployee + apit + lateDeduction + absenceDeduction + halfDayDeduction + incompleteDeduction + otherDeductions;
+      const netSalary    = grossSalary - epfEmployee - apit - otherDeductions;
 
       const record = {
         employeeId: emp.id,
@@ -281,14 +380,16 @@ router.post("/generate", async (req, res) => {
         presentDays,
         absentDays,
         lateDays,
+        halfDays: halfDaysCount,
         leaveDays,
         holidayDays,
-        overtimeHours: Math.round(totalOTHours * 100) / 100,
+        overtimeHours: Math.round(regularOtHours * 100) / 100,
         basicSalary,
         transportAllowance,
         housingAllowance,
         otherAllowances,
         overtimePay,
+        holidayOtPay,
         grossSalary,
         epfEmployee,
         epfEmployer,
@@ -296,6 +397,8 @@ router.post("/generate", async (req, res) => {
         apit,
         lateDeduction,
         absenceDeduction,
+        halfDayDeduction,
+        incompleteDeduction,
         otherDeductions,
         totalDeductions,
         netSalary,
@@ -336,7 +439,7 @@ router.get("/summary", async (req, res) => {
       totalEPF: rows.reduce((s, r) => s + r.epfEmployee + r.epfEmployer, 0),
       totalETF: rows.reduce((s, r) => s + r.etfEmployer, 0),
       totalAPIT: rows.reduce((s, r) => s + r.apit, 0),
-      totalOTPay: rows.reduce((s, r) => s + r.overtimePay, 0),
+      totalOTPay: rows.reduce((s, r) => s + r.overtimePay + (r.holidayOtPay ?? 0), 0),
       statusCounts: {
         draft: rows.filter(r => r.status === "draft").length,
         approved: rows.filter(r => r.status === "approved").length,

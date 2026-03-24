@@ -15,6 +15,7 @@ export const payrollRecords = pgTable("payroll_records", {
   presentDays: integer("present_days").notNull().default(0),
   absentDays: integer("absent_days").notNull().default(0),
   lateDays: integer("late_days").notNull().default(0),
+  halfDays: integer("half_days").notNull().default(0),
   leaveDays: integer("leave_days").notNull().default(0),
   holidayDays: integer("holiday_days").notNull().default(0),
   overtimeHours: real("overtime_hours").notNull().default(0),
@@ -24,6 +25,7 @@ export const payrollRecords = pgTable("payroll_records", {
   housingAllowance: real("housing_allowance").notNull().default(0),
   otherAllowances: real("other_allowances").notNull().default(0),
   overtimePay: real("overtime_pay").notNull().default(0),
+  holidayOtPay: real("holiday_ot_pay").notNull().default(0),
   grossSalary: real("gross_salary").notNull().default(0),
 
   epfEmployee: real("epf_employee").notNull().default(0),
@@ -32,6 +34,8 @@ export const payrollRecords = pgTable("payroll_records", {
   apit: real("apit").notNull().default(0),
   lateDeduction: real("late_deduction").notNull().default(0),
   absenceDeduction: real("absence_deduction").notNull().default(0),
+  halfDayDeduction: real("half_day_deduction").notNull().default(0),
+  incompleteDeduction: real("incomplete_deduction").notNull().default(0),
   otherDeductions: real("other_deductions").notNull().default(0),
   totalDeductions: real("total_deductions").notNull().default(0),
 
@@ -58,9 +62,9 @@ export const salaryStructures = pgTable("salary_structures", {
   name: text("name").notNull(),
   currency: text("currency").notNull().default("LKR"),
   status: text("status").notNull().$type<"active" | "inactive">().default("active"),
-  earnings: text("earnings").notNull().default("[]"),      // JSON array of SalaryComponent
-  deductions: text("deductions").notNull().default("[]"),  // JSON array of SalaryComponent
-  variablePay: text("variable_pay").notNull().default("[]"), // JSON array
+  earnings: text("earnings").notNull().default("[]"),
+  deductions: text("deductions").notNull().default("[]"),
+  variablePay: text("variable_pay").notNull().default("[]"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

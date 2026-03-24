@@ -13,14 +13,24 @@ function apiUrl(path: string) { return `${BASE}/api${path}`; }
 
 /* ─── Salary Scale defaults ──────────────────────────────── */
 const DEFAULT_SALARY_SCALE: Record<string, number> = {
-  "Postmaster General": 150000, "Deputy Postmaster General": 120000,
-  "Regional Postmaster": 80000, "Sub Postmaster": 60000,
-  "Postal Supervisor": 55000, "Senior Postal Officer": 50000,
-  "Postal Officer": 45000, "Counter Clerk": 40000,
-  "Sorting Officer": 38000, "Delivery Agent": 35000,
-  "Accounts Officer": 55000, "HR Officer": 50000, "IT Officer": 55000,
-  "PSB Officer": 48000, "Driver": 38000, "Security Officer": 35000,
-  "Clerical Assistant": 32000, "Data Entry Operator": 35000,
+  "General Manager":      150000,
+  "Operations Manager":   120000,
+  "F&B Manager":          100000,
+  "HR Manager":            90000,
+  "Accountant":            75000,
+  "Admin Officer":         65000,
+  "Kitchen Supervisor":    60000,
+  "Kitchen Staff":         45000,
+  "Room Supervisor":       60000,
+  "Room Attendant":        45000,
+  "Head Gardener":         50000,
+  "Gardener":              40000,
+  "Head Surf Instructor":  60000,
+  "Surf Instructor":       45000,
+  "Night Watcher":         40000,
+  "Security Officer":      40000,
+  "Cashier":               42000,
+  "Driver":                38000,
 };
 
 /* ─── Types ──────────────────────────────────────────────── */
@@ -29,7 +39,12 @@ interface PayrollConfig {
   transportAllowance: number;
   housingAllowanceLow: number; housingAllowanceMid: number; housingAllowanceHigh: number;
   housingMidThreshold: number; housingHighThreshold: number;
-  otherAllowances: number; lateDeductionPerInstance: number; overtimeMultiplier: number;
+  otherAllowances: number;
+  overtimeMultiplier: number;
+  statutoryOtMultiplier: number;
+  poyaOtMultiplier: number;
+  publicHolidayOtMultiplier: number;
+  offDayOtMultiplier: number;
   salaryScale: Record<string, number>; employeeOverrides: Record<string, number>;
 }
 const DEFAULTS: PayrollConfig = {
@@ -37,7 +52,12 @@ const DEFAULTS: PayrollConfig = {
   transportAllowance: 5000,
   housingAllowanceLow: 3000, housingAllowanceMid: 7000, housingAllowanceHigh: 10000,
   housingMidThreshold: 50000, housingHighThreshold: 80000,
-  otherAllowances: 1500, lateDeductionPerInstance: 100, overtimeMultiplier: 1.5,
+  otherAllowances: 1500,
+  overtimeMultiplier: 1.5,
+  statutoryOtMultiplier: 2.0,
+  poyaOtMultiplier: 1.5,
+  publicHolidayOtMultiplier: 1.5,
+  offDayOtMultiplier: 1.5,
   salaryScale: { ...DEFAULT_SALARY_SCALE }, employeeOverrides: {},
 };
 

@@ -15,9 +15,9 @@ function apiUrl(path: string) { return `${BASE}/api${path}`; }
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 const TYPE_STYLE: Record<string, string> = {
-  national:  "bg-blue-100 text-blue-700 border border-blue-200",
-  religious: "bg-purple-100 text-purple-700 border border-purple-200",
-  special:   "bg-amber-100 text-amber-700 border border-amber-200",
+  statutory: "bg-blue-100 text-blue-700 border border-blue-200",
+  poya:      "bg-purple-100 text-purple-700 border border-purple-200",
+  public:    "bg-amber-100 text-amber-700 border border-amber-200",
 };
 
 
@@ -41,7 +41,7 @@ export default function Settings() {
   const removeHoliday = useDeleteHoliday();
 
   const [copied, setCopied]       = useState(false);
-  const [newHoliday, setNewHoliday] = useState({ name: "", date: "", type: "national", description: "" });
+  const [newHoliday, setNewHoliday] = useState({ name: "", date: "", type: "statutory", description: "" });
   const [showAdd, setShowAdd]     = useState(false);
 
   const [orgSaved,  setOrgSaved]  = useState(false);
@@ -129,14 +129,24 @@ export default function Settings() {
   function setHr(k: string, v: string) { setHrSettings(s => ({ ...s, [k]: v })); }
 
   const DEFAULT_SALARY_SCALE: Record<string, number> = {
-    "Postmaster General": 150000, "Deputy Postmaster General": 120000,
-    "Regional Postmaster": 80000, "Sub Postmaster": 60000,
-    "Postal Supervisor": 55000, "Senior Postal Officer": 50000,
-    "Postal Officer": 45000, "Counter Clerk": 40000,
-    "Sorting Officer": 38000, "Delivery Agent": 35000,
-    "Accounts Officer": 55000, "HR Officer": 50000, "IT Officer": 55000,
-    "PSB Officer": 48000, "Driver": 38000, "Security Officer": 35000,
-    "Clerical Assistant": 32000, "Data Entry Operator": 35000,
+    "General Manager":      150000,
+    "Operations Manager":   120000,
+    "F&B Manager":          100000,
+    "HR Manager":            90000,
+    "Accountant":            75000,
+    "Admin Officer":         65000,
+    "Kitchen Supervisor":    60000,
+    "Kitchen Staff":         45000,
+    "Room Supervisor":       60000,
+    "Room Attendant":        45000,
+    "Head Gardener":         50000,
+    "Gardener":              40000,
+    "Head Surf Instructor":  60000,
+    "Surf Instructor":       45000,
+    "Night Watcher":         40000,
+    "Security Officer":      40000,
+    "Cashier":               42000,
+    "Driver":                38000,
   };
 
   const [payrollCfg, setPayrollCfg] = useState({
@@ -144,7 +154,12 @@ export default function Settings() {
     transportAllowance: 5000,
     housingAllowanceLow: 3000, housingAllowanceMid: 7000, housingAllowanceHigh: 10000,
     housingMidThreshold: 50000, housingHighThreshold: 80000,
-    otherAllowances: 1500, lateDeductionPerInstance: 100, overtimeMultiplier: 1.5,
+    otherAllowances: 1500,
+    overtimeMultiplier: 1.5,
+    statutoryOtMultiplier: 2.0,
+    poyaOtMultiplier: 1.5,
+    publicHolidayOtMultiplier: 1.5,
+    offDayOtMultiplier: 1.5,
     salaryScale: { ...DEFAULT_SALARY_SCALE } as Record<string, number>,
   });
   const [payrollLoading, setPayrollLoading] = useState(false);
@@ -171,8 +186,11 @@ export default function Settings() {
             housingMidThreshold: d.housingMidThreshold,
             housingHighThreshold: d.housingHighThreshold,
             otherAllowances: d.otherAllowances,
-            lateDeductionPerInstance: d.lateDeductionPerInstance,
             overtimeMultiplier: d.overtimeMultiplier,
+            statutoryOtMultiplier: d.statutoryOtMultiplier ?? 2.0,
+            poyaOtMultiplier: d.poyaOtMultiplier ?? 1.5,
+            publicHolidayOtMultiplier: d.publicHolidayOtMultiplier ?? 1.5,
+            offDayOtMultiplier: d.offDayOtMultiplier ?? 1.5,
             salaryScale: d.salaryScale || { ...DEFAULT_SALARY_SCALE },
           });
         }
@@ -228,8 +246,8 @@ export default function Settings() {
     byMonth[m].push(h);
   });
 
-  const national  = (holidays || []).filter(h => h.type === "national");
-  const religious = (holidays || []).filter(h => h.type === "religious");
+  const statutory = (holidays || []).filter(h => h.type === "statutory");
+  const poya      = (holidays || []).filter(h => h.type === "poya");
 
   function saveFn(setter: (v: boolean) => void) {
     setter(true);
@@ -581,56 +599,67 @@ export default function Settings() {
                   <p className="text-[10px] text-muted-foreground mt-1">Miscellaneous allowances</p>
                 </div>
                 <div>
-                  <Label className="text-xs font-medium">Overtime Multiplier</Label>
+                  <Label className="text-xs font-medium">Weekday OT Multiplier</Label>
                   <Input type="number" step="0.1" min="1" max="5"
                     value={payrollCfg.overtimeMultiplier}
                     onChange={e => setPay("overtimeMultiplier", parseFloat(e.target.value))}
                     className="mt-1" />
-                  <p className="text-[10px] text-muted-foreground mt-1">e.g. 1.5 = 1.5× hourly rate for OT</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">e.g. 1.5 = 1.5× hourly rate for regular OT</p>
                 </div>
               </div>
+            </Card>
 
-              <div className="mt-4">
-                <p className="text-xs font-semibold mb-2">Housing Allowance Tiers</p>
-                <p className="text-[10px] text-muted-foreground mb-3">Housing allowance is determined by the employee's basic salary. Set three tiers below.</p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-muted/30 border border-border rounded-xl p-3">
-                    <p className="text-xs font-semibold text-muted-foreground mb-2">Low Tier</p>
-                    <Label className="text-[10px]">Amount (Rs.)</Label>
-                    <Input type="number" min="0" value={payrollCfg.housingAllowanceLow}
-                      onChange={e => setPay("housingAllowanceLow", parseInt(e.target.value))} className="mt-1 h-8 text-sm" />
-                    <p className="text-[10px] text-muted-foreground mt-1.5">For basic salary below Rs. {payrollCfg.housingMidThreshold.toLocaleString()}</p>
+            {/* Holiday OT Multipliers */}
+            <Card className="p-5">
+              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border">
+                <Calendar className="w-4 h-4 text-amber-600" />
+                <span className="text-sm font-bold">Holiday OT Multipliers</span>
+                <span className="text-xs text-muted-foreground ml-1">— Rate applied when working on a holiday</span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <Label className="text-xs font-medium">Statutory Holiday</Label>
+                  <div className="relative mt-1">
+                    <Input type="number" step="0.1" min="1" max="5"
+                      value={payrollCfg.statutoryOtMultiplier}
+                      onChange={e => setPay("statutoryOtMultiplier", parseFloat(e.target.value))}
+                      className="pr-6" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">×</span>
                   </div>
-                  <div className="bg-muted/30 border border-border rounded-xl p-3">
-                    <p className="text-xs font-semibold text-muted-foreground mb-2">Mid Tier</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <Label className="text-[10px]">Amount (Rs.)</Label>
-                        <Input type="number" min="0" value={payrollCfg.housingAllowanceMid}
-                          onChange={e => setPay("housingAllowanceMid", parseInt(e.target.value))} className="mt-1 h-8 text-sm" />
-                      </div>
-                      <div>
-                        <Label className="text-[10px]">Min. Basic (Rs.)</Label>
-                        <Input type="number" min="0" value={payrollCfg.housingMidThreshold}
-                          onChange={e => setPay("housingMidThreshold", parseInt(e.target.value))} className="mt-1 h-8 text-sm" />
-                      </div>
-                    </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">Gazetted statutory days (default: 2.0×)</p>
+                </div>
+                <div>
+                  <Label className="text-xs font-medium">Poya Day</Label>
+                  <div className="relative mt-1">
+                    <Input type="number" step="0.1" min="1" max="5"
+                      value={payrollCfg.poyaOtMultiplier}
+                      onChange={e => setPay("poyaOtMultiplier", parseFloat(e.target.value))}
+                      className="pr-6" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">×</span>
                   </div>
-                  <div className="bg-muted/30 border border-border rounded-xl p-3">
-                    <p className="text-xs font-semibold text-muted-foreground mb-2">High Tier</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <Label className="text-[10px]">Amount (Rs.)</Label>
-                        <Input type="number" min="0" value={payrollCfg.housingAllowanceHigh}
-                          onChange={e => setPay("housingAllowanceHigh", parseInt(e.target.value))} className="mt-1 h-8 text-sm" />
-                      </div>
-                      <div>
-                        <Label className="text-[10px]">Min. Basic (Rs.)</Label>
-                        <Input type="number" min="0" value={payrollCfg.housingHighThreshold}
-                          onChange={e => setPay("housingHighThreshold", parseInt(e.target.value))} className="mt-1 h-8 text-sm" />
-                      </div>
-                    </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">Full moon / Poya holidays (default: 1.5×)</p>
+                </div>
+                <div>
+                  <Label className="text-xs font-medium">Public Holiday</Label>
+                  <div className="relative mt-1">
+                    <Input type="number" step="0.1" min="1" max="5"
+                      value={payrollCfg.publicHolidayOtMultiplier}
+                      onChange={e => setPay("publicHolidayOtMultiplier", parseFloat(e.target.value))}
+                      className="pr-6" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">×</span>
                   </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">Other public holidays (default: 1.5×)</p>
+                </div>
+                <div>
+                  <Label className="text-xs font-medium">Off-Day (Sunday)</Label>
+                  <div className="relative mt-1">
+                    <Input type="number" step="0.1" min="1" max="5"
+                      value={payrollCfg.offDayOtMultiplier}
+                      onChange={e => setPay("offDayOtMultiplier", parseFloat(e.target.value))}
+                      className="pr-6" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">×</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">Working on weekly off-day (default: 1.5×)</p>
                 </div>
               </div>
             </Card>
@@ -641,23 +670,15 @@ export default function Settings() {
                 <X className="w-4 h-4 text-red-600" />
                 <span className="text-sm font-bold">Deduction Rules</span>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div>
-                  <Label className="text-xs font-medium">Late Deduction per Instance (Rs.)</Label>
-                  <Input type="number" min="0"
-                    value={payrollCfg.lateDeductionPerInstance}
-                    onChange={e => setPay("lateDeductionPerInstance", parseInt(e.target.value))}
-                    className="mt-1" />
-                  <p className="text-[10px] text-muted-foreground mt-1">Deducted for each late arrival</p>
-                </div>
-                <div className="md:col-span-2 p-3 bg-muted/30 rounded-lg">
-                  <p className="text-xs font-medium text-muted-foreground">Absence & Half-day Deductions</p>
-                  <p className="text-[10px] text-muted-foreground mt-1">
-                    <strong>Absence:</strong> Calculated as (Basic Salary ÷ Working Days) × Absent Days<br />
-                    <strong>Half-day:</strong> Calculated as (Daily Rate ÷ 2) × Half-day Count
-                  </p>
-                  <p className="text-[10px] text-blue-600 mt-1">These are automatically computed from attendance and cannot be configured manually.</p>
-                </div>
+              <div className="p-3 bg-muted/30 rounded-lg">
+                <p className="text-xs font-medium text-muted-foreground mb-1">Automatic Deductions</p>
+                <p className="text-[10px] text-muted-foreground">
+                  <strong>Late:</strong> (Late minutes × Minute Rate) — Minute Rate = Basic ÷ (Working Days × 8 × 60)<br />
+                  <strong>Absence:</strong> (Basic ÷ Working Days) × Absent Days<br />
+                  <strong>Half-day:</strong> (Daily Rate ÷ 2) × Half-day Count<br />
+                  <strong>Incomplete hours:</strong> Shortfall minutes × Minute Rate (exempt: Surf Instructors)
+                </p>
+                <p className="text-[10px] text-blue-600 mt-1">All deductions are automatically computed from attendance records.</p>
               </div>
             </Card>
 
@@ -744,15 +765,15 @@ export default function Settings() {
                 <div className="flex gap-4 text-xs">
                   <span className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />
-                    National <span className="font-bold ml-0.5">({national.length})</span>
+                    Statutory <span className="font-bold ml-0.5">({statutory.length})</span>
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block" />
-                    Religious <span className="font-bold ml-0.5">({religious.length})</span>
+                    Poya <span className="font-bold ml-0.5">({poya.length})</span>
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
-                    Special <span className="font-bold ml-0.5">({(holidays || []).filter(h=>h.type==="special").length})</span>
+                    Public <span className="font-bold ml-0.5">({(holidays || []).filter(h=>h.type==="public").length})</span>
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-gray-400 inline-block" />
@@ -774,9 +795,9 @@ export default function Settings() {
                       <Input type="date" value={newHoliday.date} onChange={e => setNewHoliday(h => ({ ...h, date: e.target.value }))} /></div>
                     <div><Label className="text-xs">Type</Label>
                       <Select value={newHoliday.type} onChange={e => setNewHoliday(h => ({ ...h, type: e.target.value }))}>
-                        <option value="national">National</option>
-                        <option value="religious">Religious</option>
-                        <option value="special">Special</option>
+                        <option value="statutory">Statutory (2.0× OT)</option>
+                        <option value="poya">Poya Day (1.5× OT)</option>
+                        <option value="public">Public Holiday (1.5× OT)</option>
                       </Select></div>
                     <div><Label className="text-xs">Description (optional)</Label>
                       <Input placeholder="Details..." value={newHoliday.description} onChange={e => setNewHoliday(h => ({ ...h, description: e.target.value }))} /></div>
@@ -828,8 +849,8 @@ export default function Settings() {
                                     <p className="text-xs font-medium leading-tight truncate">
                                       {h.name}
                                     </p>
-                                    <span className={cn("text-xs px-1.5 py-0 rounded", TYPE_STYLE[h.type] || TYPE_STYLE.special)}>
-                                      {h.type === "national" ? "National" : h.type === "religious" ? "Religious" : "Special"}
+                                    <span className={cn("text-xs px-1.5 py-0 rounded", TYPE_STYLE[h.type] || TYPE_STYLE.public)}>
+                                      {h.type === "statutory" ? "Statutory" : h.type === "poya" ? "Poya" : "Public"}
                                     </span>
                                   </div>
                                 </div>
@@ -874,7 +895,9 @@ export default function Settings() {
                             <td className={cn("px-3 py-2", isSun && "text-red-500 font-medium")}>{day}</td>
                             <td className="px-3 py-2 font-medium">{h.name}</td>
                             <td className="px-3 py-2">
-                              <span className={cn("px-2 py-0.5 rounded text-xs", TYPE_STYLE[h.type] || TYPE_STYLE.special)}>{h.type}</span>
+                              <span className={cn("px-2 py-0.5 rounded text-xs", TYPE_STYLE[h.type] || TYPE_STYLE.public)}>
+                                {h.type === "statutory" ? "Statutory" : h.type === "poya" ? "Poya" : "Public"}
+                              </span>
                             </td>
                             <td className="px-3 py-2 text-right">
                               <button onClick={() => { if(confirm(`Remove "${h.name}"?`)) removeHoliday.mutate({ id: h.id }, { onSuccess: refetch }); }}
