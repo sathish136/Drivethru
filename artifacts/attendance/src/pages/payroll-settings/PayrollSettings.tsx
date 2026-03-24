@@ -1,25 +1,43 @@
 import { useState, useEffect } from "react";
-import { PageHeader, Card, Button, Input, Label } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
-  Banknote, Percent, DollarSign, Save, RefreshCw, Check,
-  Edit2, X, Info, AlertTriangle, SlidersHorizontal, Users, ChevronRight,
-  Search, UserCheck, Undo2
+  Plus, Trash2, Edit2, Check, X, RefreshCw, Save,
+  AlertTriangle, ChevronRight, Settings2,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 function apiUrl(path: string) { return `${BASE}/api${path}`; }
 
-const DEFAULT_SALARY_SCALE: Record<string, number> = {
-  "Postmaster General": 150000, "Deputy Postmaster General": 120000,
-  "Regional Postmaster": 80000, "Sub Postmaster": 60000,
-  "Postal Supervisor": 55000, "Senior Postal Officer": 50000,
-  "Postal Officer": 45000, "Counter Clerk": 40000,
-  "Sorting Officer": 38000, "Delivery Agent": 35000,
-  "Accounts Officer": 55000, "HR Officer": 50000, "IT Officer": 55000,
-  "PSB Officer": 48000, "Driver": 38000, "Security Officer": 35000,
-  "Clerical Assistant": 32000, "Data Entry Operator": 35000,
-};
+interface SalaryComponent {
+  id: string;
+  no: number;
+  component: string;
+  abbr: string;
+  amount: number;
+  dependsOnPayroll: boolean;
+  isTaxExempt: boolean;
+  isAccrual: boolean;
+  hasFormula: boolean;
+  formula: string;
+}
+
+const DEFAULT_EARNINGS: SalaryComponent[] = [
+  { id: "basic", no: 1, component: "Basic", abbr: "B", amount: 40000, dependsOnPayroll: true, isTaxExempt: true, isAccrual: false, hasFormula: false, formula: "" },
+  { id: "transport", no: 2, component: "Transport Allowance", abbr: "TA", amount: 5000, dependsOnPayroll: false, isTaxExempt: false, isAccrual: false, hasFormula: false, formula: "" },
+  { id: "housing", no: 3, component: "Housing Allowance", abbr: "HA", amount: 3000, dependsOnPayroll: false, isTaxExempt: false, isAccrual: false, hasFormula: false, formula: "" },
+  { id: "other", no: 4, component: "Other Allowances", abbr: "OA", amount: 1500, dependsOnPayroll: false, isTaxExempt: false, isAccrual: false, hasFormula: false, formula: "" },
+];
+
+const DEFAULT_DEDUCTIONS: SalaryComponent[] = [
+  { id: "epf8", no: 1, component: "EPF - 8%", abbr: "epf", amount: 0, dependsOnPayroll: false, isTaxExempt: false, isAccrual: false, hasFormula: true, formula: "B * 0.08" },
+  { id: "epf12", no: 2, component: "EPF - 12%", abbr: "epf12", amount: 0, dependsOnPayroll: false, isTaxExempt: false, isAccrual: false, hasFormula: true, formula: "B * 0.12" },
+  { id: "etf3", no: 3, component: "ETF - 3%", abbr: "etf3", amount: 0, dependsOnPayroll: false, isTaxExempt: false, isAccrual: false, hasFormula: true, formula: "B * 0.03" },
+  { id: "late", no: 4, component: "Late Deduction", abbr: "LD", amount: 100, dependsOnPayroll: false, isTaxExempt: false, isAccrual: false, hasFormula: false, formula: "" },
+];
+
+const DEFAULT_BENEFITS: { no: number; earningComponent: string; benefitAmount: number }[] = [];
+
+type Tab = "details" | "earnings" | "account";
 
 interface PayrollConfig {
   epfEmployeePercent: number;
@@ -27,10 +45,6 @@ interface PayrollConfig {
   etfEmployerPercent: number;
   transportAllowance: number;
   housingAllowanceLow: number;
-  housingAllowanceMid: number;
-  housingAllowanceHigh: number;
-  housingMidThreshold: number;
-  housingHighThreshold: number;
   otherAllowances: number;
   lateDeductionPerInstance: number;
   overtimeMultiplier: number;
@@ -38,50 +52,192 @@ interface PayrollConfig {
   employeeOverrides: Record<string, number>;
 }
 
-const DEFAULTS: PayrollConfig = {
-  epfEmployeePercent: 8, epfEmployerPercent: 12, etfEmployerPercent: 3,
-  transportAllowance: 5000,
-  housingAllowanceLow: 3000, housingAllowanceMid: 7000, housingAllowanceHigh: 10000,
-  housingMidThreshold: 50000, housingHighThreshold: 80000,
-  otherAllowances: 1500, lateDeductionPerInstance: 100, overtimeMultiplier: 1.5,
-  salaryScale: { ...DEFAULT_SALARY_SCALE },
-  employeeOverrides: {},
-};
+function CheckboxCell({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!checked)}
+      className={cn(
+        "w-4 h-4 border rounded flex items-center justify-center transition-colors mx-auto",
+        checked ? "bg-primary border-primary" : "bg-white border-gray-300"
+      )}
+    >
+      {checked && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+    </button>
+  );
+}
 
-type Tab = "general" | "scale" | "fitment";
+function ComponentTable({
+  rows, onUpdate, onDelete, onAdd, addLabel, currency = "LKR",
+}: {
+  rows: SalaryComponent[];
+  onUpdate: (id: string, field: keyof SalaryComponent, value: any) => void;
+  onDelete: (id: string) => void;
+  onAdd: () => void;
+  addLabel: string;
+  currency?: string;
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editVal, setEditVal] = useState("");
 
-const TABS: { key: Tab; label: string; icon: React.ElementType; desc: string }[] = [
-  { key: "general",  label: "General Settings",       icon: SlidersHorizontal, desc: "EPF/ETF, allowances & deductions" },
-  { key: "scale",    label: "Designation Salary Scale", icon: Banknote,          desc: "Basic salary by designation" },
-  { key: "fitment",  label: "Employee Fitment",        icon: Users,             desc: "Direct salary assignments per employee" },
-];
+  function startEdit(id: string, field: string, val: string) {
+    setEditingId(id); setEditingField(field); setEditVal(val);
+  }
 
-interface Employee {
-  id: number;
-  employeeId: string;
-  fullName: string;
-  designation: string;
-  department: string;
-  employeeType: string;
-  status: string;
+  function confirmEdit() {
+    if (!editingId || !editingField) return;
+    if (editingField === "amount") {
+      const v = parseFloat(editVal);
+      if (!isNaN(v)) onUpdate(editingId, "amount", v);
+    } else {
+      onUpdate(editingId, editingField as keyof SalaryComponent, editVal);
+    }
+    setEditingId(null); setEditingField(null);
+  }
+
+  function handleKey(e: React.KeyboardEvent) {
+    if (e.key === "Enter") confirmEdit();
+    if (e.key === "Escape") { setEditingId(null); setEditingField(null); }
+  }
+
+  const isEditing = (id: string, field: string) => editingId === id && editingField === field;
+
+  function EditableCell({ id, field, value, className = "" }: { id: string; field: string; value: string; className?: string }) {
+    if (isEditing(id, field)) {
+      return (
+        <input
+          autoFocus
+          value={editVal}
+          onChange={e => setEditVal(e.target.value)}
+          onBlur={confirmEdit}
+          onKeyDown={handleKey}
+          className={cn("border border-primary rounded px-1.5 py-0.5 text-xs outline-none w-full", className)}
+        />
+      );
+    }
+    return (
+      <span
+        className="cursor-pointer hover:text-primary group-hover:underline decoration-dashed underline-offset-2"
+        onClick={() => startEdit(id, field, value)}
+      >
+        {value || <span className="text-gray-300 italic">—</span>}
+      </span>
+    );
+  }
+
+  return (
+    <div className="border border-gray-200 rounded overflow-hidden text-sm">
+      <table className="w-full">
+        <thead>
+          <tr className="bg-gray-50 border-b border-gray-200">
+            <th className="w-8 px-3 py-2">
+              <input type="checkbox" className="w-3.5 h-3.5 accent-primary" />
+            </th>
+            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 w-10">No.</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Component <span className="text-red-500">*</span></th>
+            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 w-24">Abbr</th>
+            <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 w-36">Amount ({currency})</th>
+            <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 w-20">Depen...</th>
+            <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 w-20">Is Tax ...</th>
+            <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 w-20">Accru...</th>
+            <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 w-20">Amoun...</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Formula</th>
+            <th className="px-3 py-2 w-10">
+              <Settings2 className="w-3.5 h-3.5 text-gray-400 mx-auto" />
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {rows.map((row) => (
+            <tr key={row.id} className="group hover:bg-blue-50/30 transition-colors">
+              <td className="px-3 py-2.5 text-center">
+                <input type="checkbox" className="w-3.5 h-3.5 accent-primary" />
+              </td>
+              <td className="px-3 py-2.5 text-xs text-gray-400">{row.no}</td>
+              <td className="px-3 py-2.5 font-semibold text-gray-800">
+                <EditableCell id={row.id} field="component" value={row.component} />
+              </td>
+              <td className="px-3 py-2.5 text-gray-500">
+                <EditableCell id={row.id} field="abbr" value={row.abbr} className="w-20" />
+              </td>
+              <td className="px-3 py-2.5 text-right text-gray-700">
+                {isEditing(row.id, "amount") ? (
+                  <input
+                    autoFocus
+                    value={editVal}
+                    onChange={e => setEditVal(e.target.value)}
+                    onBlur={confirmEdit}
+                    onKeyDown={handleKey}
+                    className="border border-primary rounded px-1.5 py-0.5 text-xs outline-none w-28 text-right ml-auto block"
+                  />
+                ) : (
+                  <span
+                    className="cursor-pointer hover:text-primary"
+                    onClick={() => startEdit(row.id, "amount", String(row.amount))}
+                  >
+                    Rs {row.amount.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                )}
+              </td>
+              <td className="px-3 py-2.5 text-center">
+                <CheckboxCell checked={row.dependsOnPayroll} onChange={v => onUpdate(row.id, "dependsOnPayroll", v)} />
+              </td>
+              <td className="px-3 py-2.5 text-center">
+                <CheckboxCell checked={row.isTaxExempt} onChange={v => onUpdate(row.id, "isTaxExempt", v)} />
+              </td>
+              <td className="px-3 py-2.5 text-center">
+                <CheckboxCell checked={row.isAccrual} onChange={v => onUpdate(row.id, "isAccrual", v)} />
+              </td>
+              <td className="px-3 py-2.5 text-center">
+                <CheckboxCell checked={row.hasFormula} onChange={v => onUpdate(row.id, "hasFormula", v)} />
+              </td>
+              <td className="px-3 py-2.5 text-gray-500 font-mono text-xs">
+                {row.hasFormula
+                  ? <EditableCell id={row.id} field="formula" value={row.formula} className="w-28 font-mono" />
+                  : <span className="text-gray-300">—</span>}
+              </td>
+              <td className="px-3 py-2.5 text-center">
+                <button
+                  onClick={() => onDelete(row.id)}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500"
+                  title="Remove"
+                >
+                  <Edit2 className="w-3 h-3" />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="border-t border-gray-100 px-3 py-2">
+        <button
+          onClick={onAdd}
+          className="text-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1 transition-colors"
+        >
+          <Plus className="w-3.5 h-3.5" /> {addLabel}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default function PayrollSettings() {
-  const [tab, setTab] = useState<Tab>("general");
-  const [cfg, setCfg] = useState<PayrollConfig>(DEFAULTS);
+  const [tab, setTab] = useState<Tab>("earnings");
+  const [earnings, setEarnings] = useState<SalaryComponent[]>(DEFAULT_EARNINGS);
+  const [deductions, setDeductions] = useState<SalaryComponent[]>(DEFAULT_DEDUCTIONS);
+  const [benefits, setBenefits] = useState(DEFAULT_BENEFITS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [editingDesig, setEditingDesig] = useState<string | null>(null);
-  const [editDesigVal, setEditDesigVal] = useState("");
-
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [empsLoading, setEmpsLoading] = useState(false);
-  const [empSearch, setEmpSearch] = useState("");
-  const [editingEmpId, setEditingEmpId] = useState<number | null>(null);
-  const [editEmpVal, setEditEmpVal] = useState("");
+  /* General settings (kept for API compatibility) */
+  const [cfg, setCfg] = useState<PayrollConfig>({
+    epfEmployeePercent: 8, epfEmployerPercent: 12, etfEmployerPercent: 3,
+    transportAllowance: 5000, housingAllowanceLow: 3000, otherAllowances: 1500,
+    lateDeductionPerInstance: 100, overtimeMultiplier: 1.5,
+    salaryScale: {}, employeeOverrides: {},
+  });
 
   useEffect(() => {
     setLoading(true);
@@ -89,89 +245,91 @@ export default function PayrollSettings() {
       .then(r => r.json())
       .then(d => {
         if (d.id) {
-          setCfg({
-            epfEmployeePercent: d.epfEmployeePercent,
-            epfEmployerPercent: d.epfEmployerPercent,
-            etfEmployerPercent: d.etfEmployerPercent,
-            transportAllowance: d.transportAllowance,
-            housingAllowanceLow: d.housingAllowanceLow,
-            housingAllowanceMid: d.housingAllowanceMid,
-            housingAllowanceHigh: d.housingAllowanceHigh,
-            housingMidThreshold: d.housingMidThreshold,
-            housingHighThreshold: d.housingHighThreshold,
-            otherAllowances: d.otherAllowances,
-            lateDeductionPerInstance: d.lateDeductionPerInstance,
-            overtimeMultiplier: d.overtimeMultiplier,
-            salaryScale: d.salaryScale && typeof d.salaryScale === "object" ? d.salaryScale : { ...DEFAULT_SALARY_SCALE },
-            employeeOverrides: d.employeeOverrides && typeof d.employeeOverrides === "object" ? d.employeeOverrides : {},
-          });
+          setCfg(prev => ({
+            ...prev,
+            epfEmployeePercent: d.epfEmployeePercent ?? prev.epfEmployeePercent,
+            epfEmployerPercent: d.epfEmployerPercent ?? prev.epfEmployerPercent,
+            etfEmployerPercent: d.etfEmployerPercent ?? prev.etfEmployerPercent,
+            transportAllowance: d.transportAllowance ?? prev.transportAllowance,
+            housingAllowanceLow: d.housingAllowanceLow ?? prev.housingAllowanceLow,
+            otherAllowances: d.otherAllowances ?? prev.otherAllowances,
+            lateDeductionPerInstance: d.lateDeductionPerInstance ?? prev.lateDeductionPerInstance,
+            overtimeMultiplier: d.overtimeMultiplier ?? prev.overtimeMultiplier,
+            salaryScale: d.salaryScale ?? prev.salaryScale,
+            employeeOverrides: d.employeeOverrides ?? prev.employeeOverrides,
+          }));
+          /* Sync table rows from loaded config */
+          setEarnings(e => e.map(row => {
+            if (row.id === "transport") return { ...row, amount: d.transportAllowance ?? row.amount };
+            if (row.id === "housing") return { ...row, amount: d.housingAllowanceLow ?? row.amount };
+            if (row.id === "other") return { ...row, amount: d.otherAllowances ?? row.amount };
+            return row;
+          }));
+          setDeductions(de => de.map(row => {
+            if (row.id === "epf8") return { ...row, formula: `B * ${((d.epfEmployeePercent ?? 8) / 100).toFixed(2)}` };
+            if (row.id === "epf12") return { ...row, formula: `B * ${((d.epfEmployerPercent ?? 12) / 100).toFixed(2)}` };
+            if (row.id === "etf3") return { ...row, formula: `B * ${((d.etfEmployerPercent ?? 3) / 100).toFixed(2)}` };
+            if (row.id === "late") return { ...row, amount: d.lateDeductionPerInstance ?? row.amount };
+            return row;
+          }));
         }
       })
-      .catch(() => setError("Failed to load payroll settings"))
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
-    if (tab !== "fitment" || employees.length > 0) return;
-    setEmpsLoading(true);
-    fetch(apiUrl("/employees"))
-      .then(r => r.json())
-      .then(d => setEmployees(Array.isArray(d) ? d.filter((e: Employee) => e.status === "active") : []))
-      .catch(() => setError("Failed to load employees"))
-      .finally(() => setEmpsLoading(false));
-  }, [tab]);
-
-  function set(k: keyof PayrollConfig, v: any) { setCfg(s => ({ ...s, [k]: v })); }
-
   async function save() {
     setSaving(true); setError(null);
+    /* Derive config values from table rows */
+    const epfRow = deductions.find(r => r.id === "epf8");
+    const epf12Row = deductions.find(r => r.id === "epf12");
+    const etfRow = deductions.find(r => r.id === "etf3");
+    const lateRow = deductions.find(r => r.id === "late");
+    const transportRow = earnings.find(r => r.id === "transport");
+    const housingRow = earnings.find(r => r.id === "housing");
+    const otherRow = earnings.find(r => r.id === "other");
+
+    const payload = {
+      ...cfg,
+      transportAllowance: transportRow?.amount ?? cfg.transportAllowance,
+      housingAllowanceLow: housingRow?.amount ?? cfg.housingAllowanceLow,
+      otherAllowances: otherRow?.amount ?? cfg.otherAllowances,
+      lateDeductionPerInstance: lateRow?.amount ?? cfg.lateDeductionPerInstance,
+      epfEmployeePercent: epfRow ? parseFloat((epfRow.formula.split("*")[1] ?? "0.08").trim()) * 100 : cfg.epfEmployeePercent,
+      epfEmployerPercent: epf12Row ? parseFloat((epf12Row.formula.split("*")[1] ?? "0.12").trim()) * 100 : cfg.epfEmployerPercent,
+      etfEmployerPercent: etfRow ? parseFloat((etfRow.formula.split("*")[1] ?? "0.03").trim()) * 100 : cfg.etfEmployerPercent,
+    };
+
     try {
       const r = await fetch(apiUrl("/payroll-settings"), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(cfg),
+        body: JSON.stringify(payload),
       });
       const d = await r.json();
-      if (d.id) { setSaved(true); setTimeout(() => setSaved(false), 3000); }
+      if (d.id) { setSaved(true); setTimeout(() => setSaved(false), 2500); }
       else setError(d.message || "Save failed");
-    } catch { setError("Failed to save. Check server connection."); }
+    } catch { setError("Failed to save."); }
     setSaving(false);
   }
 
-  function startEditDesig(d: string) { setEditingDesig(d); setEditDesigVal(String(cfg.salaryScale[d] ?? 40000)); }
-  function confirmDesig(d: string) {
-    const v = parseInt(editDesigVal);
-    if (!isNaN(v) && v > 0) setCfg(s => ({ ...s, salaryScale: { ...s.salaryScale, [d]: v } }));
-    setEditingDesig(null);
+  function updateRow(list: SalaryComponent[], setList: React.Dispatch<React.SetStateAction<SalaryComponent[]>>, id: string, field: keyof SalaryComponent, value: any) {
+    setList(list.map(r => r.id === id ? { ...r, [field]: value } : r));
   }
 
-  function startEditEmp(emp: Employee) {
-    setEditingEmpId(emp.id);
-    setEditEmpVal(String(cfg.employeeOverrides[String(emp.id)] ?? cfg.salaryScale[emp.designation] ?? 40000));
+  function deleteRow(list: SalaryComponent[], setList: React.Dispatch<React.SetStateAction<SalaryComponent[]>>, id: string) {
+    setList(list.filter(r => r.id !== id).map((r, i) => ({ ...r, no: i + 1 })));
   }
 
-  function confirmEmpOverride(empId: number) {
-    const v = parseInt(editEmpVal);
-    if (!isNaN(v) && v > 0) {
-      setCfg(s => ({ ...s, employeeOverrides: { ...s.employeeOverrides, [String(empId)]: v } }));
-    }
-    setEditingEmpId(null);
+  function addRow(list: SalaryComponent[], setList: React.Dispatch<React.SetStateAction<SalaryComponent[]>>) {
+    const newRow: SalaryComponent = {
+      id: `row-${Date.now()}`, no: list.length + 1,
+      component: "New Component", abbr: "NC", amount: 0,
+      dependsOnPayroll: false, isTaxExempt: false, isAccrual: false,
+      hasFormula: false, formula: "",
+    };
+    setList([...list, newRow]);
   }
-
-  function clearEmpOverride(empId: number) {
-    setCfg(s => {
-      const next = { ...s.employeeOverrides };
-      delete next[String(empId)];
-      return { ...s, employeeOverrides: next };
-    });
-    if (editingEmpId === empId) setEditingEmpId(null);
-  }
-
-  const filteredEmps = employees.filter(e =>
-    `${e.fullName} ${e.employeeId} ${e.designation} ${e.department}`.toLowerCase().includes(empSearch.toLowerCase())
-  );
-
-  const overrideCount = Object.keys(cfg.employeeOverrides).length;
 
   if (loading) {
     return (
@@ -182,433 +340,195 @@ export default function PayrollSettings() {
     );
   }
 
+  const TABS: { key: Tab; label: string }[] = [
+    { key: "details",  label: "Details" },
+    { key: "earnings", label: "Earnings & Deductions" },
+    { key: "account",  label: "Account" },
+  ];
+
   return (
-    <div className="space-y-5 max-w-5xl">
-      <PageHeader
-        title="Payroll Settings"
-        description="Configure statutory contributions, allowances, salary scales, and per-employee fitments"
-      />
-
-      {error && (
-        <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm bg-red-50 text-red-700 border border-red-200">
-          <AlertTriangle className="w-4 h-4 shrink-0" />{error}
-          <button onClick={() => setError(null)} className="ml-auto p-0.5 rounded hover:bg-red-100"><X className="w-3.5 h-3.5" /></button>
+    <div className="min-h-screen bg-gray-50">
+      {/* Blue breadcrumb header */}
+      <div className="bg-primary text-white px-6 py-3 flex items-center gap-1.5 text-sm">
+        <span className="opacity-70">Payroll</span>
+        <ChevronRight className="w-3.5 h-3.5 opacity-70" />
+        <span className="opacity-70">Salary Structure</span>
+        <ChevronRight className="w-3.5 h-3.5 opacity-70" />
+        <span className="font-semibold">Drivethru</span>
+        <span className="ml-3 px-2.5 py-0.5 text-xs font-semibold bg-white/20 rounded-full border border-white/30">
+          Active
+        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={save}
+            disabled={saving}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/15 hover:bg-white/25 border border-white/30 rounded text-xs font-medium transition-colors"
+          >
+            {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : saved ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+            {saving ? "Saving…" : saved ? "Saved!" : "Save"}
+          </button>
         </div>
-      )}
+      </div>
 
-      {/* Tab Nav */}
-      <div className="flex gap-1 p-1 bg-muted/50 rounded-xl border border-border w-fit">
-        {TABS.map(({ key, label, icon: Icon, desc }) => (
-          <button key={key} onClick={() => setTab(key)}
+      {/* Tabs */}
+      <div className="bg-white border-b border-gray-200 px-6 flex items-center gap-0">
+        {TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
             className={cn(
-              "flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-150",
+              "px-4 py-3 text-sm font-medium border-b-2 transition-colors -mb-px",
               tab === key
-                ? "bg-white shadow-sm text-foreground border border-border"
-                : "text-muted-foreground hover:text-foreground hover:bg-white/60"
-            )}>
-            <Icon className={cn("w-4 h-4", tab === key ? "text-primary" : "text-muted-foreground")} />
-            <span>{label}</span>
-            {key === "fitment" && overrideCount > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-primary/10 text-primary rounded-full">
-                {overrideCount}
-              </span>
+                ? "border-gray-800 text-gray-900"
+                : "border-transparent text-gray-500 hover:text-gray-700"
             )}
+          >
+            {label}
           </button>
         ))}
       </div>
 
-      {/* ── General Settings Tab ─────────────────────────── */}
-      {tab === "general" && (
-        <div className="space-y-4">
-          {/* Statutory Contributions */}
-          <Card className="p-5">
-            <div className="flex items-center gap-2 mb-5 pb-3 border-b border-border">
-              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                <Percent className="w-4 h-4 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm font-bold">Statutory Deductions & Contributions</p>
-                <p className="text-xs text-muted-foreground">Applied automatically during payroll calculation</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {[
-                { key: "epfEmployeePercent", label: "EPF — Employee Contribution", hint: "Deducted from employee gross salary" },
-                { key: "epfEmployerPercent", label: "EPF — Employer Contribution", hint: "Employer cost, not deducted from employee" },
-                { key: "etfEmployerPercent", label: "ETF — Employer Contribution", hint: "Employees Trust Fund contribution" },
-              ].map(({ key, label, hint }) => (
-                <div key={key}>
-                  <Label className="text-xs font-semibold">{label}</Label>
-                  <div className="relative mt-1.5">
-                    <Input type="number" step="0.01" min="0" max="100"
-                      value={(cfg as any)[key]}
-                      onChange={e => set(key as keyof PayrollConfig, parseFloat(e.target.value))}
-                      className="pr-8" />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">%</span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">{hint}</p>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <Info className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
-              <p className="text-xs text-blue-700">
-                <strong>APIT (income tax)</strong> is automatically calculated using Sri Lanka IRD progressive slabs (6%–30%) and cannot be manually configured.
-              </p>
-            </div>
-          </Card>
-
-          {/* Earnings & Allowances */}
-          <Card className="p-5">
-            <div className="flex items-center gap-2 mb-5 pb-3 border-b border-border">
-              <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center">
-                <DollarSign className="w-4 h-4 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm font-bold">Earnings & Allowances</p>
-                <p className="text-xs text-muted-foreground">Fixed monthly amounts added on top of basic salary</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              <div>
-                <Label className="text-xs font-semibold">Transport Allowance (Rs.)</Label>
-                <Input type="number" min="0" value={cfg.transportAllowance}
-                  onChange={e => set("transportAllowance", parseInt(e.target.value))} className="mt-1.5" />
-                <p className="text-[10px] text-muted-foreground mt-1">Same fixed amount for all employees</p>
-              </div>
-              <div>
-                <Label className="text-xs font-semibold">Other Allowances (Rs.)</Label>
-                <Input type="number" min="0" value={cfg.otherAllowances}
-                  onChange={e => set("otherAllowances", parseInt(e.target.value))} className="mt-1.5" />
-                <p className="text-[10px] text-muted-foreground mt-1">Miscellaneous fixed allowances</p>
-              </div>
-              <div>
-                <Label className="text-xs font-semibold">Overtime Rate Multiplier</Label>
-                <Input type="number" step="0.1" min="1" max="5" value={cfg.overtimeMultiplier}
-                  onChange={e => set("overtimeMultiplier", parseFloat(e.target.value))} className="mt-1.5" />
-                <p className="text-[10px] text-muted-foreground mt-1">e.g. 1.5× = 1.5× hourly rate per OT hour</p>
-              </div>
-            </div>
-            <div className="mt-5">
-              <p className="text-xs font-semibold mb-1">Housing Allowance — Salary-Based Tiers</p>
-              <p className="text-[10px] text-muted-foreground mb-3">
-                Each employee is placed in a tier based on their basic salary. The tier amount is added to their gross pay.
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="border border-border rounded-xl p-4 bg-muted/20">
-                  <p className="text-xs font-bold text-muted-foreground mb-3 uppercase tracking-wide">Low Tier</p>
-                  <Label className="text-[10px]">Allowance Amount (Rs.)</Label>
-                  <Input type="number" min="0" value={cfg.housingAllowanceLow}
-                    onChange={e => set("housingAllowanceLow", parseInt(e.target.value))} className="mt-1 h-8 text-sm" />
-                  <p className="text-[10px] text-muted-foreground mt-2">For basic below Rs. {cfg.housingMidThreshold.toLocaleString()}</p>
-                </div>
-                <div className="border border-blue-200 rounded-xl p-4 bg-blue-50/30">
-                  <p className="text-xs font-bold text-blue-600 mb-3 uppercase tracking-wide">Mid Tier</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div><Label className="text-[10px]">Allowance (Rs.)</Label>
-                      <Input type="number" min="0" value={cfg.housingAllowanceMid}
-                        onChange={e => set("housingAllowanceMid", parseInt(e.target.value))} className="mt-1 h-8 text-sm" /></div>
-                    <div><Label className="text-[10px]">Min. Basic (Rs.)</Label>
-                      <Input type="number" min="0" value={cfg.housingMidThreshold}
-                        onChange={e => set("housingMidThreshold", parseInt(e.target.value))} className="mt-1 h-8 text-sm" /></div>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-2">
-                    {cfg.housingMidThreshold.toLocaleString()} – {cfg.housingHighThreshold.toLocaleString()}
-                  </p>
-                </div>
-                <div className="border border-amber-200 rounded-xl p-4 bg-amber-50/30">
-                  <p className="text-xs font-bold text-amber-600 mb-3 uppercase tracking-wide">High Tier</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div><Label className="text-[10px]">Allowance (Rs.)</Label>
-                      <Input type="number" min="0" value={cfg.housingAllowanceHigh}
-                        onChange={e => set("housingAllowanceHigh", parseInt(e.target.value))} className="mt-1 h-8 text-sm" /></div>
-                    <div><Label className="text-[10px]">Min. Basic (Rs.)</Label>
-                      <Input type="number" min="0" value={cfg.housingHighThreshold}
-                        onChange={e => set("housingHighThreshold", parseInt(e.target.value))} className="mt-1 h-8 text-sm" /></div>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-2">Rs. {cfg.housingHighThreshold.toLocaleString()} and above</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Deduction Rules */}
-          <Card className="p-5">
-            <div className="flex items-center gap-2 mb-5 pb-3 border-b border-border">
-              <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center">
-                <X className="w-4 h-4 text-red-600" />
-              </div>
-              <div>
-                <p className="text-sm font-bold">Deduction Rules</p>
-                <p className="text-xs text-muted-foreground">Rules applied for attendance violations</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div>
-                <Label className="text-xs font-semibold">Late Arrival Deduction (Rs. per instance)</Label>
-                <Input type="number" min="0" value={cfg.lateDeductionPerInstance}
-                  onChange={e => set("lateDeductionPerInstance", parseInt(e.target.value))} className="mt-1.5" />
-                <p className="text-[10px] text-muted-foreground mt-1">Deducted once for each late-arrival record in the month</p>
-              </div>
-              <div className="p-4 rounded-xl bg-muted/30 border border-border">
-                <p className="text-xs font-semibold mb-2">Auto-Calculated Deductions</p>
-                <ul className="space-y-1.5 text-[11px] text-muted-foreground">
-                  <li><strong className="text-foreground">Absence:</strong> (Basic ÷ Working Days) × Absent Days</li>
-                  <li><strong className="text-foreground">Half-day:</strong> (Daily Rate ÷ 2) × Half-day Count</li>
-                </ul>
-                <p className="text-[10px] text-blue-600 mt-2">Derived from attendance data, not configurable.</p>
-              </div>
-            </div>
-          </Card>
+      {/* Error */}
+      {error && (
+        <div className="mx-6 mt-4 flex items-center gap-2 px-4 py-3 rounded text-sm bg-red-50 text-red-700 border border-red-200">
+          <AlertTriangle className="w-4 h-4 shrink-0" />{error}
+          <button onClick={() => setError(null)} className="ml-auto"><X className="w-3.5 h-3.5" /></button>
         </div>
       )}
 
-      {/* ── Designation Scale Tab ────────────────────────── */}
-      {tab === "scale" && (
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-5 pb-3 border-b border-border">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center">
-                <Banknote className="w-4 h-4 text-violet-600" />
+      {/* Tab: Details */}
+      {tab === "details" && (
+        <div className="p-6 space-y-4 max-w-2xl">
+          <div className="bg-white border border-gray-200 rounded p-5 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-semibold text-gray-600 block mb-1">Structure Name</label>
+                <input defaultValue="Drivethru" className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-primary" />
               </div>
               <div>
-                <p className="text-sm font-bold">Designation Salary Scale</p>
-                <p className="text-xs text-muted-foreground">
-                  Default basic salary per designation — hover a row and click the edit icon to change
-                </p>
+                <label className="text-xs font-semibold text-gray-600 block mb-1">Company</label>
+                <input defaultValue="Drivethru Post Office" className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-primary" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-600 block mb-1">Currency</label>
+                <input defaultValue="LKR" className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-primary" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-600 block mb-1">Payroll Frequency</label>
+                <select className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-primary bg-white">
+                  <option>Monthly</option>
+                  <option>Bi-weekly</option>
+                  <option>Weekly</option>
+                </select>
               </div>
             </div>
-            <span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-full">
-              {Object.keys(cfg.salaryScale).length} designations
-            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Earnings & Deductions */}
+      {tab === "earnings" && (
+        <div className="p-6 space-y-6">
+          {/* Earnings */}
+          <div>
+            <p className="text-sm font-semibold text-gray-700 mb-2">Earnings</p>
+            <ComponentTable
+              rows={earnings}
+              onUpdate={(id, field, value) => updateRow(earnings, setEarnings, id, field, value)}
+              onDelete={(id) => deleteRow(earnings, setEarnings, id)}
+              onAdd={() => addRow(earnings, setEarnings)}
+              addLabel="Add Row"
+            />
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-border">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/50 border-b border-border">
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground w-10">#</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground">Designation</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">Basic Salary (Rs.)</th>
-                  <th className="px-4 py-2.5 text-center text-xs font-semibold text-muted-foreground w-20">Edit</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {Object.entries(cfg.salaryScale)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([designation, salary], idx) => (
-                    <tr key={designation} className="hover:bg-muted/30 transition-colors group">
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground">{idx + 1}</td>
-                      <td className="px-4 py-2.5 font-medium">{designation}</td>
-                      <td className="px-4 py-2.5 text-right">
-                        {editingDesig === designation ? (
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Input
-                              type="number" value={editDesigVal}
-                              onChange={e => setEditDesigVal(e.target.value)}
-                              onKeyDown={e => { if (e.key === "Enter") confirmDesig(designation); if (e.key === "Escape") setEditingDesig(null); }}
-                              className="h-7 w-32 text-right text-sm font-mono" autoFocus
-                            />
-                            <button onClick={() => confirmDesig(designation)} className="p-1 rounded bg-green-100 text-green-700 hover:bg-green-200">
-                              <Check className="w-3.5 h-3.5" />
-                            </button>
-                            <button onClick={() => setEditingDesig(null)} className="p-1 rounded hover:bg-muted text-muted-foreground">
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="font-mono font-semibold">Rs. {salary.toLocaleString("en-LK")}</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 text-center">
-                        {editingDesig !== designation && (
-                          <button onClick={() => startEditDesig(designation)}
-                            className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-muted text-muted-foreground hover:text-foreground"
-                            title="Edit salary">
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+          {/* Deductions */}
+          <div>
+            <p className="text-sm font-semibold text-gray-700 mb-2">Deductions</p>
+            <ComponentTable
+              rows={deductions}
+              onUpdate={(id, field, value) => updateRow(deductions, setDeductions, id, field, value)}
+              onDelete={(id) => deleteRow(deductions, setDeductions, id)}
+              onAdd={() => addRow(deductions, setDeductions)}
+              addLabel="Add Row"
+            />
+          </div>
+
+          {/* Flexible Benefits */}
+          <div>
+            <p className="text-sm font-semibold text-gray-700 mb-0.5">Flexible Benefits</p>
+            <p className="text-xs text-gray-400 mb-2">Enter yearly benefit amounts</p>
+            <div className="border border-gray-200 rounded overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="w-8 px-3 py-2">
+                      <input type="checkbox" className="w-3.5 h-3.5 accent-primary" />
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 w-10">No.</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Earning Component <span className="text-red-500">*</span></th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500">Benefit Amount <span className="text-red-500">*</span></th>
+                    <th className="px-3 py-2 w-10">
+                      <Settings2 className="w-3.5 h-3.5 text-gray-400 mx-auto" />
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {benefits.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-4 text-center text-xs text-gray-400 italic">No flexible benefits configured</td>
+                    </tr>
+                  )}
+                  {benefits.map((b, i) => (
+                    <tr key={i} className="border-t border-gray-100 hover:bg-blue-50/30 group">
+                      <td className="px-3 py-2.5 text-center"><input type="checkbox" className="w-3.5 h-3.5 accent-primary" /></td>
+                      <td className="px-3 py-2.5 text-xs text-gray-400">{b.no}</td>
+                      <td className="px-3 py-2.5 text-gray-700">{b.earningComponent}</td>
+                      <td className="px-3 py-2.5 text-right text-gray-700">Rs {b.benefitAmount.toLocaleString()}</td>
+                      <td className="px-3 py-2.5 text-center">
+                        <button onClick={() => setBenefits(benefits.filter((_, j) => j !== i))}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500">
+                          <X className="w-3 h-3" />
+                        </button>
                       </td>
                     </tr>
                   ))}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+              <div className="border-t border-gray-100 px-3 py-2">
+                <button
+                  onClick={() => setBenefits([...benefits, { no: benefits.length + 1, earningComponent: "Basic", benefitAmount: 0 }])}
+                  className="text-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1 transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Row
+                </button>
+              </div>
+            </div>
           </div>
-        </Card>
-      )}
-
-      {/* ── Employee Fitment Tab ─────────────────────────── */}
-      {tab === "fitment" && (
-        <div className="space-y-4">
-          <Card className="p-4 bg-blue-50/40 border-blue-200">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0 mt-0.5">
-                <UserCheck className="w-4 h-4 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-blue-900">Employee Salary Fitment</p>
-                <p className="text-xs text-blue-700 mt-0.5">
-                  Assign a custom basic salary directly to specific employees. This overrides the designation-based salary scale
-                  for that employee during payroll generation. Employees without an override use their designation's default salary.
-                </p>
-              </div>
-            </div>
-          </Card>
-
-          {overrideCount > 0 && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/20 text-xs text-primary font-medium">
-              <UserCheck className="w-3.5 h-3.5" />
-              {overrideCount} employee{overrideCount > 1 ? "s have" : " has"} a custom salary fitment applied
-            </div>
-          )}
-
-          <Card className="p-5">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by name, ID, designation or department…"
-                  value={empSearch}
-                  onChange={e => setEmpSearch(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {filteredEmps.length} of {employees.length} employees
-              </span>
-            </div>
-
-            {empsLoading ? (
-              <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span className="text-sm">Loading employees…</span>
-              </div>
-            ) : (
-              <div className="overflow-x-auto rounded-xl border border-border">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-muted/50 border-b border-border">
-                      <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground">Employee</th>
-                      <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground">Designation</th>
-                      <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">Scale Salary</th>
-                      <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">Fitment Salary</th>
-                      <th className="px-4 py-2.5 text-center text-xs font-semibold text-muted-foreground w-28">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {filteredEmps.map(emp => {
-                      const scaleSalary = cfg.salaryScale[emp.designation] ?? 40000;
-                      const overrideSalary = cfg.employeeOverrides[String(emp.id)];
-                      const hasOverride = overrideSalary !== undefined;
-                      const isEditing = editingEmpId === emp.id;
-
-                      return (
-                        <tr key={emp.id} className={cn(
-                          "transition-colors group",
-                          hasOverride ? "bg-primary/3 hover:bg-primary/5" : "hover:bg-muted/30"
-                        )}>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
-                                <span className="text-[10px] font-bold text-muted-foreground">
-                                  {emp.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
-                                </span>
-                              </div>
-                              <div>
-                                <p className="font-medium text-sm leading-tight">{emp.fullName}</p>
-                                <p className="text-[10px] text-muted-foreground">{emp.employeeId}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <p className="text-sm">{emp.designation}</p>
-                            <p className="text-[10px] text-muted-foreground">{emp.department}</p>
-                          </td>
-                          <td className="px-4 py-3 text-right font-mono text-sm text-muted-foreground">
-                            Rs. {scaleSalary.toLocaleString("en-LK")}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            {isEditing ? (
-                              <div className="flex items-center justify-end gap-1.5">
-                                <Input
-                                  type="number" value={editEmpVal}
-                                  onChange={e => setEditEmpVal(e.target.value)}
-                                  onKeyDown={e => { if (e.key === "Enter") confirmEmpOverride(emp.id); if (e.key === "Escape") setEditingEmpId(null); }}
-                                  className="h-7 w-32 text-right text-sm font-mono" autoFocus
-                                />
-                                <button onClick={() => confirmEmpOverride(emp.id)} className="p-1 rounded bg-green-100 text-green-700 hover:bg-green-200">
-                                  <Check className="w-3.5 h-3.5" />
-                                </button>
-                                <button onClick={() => setEditingEmpId(null)} className="p-1 rounded hover:bg-muted text-muted-foreground">
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            ) : hasOverride ? (
-                              <div className="flex items-center justify-end gap-1.5">
-                                <span className="font-mono font-bold text-sm text-primary">
-                                  Rs. {overrideSalary.toLocaleString("en-LK")}
-                                </span>
-                                <span className="px-1.5 py-0.5 text-[9px] font-bold bg-primary/10 text-primary rounded-full uppercase tracking-wide">
-                                  Fitment
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-muted-foreground italic">— using scale default —</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            {!isEditing && (
-                              <div className="flex items-center justify-center gap-1">
-                                <button
-                                  onClick={() => startEditEmp(emp)}
-                                  className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                                  title={hasOverride ? "Edit fitment salary" : "Set fitment salary"}
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                {hasOverride && (
-                                  <button
-                                    onClick={() => clearEmpOverride(emp.id)}
-                                    className="p-1.5 rounded-lg hover:bg-red-50 transition-colors text-muted-foreground hover:text-red-600"
-                                    title="Remove fitment — revert to scale salary"
-                                  >
-                                    <Undo2 className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {filteredEmps.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground text-sm">
-                          No employees match your search
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
         </div>
       )}
 
-      {/* Save Bar */}
-      <div className="flex items-center justify-between py-2 sticky bottom-0 bg-background/80 backdrop-blur border-t border-border mt-4 pt-4">
-        <p className="text-xs text-muted-foreground">
-          {tab === "fitment"
-            ? "Fitment overrides are saved together with all payroll settings."
-            : "Changes take effect on the next payroll generation run."}
-        </p>
-        <Button onClick={save} disabled={saving} className="flex items-center gap-2">
-          {saving ? <><RefreshCw className="w-4 h-4 animate-spin" /> Saving…</> :
-           saved  ? <><Check className="w-4 h-4 text-green-300" /> Saved!</> :
-                    <><Save className="w-4 h-4" /> Save Payroll Settings</>}
-        </Button>
-      </div>
+      {/* Tab: Account */}
+      {tab === "account" && (
+        <div className="p-6 max-w-2xl">
+          <div className="bg-white border border-gray-200 rounded p-5 space-y-4">
+            <p className="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-3">Account Settings</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-semibold text-gray-600 block mb-1">Mode of Payment</label>
+                <select className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-primary bg-white">
+                  <option>Bank Transfer</option>
+                  <option>Cash</option>
+                  <option>Cheque</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-600 block mb-1">Payment Account</label>
+                <input defaultValue="Payroll Payable" className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-primary" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
