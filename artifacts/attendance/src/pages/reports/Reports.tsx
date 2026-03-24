@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useGetAttendanceReport, useGetMonthlyReport, useGetOvertimeReport, useListBranches } from "@workspace/api-client-react";
-import { PageHeader, Card, Button, Input, Select, Label } from "@/components/ui";
+import { PageHeader, Card, Input, Select, Label } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { FileText, Printer, Users, Clock, Calendar, Banknote } from "lucide-react";
+import { Users, Clock, Calendar, Banknote, FileDown } from "lucide-react";
 import drivethruLogo from "@/assets/drivethru-logo.png";
 import liveuLogo from "@/assets/liveu-logo.png";
 
@@ -25,130 +25,110 @@ const STATUS_COLORS: Record<string, string> = {
 function fmtAmt(n: number) { return `Rs. ${Math.round(n).toLocaleString("en-LK")}`; }
 function getMonthName(m: number) { return MONTHS[m - 1]; }
 
-/* ─── CSV download ─── */
-function downloadCSV(filename: string, headers: string[], rows: (string | number | null | undefined)[][]) {
-  const esc = (v: string | number | null | undefined) => {
-    const s = v == null ? "" : String(v);
-    return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const csv = [headers, ...rows].map(r => r.map(esc).join(",")).join("\n");
-  const a = Object.assign(document.createElement("a"), {
-    href: URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" })),
-    download: filename,
-  });
-  a.click();
-  URL.revokeObjectURL(a.href);
+/* ─── Simple debounce hook ─── */
+function useDebounce<T>(value: T, ms: number): T {
+  const [v, setV] = useState<T>(value);
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return v;
 }
 
-/* ─── Print window ─── */
+/* ─── Print-to-PDF window ─── */
 function printReport(opts: {
   title: string;
   meta: { label: string; value: string }[];
   tableHtml: string;
-  drivethruLogoUrl: string;
-  liveuLogoUrl: string;
 }) {
-  const { title, meta, tableHtml, drivethruLogoUrl, liveuLogoUrl } = opts;
-  const metaHtml = meta.map(m => `<div class="meta-item"><span class="meta-label">${m.label}</span><span class="meta-value">${m.value}</span></div>`).join("");
-  const w = window.open("", "_blank", "width=1200,height=800");
-  if (!w) { alert("Please allow popups for this page to print."); return; }
+  const { title, meta, tableHtml } = opts;
+  const metaHtml = meta.map(m =>
+    `<div class="meta-item"><span class="meta-label">${m.label}</span><span class="meta-value">${m.value}</span></div>`
+  ).join("");
+  const w = window.open("", "_blank", "width=1200,height=850");
+  if (!w) { alert("Please allow popups to export PDF."); return; }
   w.document.write(`<!DOCTYPE html><html lang="en"><head>
-<meta charset="UTF-8" />
-<title>${title} – Drivethru Attendance</title>
+<meta charset="UTF-8"/>
+<title>${title} – Drivethru</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;background:#fff;font-size:10.5px}
-  /* ── Header ── */
-  .header{display:flex;align-items:center;justify-content:space-between;padding:18px 24px 14px;border-bottom:3px solid #1565a8;background:#f8faff}
-  .header-left{display:flex;align-items:center;gap:14px}
-  .header-logo{width:52px;height:52px;object-fit:contain;border-radius:10px}
-  .header-company{font-size:20px;font-weight:700;color:#1565a8;line-height:1.1}
-  .header-sub{font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
+  .header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px 12px;border-bottom:3px solid #1565a8;background:#f5f8ff}
+  .header-left{display:flex;align-items:center;gap:12px}
+  .header-logo{width:46px;height:46px;object-fit:contain;border-radius:12px;background:#fff;padding:4px;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+  .company{font-size:18px;font-weight:700;color:#1565a8;line-height:1.15}
+  .company-sub{font-size:9.5px;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-top:1px}
   .header-right{text-align:right}
-  .header-report-title{font-size:14px;font-weight:700;color:#1565a8}
-  .header-date{font-size:10px;color:#6b7280;margin-top:3px}
-  /* ── Meta ── */
-  .meta-bar{display:flex;flex-wrap:wrap;gap:0;border-bottom:1px solid #e5e7eb;background:#fff}
-  .meta-item{padding:8px 20px;border-right:1px solid #e5e7eb}
+  .report-title{font-size:13px;font-weight:700;color:#1565a8}
+  .report-date{font-size:9px;color:#9ca3af;margin-top:3px}
+  .meta-bar{display:flex;flex-wrap:wrap;background:#fff;border-bottom:1px solid #e5e7eb}
+  .meta-item{padding:8px 18px;border-right:1px solid #f0f0f0}
   .meta-label{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;font-weight:600}
-  .meta-value{display:block;font-size:12px;font-weight:700;color:#111827;margin-top:1px}
-  /* ── Table ── */
-  .table-wrap{padding:0 0 0 0;overflow-x:auto}
+  .meta-value{display:block;font-size:11.5px;font-weight:700;color:#111827;margin-top:1px}
   table{width:100%;border-collapse:collapse}
   thead tr{background:#1565a8}
-  th{color:#fff;padding:7px 10px;text-align:left;font-size:9.5px;font-weight:600;white-space:nowrap;letter-spacing:.03em}
-  td{padding:6px 10px;font-size:10px;border-bottom:1px solid #f0f0f0;white-space:nowrap}
-  tbody tr:nth-child(even) td{background:#f8faff}
-  tbody tr:hover td{background:#eff6ff}
-  tfoot td{padding:7px 10px;font-size:10px;font-weight:700;background:#e8f0fe;border-top:2px solid #1565a8}
-  /* ── Footer ── */
-  .footer{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;border-top:1px solid #e5e7eb;background:#f8faff;margin-top:auto}
-  .footer-note{font-size:9px;color:#9ca3af}
-  .footer-right{display:flex;align-items:center;gap:8px}
+  th{color:#fff;padding:7px 9px;text-align:left;font-size:9px;font-weight:600;white-space:nowrap;letter-spacing:.03em}
+  td{padding:5px 9px;font-size:9.5px;border-bottom:1px solid #f0f0f0;white-space:nowrap}
+  tbody tr:nth-child(even) td{background:#f8fbff}
+  tfoot td{padding:6px 9px;font-size:10px;font-weight:700;background:#e8f0fe;border-top:2px solid #1565a8}
+  .footer{display:flex;align-items:center;justify-content:space-between;padding:10px 24px;border-top:1px solid #e5e7eb;background:#f5f8ff;margin-top:auto}
+  .footer-note{font-size:8.5px;color:#9ca3af}
+  .footer-right{display:flex;align-items:center;gap:6px}
   .footer-powered{font-size:9px;color:#9ca3af}
-  .footer-liveu{height:20px;object-fit:contain;opacity:.8}
-  /* ── Print media ── */
-  @media print{
-    body{font-size:9px}
-    .header{padding:10px 16px 8px}
-    th,td{padding:4px 7px}
-    .no-print{display:none}
-    @page{margin:10mm;size:landscape}
-  }
+  .footer-liveu{height:18px;object-fit:contain;opacity:.75}
+  @media print{@page{margin:8mm;size:landscape} body{font-size:9px}}
 </style>
 </head><body>
 <div class="header">
   <div class="header-left">
-    <img src="${drivethruLogoUrl}" class="header-logo" alt="Drivethru" />
+    <img src="${drivethruLogo}" class="header-logo" alt="Drivethru"/>
     <div>
-      <div class="header-company">Drivethru Pvt Ltd</div>
-      <div class="header-sub">Attendance Management System</div>
+      <div class="company">Drivethru Pvt Ltd</div>
+      <div class="company-sub">Attendance Management System</div>
     </div>
   </div>
   <div class="header-right">
-    <div class="header-report-title">${title}</div>
-    <div class="header-date">Generated: ${new Date().toLocaleString("en-LK", { dateStyle:"long", timeStyle:"short" })}</div>
+    <div class="report-title">${title}</div>
+    <div class="report-date">Generated: ${new Date().toLocaleString("en-LK",{dateStyle:"long",timeStyle:"short"})}</div>
   </div>
 </div>
 <div class="meta-bar">${metaHtml}</div>
-<div class="table-wrap">${tableHtml}</div>
+${tableHtml}
 <div class="footer">
-  <div class="footer-note">This is a system-generated report. For internal use only. © ${new Date().getFullYear()} Drivethru Pvt Ltd</div>
+  <div class="footer-note">System-generated report. For internal use only. © ${new Date().getFullYear()} Drivethru Pvt Ltd</div>
   <div class="footer-right">
     <span class="footer-powered">Powered by</span>
-    <img src="${liveuLogoUrl}" class="footer-liveu" alt="Live U Pvt Ltd" />
+    <img src="${liveuLogo}" class="footer-liveu" alt="Live U Pvt Ltd"/>
   </div>
 </div>
-<script>
-  window.addEventListener("load", function() {
-    setTimeout(function() { window.print(); }, 400);
-  });
-<\/script>
+<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},350);});<\/script>
 </body></html>`);
   w.document.close();
 }
 
-/* ─── Simple two-button export row ─── */
-function ExportButtons({ onCSV, onPrint }: { onCSV: () => void; onPrint: () => void }) {
+/* ─── PDF Export button ─── */
+function PdfButton({ onClick }: { onClick: () => void }) {
   return (
-    <div className="flex gap-1.5">
-      <Button
-        variant="outline"
-        onClick={onCSV}
-        className="flex items-center gap-1.5 text-xs font-medium h-9 px-3 border-green-300 text-green-700 hover:bg-green-50"
-      >
-        <FileText className="w-3.5 h-3.5" />
-        CSV
-      </Button>
-      <Button
-        variant="outline"
-        onClick={onPrint}
-        className="flex items-center gap-1.5 text-xs font-medium h-9 px-3 border-blue-300 text-blue-700 hover:bg-blue-50"
-      >
-        <Printer className="w-3.5 h-3.5" />
-        Print
-      </Button>
-    </div>
+    <button
+      onClick={onClick}
+      className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 active:scale-95 transition-all shadow-sm"
+    >
+      <FileDown className="w-4 h-4" />
+      Export PDF
+    </button>
+  );
+}
+
+/* ── Filter card wrapper with title + PDF button ── */
+function FilterCard({ title, onExport, children }: { title: string; onExport: () => void; children: React.ReactNode }) {
+  return (
+    <Card className="p-0 overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+        <span className="text-sm font-semibold text-foreground">{title}</span>
+        <PdfButton onClick={onExport} />
+      </div>
+      <div className="p-4">{children}</div>
+    </Card>
   );
 }
 
@@ -160,27 +140,23 @@ export default function Reports() {
       <PageHeader title="Reports" description="Detailed attendance, monthly, overtime and payroll reports." />
       <div className="flex gap-1 border-b border-border">
         {([
-          { id: "attendance", label: "Attendance Report", icon: Users },
-          { id: "monthly",    label: "Monthly Report",    icon: Calendar },
-          { id: "overtime",   label: "Overtime Report",   icon: Clock },
-          { id: "payroll",    label: "Payroll Report",    icon: Banknote },
+          { id:"attendance", label:"Attendance Report", icon:Users },
+          { id:"monthly",    label:"Monthly Report",    icon:Calendar },
+          { id:"overtime",   label:"Overtime Report",   icon:Clock },
+          { id:"payroll",    label:"Payroll Report",    icon:Banknote },
         ] as const).map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
-              tab === id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <Icon className="w-4 h-4" />{label}
+          <button key={id} onClick={() => setTab(id)}
+            className={cn("flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
+              tab===id?"border-primary text-primary":"border-transparent text-muted-foreground hover:text-foreground"
+            )}>
+            <Icon className="w-4 h-4"/>{label}
           </button>
         ))}
       </div>
-      {tab === "attendance" && <AttendanceReport />}
-      {tab === "monthly"    && <MonthlyReport />}
-      {tab === "overtime"   && <OvertimeReport />}
-      {tab === "payroll"    && <PayrollReport />}
+      {tab==="attendance" && <AttendanceReport/>}
+      {tab==="monthly"    && <MonthlyReport/>}
+      {tab==="overtime"   && <OvertimeReport/>}
+      {tab==="payroll"    && <PayrollReport/>}
     </div>
   );
 }
@@ -190,20 +166,24 @@ export default function Reports() {
 ══════════════════════════════════════════════════════════ */
 function AttendanceReport() {
   const now = new Date();
-  const [startDate, setStartDate]   = useState(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0]);
+  const [startDate, setStartDate]   = useState(new Date(now.getFullYear(),now.getMonth(),1).toISOString().split("T")[0]);
   const [endDate, setEndDate]       = useState(now.toISOString().split("T")[0]);
   const [branchId, setBranchId]     = useState("");
   const [status, setStatus]         = useState("");
   const [empType, setEmpType]       = useState("");
   const [department, setDepartment] = useState("");
   const [empName, setEmpName]       = useState("");
-  const [applied, setApplied]       = useState({ startDate, endDate, branchId, status });
+
+  const dStart   = useDebounce(startDate, 400);
+  const dEnd     = useDebounce(endDate, 400);
+  const dBranch  = useDebounce(branchId, 200);
+  const dStatus  = useDebounce(status, 200);
 
   const { data: branches } = useListBranches();
   const { data, isLoading } = useGetAttendanceReport({
-    startDate: applied.startDate, endDate: applied.endDate,
-    ...(applied.branchId ? { branchId: Number(applied.branchId) } : {}),
-    ...(applied.status   ? { status: applied.status }             : {}),
+    startDate: dStart, endDate: dEnd,
+    ...(dBranch ? { branchId: Number(dBranch) } : {}),
+    ...(dStatus ? { status: dStatus } : {}),
   });
 
   const departments = useMemo(() => {
@@ -211,30 +191,18 @@ function AttendanceReport() {
     return Array.from(set).sort() as string[];
   }, [data]);
 
-  const filtered = useMemo(() => (data?.records || []).filter((r: any) => {
-    return (!empType || r.employeeType === empType)
-      && (!department || r.department === department)
-      && (!empName || (r.employeeName || "").toLowerCase().includes(empName.toLowerCase()));
-  }), [data, empType, department, empName]);
+  const filtered = useMemo(() => (data?.records || []).filter((r: any) =>
+    (!empType || r.employeeType === empType)
+    && (!department || r.department === department)
+    && (!empName || (r.employeeName || "").toLowerCase().includes(empName.toLowerCase()))
+  ), [data, empType, department, empName]);
 
   const HEADERS = ["Date","Emp ID","Employee","Department","Branch","Designation","Type","Status","In Time","Out Time","Total Hrs","OT Hrs"];
 
-  const handleCSV = () => {
-    downloadCSV(`attendance-report_${applied.startDate}_${applied.endDate}.csv`, HEADERS,
-      filtered.map((r: any) => [
-        r.date, r.employeeCode, r.employeeName, r.department || "", r.branchName,
-        r.designation || "", r.employeeType || "", r.status.replace("_"," "),
-        r.inTime1 || "", r.outTime1 || "",
-        r.totalHours != null ? r.totalHours.toFixed(1) : "",
-        r.overtimeHours > 0 ? r.overtimeHours.toFixed(1) : "",
-      ])
-    );
-  };
-
-  const handlePrint = () => {
-    const present  = filtered.filter((r: any) => r.status === "present").length;
-    const absent   = filtered.filter((r: any) => r.status === "absent").length;
-    const late     = filtered.filter((r: any) => r.status === "late").length;
+  const handleExport = () => {
+    const present = filtered.filter((r: any) => r.status === "present").length;
+    const absent  = filtered.filter((r: any) => r.status === "absent").length;
+    const late    = filtered.filter((r: any) => r.status === "late").length;
     const thead = `<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
     const tbody = filtered.map((r: any) => `<tr>
       <td>${r.date}</td><td>${r.employeeCode}</td><td>${r.employeeName}</td>
@@ -247,28 +215,25 @@ function AttendanceReport() {
     printReport({
       title: "Attendance Report",
       meta: [
-        { label: "Period", value: `${applied.startDate} – ${applied.endDate}` },
-        { label: "Total Records", value: String(filtered.length) },
-        { label: "Present", value: String(present) },
-        { label: "Absent", value: String(absent) },
-        { label: "Late", value: String(late) },
-        { label: "Branch", value: applied.branchId ? (branches?.find(b=>String(b.id)===applied.branchId)?.name || "—") : "All Branches" },
-        { label: "Status Filter", value: applied.status || "All Statuses" },
+        { label:"Period",        value:`${dStart} – ${dEnd}` },
+        { label:"Total Records", value:String(filtered.length) },
+        { label:"Present",       value:String(present) },
+        { label:"Absent",        value:String(absent) },
+        { label:"Late",          value:String(late) },
+        { label:"Branch",        value:dBranch?(branches?.find(b=>String(b.id)===dBranch)?.name||"—"):"All Branches" },
       ],
       tableHtml: `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`,
-      drivethruLogoUrl: drivethruLogo,
-      liveuLogoUrl: liveuLogo,
     });
   };
 
   return (
     <div className="space-y-4">
-      <Card className="p-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 items-end">
+      <FilterCard title="Attendance Report Filters" onExport={handleExport}>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
           <div><Label className="text-xs">Start Date</Label>
-            <Input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} /></div>
+            <Input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/></div>
           <div><Label className="text-xs">End Date</Label>
-            <Input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} /></div>
+            <Input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)}/></div>
           <div><Label className="text-xs">Branch</Label>
             <Select value={branchId} onChange={e=>setBranchId(e.target.value)}>
               <option value="">All Branches</option>
@@ -293,23 +258,19 @@ function AttendanceReport() {
               {departments.map(d=><option key={d} value={d}>{d}</option>)}
             </Select></div>
           <div><Label className="text-xs">Employee Name</Label>
-            <Input placeholder="Search name…" value={empName} onChange={e=>setEmpName(e.target.value)} /></div>
-          <div className="flex flex-col gap-2">
-            <Button onClick={()=>setApplied({startDate,endDate,branchId,status})} className="w-full">Apply</Button>
-            <ExportButtons onCSV={handleCSV} onPrint={handlePrint} />
-          </div>
+            <Input placeholder="Search name…" value={empName} onChange={e=>setEmpName(e.target.value)}/></div>
         </div>
-      </Card>
+      </FilterCard>
 
       {data && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
           {[
-            { label:"Present",  val:filtered.filter((r:any)=>r.status==="present").length,  cls:"text-green-600" },
-            { label:"Absent",   val:filtered.filter((r:any)=>r.status==="absent").length,   cls:"text-red-600" },
-            { label:"Late",     val:filtered.filter((r:any)=>r.status==="late").length,     cls:"text-amber-600" },
-            { label:"Half Day", val:filtered.filter((r:any)=>r.status==="half_day").length, cls:"text-yellow-600" },
-            { label:"Leave",    val:filtered.filter((r:any)=>r.status==="leave").length,    cls:"text-purple-600" },
-            { label:"Holiday",  val:filtered.filter((r:any)=>r.status==="holiday").length,  cls:"text-gray-600" },
+            {label:"Present",  val:filtered.filter((r:any)=>r.status==="present").length,  cls:"text-green-600"},
+            {label:"Absent",   val:filtered.filter((r:any)=>r.status==="absent").length,   cls:"text-red-600"},
+            {label:"Late",     val:filtered.filter((r:any)=>r.status==="late").length,     cls:"text-amber-600"},
+            {label:"Half Day", val:filtered.filter((r:any)=>r.status==="half_day").length, cls:"text-yellow-600"},
+            {label:"Leave",    val:filtered.filter((r:any)=>r.status==="leave").length,    cls:"text-purple-600"},
+            {label:"Holiday",  val:filtered.filter((r:any)=>r.status==="holiday").length,  cls:"text-gray-600"},
           ].map(({label,val,cls})=>(
             <Card key={label} className="p-3 text-center">
               <div className={cn("text-2xl font-bold",cls)}>{val}</div>
@@ -320,7 +281,7 @@ function AttendanceReport() {
       )}
 
       <Card className="overflow-hidden">
-        {isLoading ? <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div> : (
+        {isLoading ? <div className="p-8 text-center text-sm text-muted-foreground">Loading…</div> : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-muted/50">
@@ -351,7 +312,7 @@ function AttendanceReport() {
                     <td className="px-3 py-2 font-mono whitespace-nowrap">{r.overtimeHours>0?`${r.overtimeHours.toFixed(1)}h`:"—"}</td>
                   </tr>
                 ))}
-                {!filtered.length&&<tr><td colSpan={12} className="text-center py-8 text-muted-foreground">No records found. Apply filters and click Apply.</td></tr>}
+                {!filtered.length&&<tr><td colSpan={12} className="text-center py-8 text-muted-foreground">No records found for the selected filters.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -372,39 +333,33 @@ function MonthlyReport() {
   const [empType, setEmpType]       = useState("");
   const [department, setDepartment] = useState("");
   const [empName, setEmpName]       = useState("");
-  const [applied, setApplied]       = useState({month,year,branchId});
+
+  const dMonth  = useDebounce(month, 200);
+  const dYear   = useDebounce(year, 200);
+  const dBranch = useDebounce(branchId, 200);
 
   const { data: branches } = useListBranches();
   const { data, isLoading } = useGetMonthlyReport({
-    month:applied.month, year:applied.year,
-    ...(applied.branchId?{branchId:Number(applied.branchId)}:{}),
+    month: dMonth, year: dYear,
+    ...(dBranch ? { branchId: Number(dBranch) } : {}),
   });
 
-  const departments = useMemo(()=>{
-    const set=new Set((data?.employees||[]).map((e:any)=>e.department).filter(Boolean));
+  const departments = useMemo(() => {
+    const set = new Set((data?.employees || []).map((e: any) => e.department).filter(Boolean));
     return Array.from(set).sort() as string[];
-  },[data]);
+  }, [data]);
 
-  const filtered = useMemo(()=>(data?.employees||[]).filter((e:any)=>
-    (!empType||e.employeeType===empType)&&(!department||e.department===department)
-    &&(!empName||(e.employeeName||"").toLowerCase().includes(empName.toLowerCase()))
-  ),[data,empType,department,empName]);
+  const filtered = useMemo(() => (data?.employees || []).filter((e: any) =>
+    (!empType || e.employeeType === empType)
+    && (!department || e.department === department)
+    && (!empName || (e.employeeName || "").toLowerCase().includes(empName.toLowerCase()))
+  ), [data, empType, department, empName]);
 
   const HEADERS = ["Emp ID","Employee","Department","Branch","Designation","Type","Present","Absent","Late","Half Day","Leave","Holiday","Work Hrs","OT Hrs","Att %"];
 
-  const handleCSV = () => {
-    downloadCSV(`monthly-report_${getMonthName(applied.month)}_${applied.year}.csv`, HEADERS,
-      filtered.map((e:any)=>[
-        e.employeeCode,e.employeeName,e.department||"",e.branchName,e.designation,e.employeeType||"",
-        e.presentDays,e.absentDays,e.lateDays,e.halfDays,e.leaveDays,e.holidayDays,
-        e.totalWorkHours.toFixed(1),e.overtimeHours.toFixed(1),`${e.attendancePercentage}%`,
-      ])
-    );
-  };
-
-  const handlePrint = () => {
-    const thead=`<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
-    const tbody=filtered.map((e:any)=>`<tr>
+  const handleExport = () => {
+    const thead = `<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
+    const tbody = filtered.map((e: any) => `<tr>
       <td>${e.employeeCode}</td><td>${e.employeeName}</td><td>${e.department||""}</td>
       <td>${e.branchName}</td><td>${e.designation}</td><td>${e.employeeType||""}</td>
       <td>${e.presentDays}</td><td>${e.absentDays}</td><td>${e.lateDays}</td>
@@ -415,20 +370,19 @@ function MonthlyReport() {
     printReport({
       title: "Monthly Attendance Report",
       meta: [
-        { label:"Period", value:`${getMonthName(applied.month)} ${applied.year}` },
-        { label:"Working Days", value:String(data?.workingDays??"—") },
+        { label:"Period",        value:`${getMonthName(dMonth)} ${dYear}` },
+        { label:"Working Days",  value:String(data?.workingDays??"—") },
         { label:"Total Employees", value:String(filtered.length) },
-        { label:"Branch", value:applied.branchId?(branches?.find(b=>String(b.id)===applied.branchId)?.name||"—"):"All Branches" },
+        { label:"Branch",        value:dBranch?(branches?.find(b=>String(b.id)===dBranch)?.name||"—"):"All Branches" },
       ],
-      tableHtml:`<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`,
-      drivethruLogoUrl:drivethruLogo, liveuLogoUrl:liveuLogo,
+      tableHtml: `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`,
     });
   };
 
   return (
     <div className="space-y-4">
-      <Card className="p-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 items-end">
+      <FilterCard title="Monthly Report Filters" onExport={handleExport}>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <div><Label className="text-xs">Month</Label>
             <Select value={month} onChange={e=>setMonth(Number(e.target.value))}>
               {Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{getMonthName(i+1)}</option>)}
@@ -454,13 +408,9 @@ function MonthlyReport() {
               {departments.map(d=><option key={d} value={d}>{d}</option>)}
             </Select></div>
           <div><Label className="text-xs">Employee Name</Label>
-            <Input placeholder="Search name…" value={empName} onChange={e=>setEmpName(e.target.value)} /></div>
-          <div className="flex flex-col gap-2">
-            <Button onClick={()=>setApplied({month,year,branchId})} className="w-full">Generate</Button>
-            <ExportButtons onCSV={handleCSV} onPrint={handlePrint} />
-          </div>
+            <Input placeholder="Search name…" value={empName} onChange={e=>setEmpName(e.target.value)}/></div>
         </div>
-      </Card>
+      </FilterCard>
 
       {data && (
         <Card className="p-3 flex flex-wrap gap-6 text-sm border-green-200 bg-green-50/30">
@@ -471,7 +421,7 @@ function MonthlyReport() {
       )}
 
       <Card className="overflow-hidden">
-        {isLoading?<div className="p-8 text-center text-sm text-muted-foreground">Generating report...</div>:(
+        {isLoading ? <div className="p-8 text-center text-sm text-muted-foreground">Generating report…</div> : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-muted/50">
@@ -505,7 +455,7 @@ function MonthlyReport() {
                     </td>
                   </tr>
                 ))}
-                {!filtered.length&&<tr><td colSpan={15} className="text-center py-8 text-muted-foreground">Click Generate to load the monthly report.</td></tr>}
+                {!filtered.length&&<tr><td colSpan={15} className="text-center py-8 text-muted-foreground">No data available for the selected period.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -525,61 +475,54 @@ function OvertimeReport() {
   const [branchId, setBranchId]   = useState("");
   const [empType, setEmpType]     = useState("");
   const [empName, setEmpName]     = useState("");
-  const [applied, setApplied]     = useState({startDate,endDate,branchId});
+
+  const dStart  = useDebounce(startDate, 400);
+  const dEnd    = useDebounce(endDate, 400);
+  const dBranch = useDebounce(branchId, 200);
 
   const { data: branches } = useListBranches();
   const { data, isLoading } = useGetOvertimeReport({
-    startDate:applied.startDate, endDate:applied.endDate,
-    ...(applied.branchId?{branchId:Number(applied.branchId)}:{}),
+    startDate: dStart, endDate: dEnd,
+    ...(dBranch ? { branchId: Number(dBranch) } : {}),
   });
 
-  const filtered = useMemo(()=>(data?.employees||[]).filter((e:any)=>
-    (!empType||e.employeeType===empType)&&(!empName||(e.employeeName||"").toLowerCase().includes(empName.toLowerCase()))
-  ),[data,empType,empName]);
+  const filtered = useMemo(() => (data?.employees || []).filter((e: any) =>
+    (!empType || e.employeeType === empType)
+    && (!empName || (e.employeeName || "").toLowerCase().includes(empName.toLowerCase()))
+  ), [data, empType, empName]);
 
-  const totalOT = filtered.reduce((s:number,e:any)=>s+e.totalOvertimeHours,0);
+  const totalOT = filtered.reduce((s: number, e: any) => s + e.totalOvertimeHours, 0);
 
-  const HEADERS = ["Emp ID","Employee","Branch","Designation","Type","OT Days","Total OT Hours","Daily Breakdown"];
+  const HEADERS = ["Emp ID","Employee","Branch","Designation","Type","OT Days","Total OT Hrs","Daily Breakdown"];
 
-  const handleCSV = () => {
-    downloadCSV(`overtime-report_${applied.startDate}_${applied.endDate}.csv`, HEADERS,
-      filtered.map((e:any)=>[
-        e.employeeCode,e.employeeName,e.branchName,e.designation,e.employeeType||"",
-        e.overtimeDays,e.totalOvertimeHours.toFixed(1),
-        e.records.map((r:any)=>`${r.date}: ${r.overtimeHours.toFixed(1)}h`).join(" | "),
-      ])
-    );
-  };
-
-  const handlePrint = () => {
-    const thead=`<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
-    const tbody=filtered.map((e:any)=>`<tr>
+  const handleExport = () => {
+    const thead = `<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
+    const tbody = filtered.map((e: any) => `<tr>
       <td>${e.employeeCode}</td><td>${e.employeeName}</td><td>${e.branchName}</td>
       <td>${e.designation}</td><td>${e.employeeType||""}</td>
       <td>${e.overtimeDays}</td><td>${e.totalOvertimeHours.toFixed(1)}h</td>
       <td>${e.records.slice(0,5).map((r:any)=>`${r.date}: ${r.overtimeHours.toFixed(1)}h`).join(" | ")}</td>
     </tr>`).join("");
     printReport({
-      title:"Overtime Report",
-      meta:[
-        { label:"Period", value:`${applied.startDate} – ${applied.endDate}` },
-        { label:"Total OT Hours", value:`${totalOT.toFixed(1)}h` },
-        { label:"Employees with OT", value:String(filtered.length) },
-        { label:"Branch", value:applied.branchId?(branches?.find(b=>String(b.id)===applied.branchId)?.name||"—"):"All Branches" },
+      title: "Overtime Report",
+      meta: [
+        { label:"Period",           value:`${dStart} – ${dEnd}` },
+        { label:"Total OT Hours",   value:`${totalOT.toFixed(1)}h` },
+        { label:"Employees with OT",value:String(filtered.length) },
+        { label:"Branch",           value:dBranch?(branches?.find(b=>String(b.id)===dBranch)?.name||"—"):"All Branches" },
       ],
-      tableHtml:`<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`,
-      drivethruLogoUrl:drivethruLogo, liveuLogoUrl:liveuLogo,
+      tableHtml: `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`,
     });
   };
 
   return (
     <div className="space-y-4">
-      <Card className="p-4">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
+      <FilterCard title="Overtime Report Filters" onExport={handleExport}>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           <div><Label className="text-xs">Start Date</Label>
-            <Input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} /></div>
+            <Input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/></div>
           <div><Label className="text-xs">End Date</Label>
-            <Input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} /></div>
+            <Input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)}/></div>
           <div><Label className="text-xs">Branch</Label>
             <Select value={branchId} onChange={e=>setBranchId(e.target.value)}>
               <option value="">All Branches</option>
@@ -592,13 +535,9 @@ function OvertimeReport() {
               <option value="casual">Casual</option>
             </Select></div>
           <div><Label className="text-xs">Employee Name</Label>
-            <Input placeholder="Search name…" value={empName} onChange={e=>setEmpName(e.target.value)} /></div>
-          <div className="flex flex-col gap-2">
-            <Button onClick={()=>setApplied({startDate,endDate,branchId})} className="w-full">Apply</Button>
-            <ExportButtons onCSV={handleCSV} onPrint={handlePrint} />
-          </div>
+            <Input placeholder="Search name…" value={empName} onChange={e=>setEmpName(e.target.value)}/></div>
         </div>
-      </Card>
+      </FilterCard>
 
       {data && (
         <Card className="p-3 flex gap-6 text-sm border-amber-200 bg-amber-50/30">
@@ -608,7 +547,7 @@ function OvertimeReport() {
       )}
 
       <Card className="overflow-hidden">
-        {isLoading?<div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>:(
+        {isLoading ? <div className="p-8 text-center text-sm text-muted-foreground">Loading…</div> : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-muted/50">
@@ -665,25 +604,25 @@ function PayrollReport() {
   const [data, setData]       = useState<PayrollRecord[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(()=>{ loadPayroll(); },[month,year]);
+  const dMonth = useDebounce(month, 300);
+  const dYear  = useDebounce(year, 300);
 
-  const loadPayroll = async () => {
+  useEffect(() => {
     setLoading(true);
-    try {
-      const r = await fetch(apiUrl(`/payroll?month=${month}&year=${year}`));
-      const d = await r.json();
-      setData(Array.isArray(d)?d:[]);
-    } catch { setData([]); }
-    setLoading(false);
-  };
+    fetch(apiUrl(`/payroll?month=${dMonth}&year=${dYear}`))
+      .then(r => r.json())
+      .then(d => setData(Array.isArray(d) ? d : []))
+      .catch(() => setData([]))
+      .finally(() => setLoading(false));
+  }, [dMonth, dYear]);
 
-  const filtered = useMemo(()=>data.filter(r=>
-    (!empType||r.employee.employeeType===empType)
-    &&(!status||r.status===status)
-    &&(!empName||(r.employee.fullName||"").toLowerCase().includes(empName.toLowerCase()))
-  ),[data,empType,status,empName]);
+  const filtered = useMemo(() => data.filter(r =>
+    (!empType || r.employee.employeeType === empType)
+    && (!status || r.status === status)
+    && (!empName || (r.employee.fullName || "").toLowerCase().includes(empName.toLowerCase()))
+  ), [data, empType, status, empName]);
 
-  const totals = useMemo(()=>({
+  const totals = useMemo(() => ({
     gross:       filtered.reduce((s,r)=>s+r.grossSalary,0),
     net:         filtered.reduce((s,r)=>s+r.netSalary,0),
     epfEmployee: filtered.reduce((s,r)=>s+r.epfEmployee,0),
@@ -691,27 +630,13 @@ function PayrollReport() {
     etf:         filtered.reduce((s,r)=>s+r.etfEmployer,0),
     apit:        filtered.reduce((s,r)=>s+r.apit,0),
     ot:          filtered.reduce((s,r)=>s+r.overtimePay,0),
-  }),[filtered]);
+  }), [filtered]);
 
   const HEADERS = ["Emp ID","Employee","Designation","Department","Type","Basic Salary","Gross Salary","EPF (Emp)","EPF (Employer)","ETF","APIT","OT Pay","Total Deductions","Net Salary","Status"];
 
-  const handleCSV = () => {
-    const rows = filtered.map(r=>[
-      r.employee.employeeId,r.employee.fullName,r.employee.designation,r.employee.department||"",
-      r.employee.employeeType||"",r.basicSalary.toFixed(2),r.grossSalary.toFixed(2),
-      r.epfEmployee.toFixed(2),r.epfEmployer.toFixed(2),r.etfEmployer.toFixed(2),
-      r.apit.toFixed(2),r.overtimePay.toFixed(2),r.totalDeductions.toFixed(2),r.netSalary.toFixed(2),r.status,
-    ]);
-    rows.push(["","TOTALS","","","","",totals.gross.toFixed(2),totals.epfEmployee.toFixed(2),
-      totals.epfEmployer.toFixed(2),totals.etf.toFixed(2),totals.apit.toFixed(2),
-      totals.ot.toFixed(2),"",totals.net.toFixed(2),"",
-    ]);
-    downloadCSV(`payroll-report_${getMonthName(month)}_${year}.csv`,HEADERS,rows);
-  };
-
-  const handlePrint = () => {
-    const thead=`<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
-    const tbody=filtered.map(r=>`<tr>
+  const handleExport = () => {
+    const thead = `<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
+    const tbody = filtered.map(r=>`<tr>
       <td>${r.employee.employeeId}</td><td>${r.employee.fullName}</td>
       <td>${r.employee.designation}</td><td>${r.employee.department||""}</td>
       <td>${r.employee.employeeType||""}</td>
@@ -726,7 +651,7 @@ function PayrollReport() {
       <td><strong>Rs.${Math.round(r.netSalary).toLocaleString()}</strong></td>
       <td>${r.status.toUpperCase()}</td>
     </tr>`).join("");
-    const tfoot=`<tr>
+    const tfoot = `<tr>
       <td colspan="5"><strong>TOTALS (${filtered.length} employees)</strong></td>
       <td></td>
       <td><strong>Rs.${Math.round(totals.gross).toLocaleString()}</strong></td>
@@ -740,26 +665,25 @@ function PayrollReport() {
       <td></td>
     </tr>`;
     printReport({
-      title:"Payroll Report",
-      meta:[
-        { label:"Period", value:`${getMonthName(month)} ${year}` },
-        { label:"Total Employees", value:String(filtered.length) },
-        { label:"Total Gross", value:`Rs.${Math.round(totals.gross).toLocaleString()}` },
-        { label:"Total Net Pay", value:`Rs.${Math.round(totals.net).toLocaleString()}` },
-        { label:"EPF (Employee)", value:`Rs.${Math.round(totals.epfEmployee).toLocaleString()}` },
-        { label:"EPF (Employer)", value:`Rs.${Math.round(totals.epfEmployer).toLocaleString()}` },
-        { label:"ETF", value:`Rs.${Math.round(totals.etf).toLocaleString()}` },
-        { label:"APIT", value:`Rs.${Math.round(totals.apit).toLocaleString()}` },
+      title: "Payroll Report",
+      meta: [
+        { label:"Period",           value:`${getMonthName(dMonth)} ${dYear}` },
+        { label:"Total Employees",  value:String(filtered.length) },
+        { label:"Total Gross",      value:`Rs.${Math.round(totals.gross).toLocaleString()}` },
+        { label:"Total Net Pay",    value:`Rs.${Math.round(totals.net).toLocaleString()}` },
+        { label:"EPF (Employee)",   value:`Rs.${Math.round(totals.epfEmployee).toLocaleString()}` },
+        { label:"EPF (Employer)",   value:`Rs.${Math.round(totals.epfEmployer).toLocaleString()}` },
+        { label:"ETF",              value:`Rs.${Math.round(totals.etf).toLocaleString()}` },
+        { label:"APIT",             value:`Rs.${Math.round(totals.apit).toLocaleString()}` },
       ],
-      tableHtml:`<table><thead>${thead}</thead><tbody>${tbody}</tbody><tfoot>${tfoot}</tfoot></table>`,
-      drivethruLogoUrl:drivethruLogo, liveuLogoUrl:liveuLogo,
+      tableHtml: `<table><thead>${thead}</thead><tbody>${tbody}</tbody><tfoot>${tfoot}</tfoot></table>`,
     });
   };
 
   return (
     <div className="space-y-4">
-      <Card className="p-4">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
+      <FilterCard title="Payroll Report Filters" onExport={handleExport}>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           <div><Label className="text-xs">Month</Label>
             <Select value={month} onChange={e=>setMonth(Number(e.target.value))}>
               {Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{getMonthName(i+1)}</option>)}
@@ -781,15 +705,11 @@ function PayrollReport() {
               <option value="paid">Paid</option>
             </Select></div>
           <div><Label className="text-xs">Employee Name</Label>
-            <Input placeholder="Search name…" value={empName} onChange={e=>setEmpName(e.target.value)} /></div>
-          <div className="flex flex-col gap-2">
-            <Button onClick={loadPayroll} className="w-full">Refresh</Button>
-            <ExportButtons onCSV={handleCSV} onPrint={handlePrint} />
-          </div>
+            <Input placeholder="Search name…" value={empName} onChange={e=>setEmpName(e.target.value)}/></div>
         </div>
-      </Card>
+      </FilterCard>
 
-      {filtered.length>0&&(
+      {filtered.length>0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             {label:"Total Employees",val:filtered.length,    fmt:false,cls:"text-primary"},
@@ -810,7 +730,7 @@ function PayrollReport() {
       )}
 
       <Card className="overflow-hidden">
-        {loading?<div className="p-8 text-center text-sm text-muted-foreground">Loading payroll data...</div>:(
+        {loading ? <div className="p-8 text-center text-sm text-muted-foreground">Loading payroll data…</div> : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-muted/50">
@@ -846,9 +766,9 @@ function PayrollReport() {
                     </td>
                   </tr>
                 ))}
-                {!filtered.length&&<tr><td colSpan={15} className="text-center py-8 text-muted-foreground">No payroll records found for {getMonthName(month)} {year}.</td></tr>}
+                {!filtered.length&&<tr><td colSpan={15} className="text-center py-8 text-muted-foreground">No payroll records found for {getMonthName(dMonth)} {dYear}.</td></tr>}
               </tbody>
-              {filtered.length>0&&(
+              {filtered.length>0 && (
                 <tfoot className="bg-muted/70">
                   <tr>
                     <td colSpan={5} className="px-3 py-2 text-xs font-bold">TOTALS ({filtered.length} employees)</td>

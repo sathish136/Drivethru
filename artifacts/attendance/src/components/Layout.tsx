@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import liveuLogo from "@/assets/liveu-logo.png";
-import drivethruLogo from "@/assets/drivethru-brand.svg";
+import drivethruLogo from "@/assets/drivethru-logo.png";
 import {
   LayoutGrid,
   UserRound,
@@ -342,10 +342,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           sidebarLight ? "border-b border-gray-200" : "border-b border-white/8",
           collapsed ? "justify-center py-4 px-0" : "px-4 pt-5 pb-4 gap-3"
         )}>
-          <div className="w-10 h-10 rounded-xl bg-sidebar-active flex items-center justify-center shadow overflow-hidden shrink-0">
+          <div className="w-10 h-10 rounded-2xl bg-white flex items-center justify-center shrink-0 overflow-hidden"
+            style={{ boxShadow: "0 2px 10px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.06)" }}>
             {logoUrl
-              ? <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-1" />
-              : <span className="font-extrabold text-sm text-white">P</span>}
+              ? <img src={logoUrl} alt="Logo" className="w-7 h-7 object-contain" />
+              : <span className="font-extrabold text-sm text-primary">D</span>}
           </div>
 
           {!collapsed && (
