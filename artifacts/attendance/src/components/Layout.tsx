@@ -9,7 +9,6 @@ import {
   CalendarCheck,
   Timer,
   MapPinned,
-  ScanLine,
   Cog,
   BarChart3,
   LogOut,
@@ -68,8 +67,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Organization",
     items: [
-      { href: "/branches",  label: "Branches",          icon: MapPinned },
-      { href: "/biometric", label: "Biometric Devices", icon: ScanLine  },
+      { href: "/branches", label: "Branches", icon: MapPinned },
     ],
   },
   {
@@ -137,7 +135,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     try { return JSON.parse(localStorage.getItem("auth_user") || "{}"); } catch { return {}; }
   })();
   const userName  = storedUser.fullName || storedUser.username || "Admin User";
-  const userEmail = storedUser.email    || storedUser.username  || "admin@post.com";
+  const userEmail = storedUser.email    || storedUser.username  || "admin@drivethru.com";
   const userRole  = storedUser.role     || "admin";
 
   useEffect(() => {

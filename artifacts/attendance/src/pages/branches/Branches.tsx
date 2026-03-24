@@ -244,7 +244,7 @@ export default function Branches() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <Label className="text-xs">Branch Name *</Label>
-                  <Input placeholder="e.g. Colombo Head Post Office" value={form.name} onChange={e => set("name", e.target.value)} />
+                  <Input placeholder="e.g. Drivethru Main Branch" value={form.name} onChange={e => set("name", e.target.value)} />
                 </div>
                 <div>
                   <Label className="text-xs">Branch Code *</Label>

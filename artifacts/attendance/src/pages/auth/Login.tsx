@@ -146,7 +146,7 @@ export default function Login() {
                   style={{ background: primary, boxShadow: `0 0 20px ${primaryGlow}` }}>P</div>
               </div>
               <div>
-                <p className="font-bold text-white text-base tracking-tight leading-none">Post Office</p>
+                <p className="font-bold text-white text-base tracking-tight leading-none">Drivethru</p>
                 <p className="text-white/40 text-[11px] mt-0.5">Attendance Management System</p>
               </div>
             </div>
@@ -163,7 +163,7 @@ export default function Login() {
                 Platform
               </h1>
               <p className="mt-4 text-white/45 text-[14px] leading-relaxed max-w-xs">
-                Unified attendance, HR, and payroll management for Drivethru — powered by ZKTeco biometrics.
+                Unified attendance, HR, and payroll management for Drivethru — cloud-based and accessible anywhere.
               </p>
 
               {/* Feature list */}
