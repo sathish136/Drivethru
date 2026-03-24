@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, real, text, timestamp, date } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, real, text, timestamp, date, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { employees } from "./employees";
@@ -50,3 +50,32 @@ export const payrollRecords = pgTable("payroll_records", {
 export const insertPayrollSchema = createInsertSchema(payrollRecords).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertPayroll = z.infer<typeof insertPayrollSchema>;
 export type PayrollRecord = typeof payrollRecords.$inferSelect;
+
+/* ── Salary Structures ──────────────────────────────────── */
+
+export const salaryStructures = pgTable("salary_structures", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  currency: text("currency").notNull().default("LKR"),
+  status: text("status").notNull().$type<"active" | "inactive">().default("active"),
+  earnings: text("earnings").notNull().default("[]"),      // JSON array of SalaryComponent
+  deductions: text("deductions").notNull().default("[]"),  // JSON array of SalaryComponent
+  variablePay: text("variable_pay").notNull().default("[]"), // JSON array
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const employeeSalaryAssignments = pgTable("employee_salary_assignments", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employee_id").notNull().references(() => employees.id),
+  salaryStructureId: integer("salary_structure_id").notNull().references(() => salaryStructures.id),
+  basicAmount: real("basic_amount").notNull().default(0),
+  effectiveDate: date("effective_date").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertSalaryStructureSchema = createInsertSchema(salaryStructures).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertEmployeeSalaryAssignmentSchema = createInsertSchema(employeeSalaryAssignments).omit({ id: true, createdAt: true, updatedAt: true });
+export type SalaryStructure = typeof salaryStructures.$inferSelect;
+export type EmployeeSalaryAssignment = typeof employeeSalaryAssignments.$inferSelect;

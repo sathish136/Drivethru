@@ -15,6 +15,7 @@ import designationsRouter from "./designations.js";
 import mockDataRouter from "./mock-data.js";
 import payrollRouter from "./payroll.js";
 import payrollSettingsRouter from "./payroll-settings.js";
+import salaryStructuresRouter from "./salary-structures.js";
 import activityLogsRouter from "./activity-logs.js";
 import checkinImportRouter from "./checkin-import.js";
 
@@ -37,6 +38,7 @@ router.use("/mock-data", mockDataRouter);
 router.use("/checkin-import", checkinImportRouter);
 router.use("/payroll", payrollRouter);
 router.use("/payroll-settings", payrollSettingsRouter);
+router.use("/salary-structures", salaryStructuresRouter);
 router.use("/activity-logs", activityLogsRouter);
 
 export default router;
