@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { payrollRecords, employees, attendanceRecords, payrollSettings } from "@workspace/db/schema";
+import { payrollRecords, employees, attendanceRecords, payrollSettings, salaryStructures, employeeSalaryAssignments } from "@workspace/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
+
+const STATUTORY_NAMES = ["EPF – Employee", "EPF – Employer", "ETF"];
 
 const router = Router();
 
@@ -150,6 +152,22 @@ router.post("/generate", async (req, res) => {
       .where(inArray(attendanceRecords.employeeId, empIds));
     const filteredAtt = allAtt.filter(a => a.date.startsWith(datePrefix));
 
+    // Load salary structure assignments for these employees
+    const assignmentRows = await db
+      .select({ assignment: employeeSalaryAssignments, structure: salaryStructures })
+      .from(employeeSalaryAssignments)
+      .innerJoin(salaryStructures, eq(employeeSalaryAssignments.salaryStructureId, salaryStructures.id))
+      .where(inArray(employeeSalaryAssignments.employeeId, empIds));
+
+    const structureMap = new Map<number, { basicAmount: number; earnings: any[]; deductions: any[] }>();
+    for (const row of assignmentRows) {
+      structureMap.set(row.assignment.employeeId, {
+        basicAmount: row.assignment.basicAmount,
+        earnings: JSON.parse(row.structure.earnings),
+        deductions: JSON.parse(row.structure.deductions),
+      });
+    }
+
     const wdCount = workingDaysInMonth(year, month);
     const generated: any[] = [];
 
@@ -171,13 +189,55 @@ router.post("/generate", async (req, res) => {
       const holidayDays = empAtt.filter(a => a.status === "holiday").length;
       const totalOTHours = empAtt.reduce((s, a) => s + (a.overtimeHours || 0), 0);
 
-      const basicSalary = cfg.employeeOverrides[String(emp.id)] ?? cfg.salaryScale[emp.designation] ?? 40000;
-      const transportAllowance = cfg.transportAllowance;
-      const housingAllowance =
-        basicSalary >= cfg.housingHighThreshold ? cfg.housingAllowanceHigh :
-        basicSalary >= cfg.housingMidThreshold ? cfg.housingAllowanceMid :
-        cfg.housingAllowanceLow;
-      const otherAllowances = cfg.otherAllowances;
+      const structData = structureMap.get(emp.id);
+
+      let basicSalary: number;
+      let transportAllowance: number;
+      let housingAllowance: number;
+      let otherAllowances: number;
+      let epfEmployee: number;
+      let epfEmployer: number;
+      let etfEmployer: number;
+      let otherDeductionsFromStruct = 0;
+
+      if (structData) {
+        // Use the assigned salary structure
+        const basicEarning = structData.earnings.find((e: any) => e.component === "Basic");
+        basicSalary = structData.basicAmount || basicEarning?.amount || 0;
+
+        // Map non-basic earnings into allowance buckets
+        const nonBasicEarnings = structData.earnings.filter((e: any) => e.component !== "Basic");
+        transportAllowance = 0;
+        housingAllowance = 0;
+        otherAllowances = 0;
+        for (const e of nonBasicEarnings) {
+          const name = (e.component ?? "").toLowerCase();
+          if (name.includes("transport") || name.includes("travel")) transportAllowance += e.amount || 0;
+          else if (name.includes("housing") || name.includes("rent")) housingAllowance += e.amount || 0;
+          else otherAllowances += e.amount || 0;
+        }
+
+        // EPF/ETF calculated from basic salary per structure
+        epfEmployee = Math.round(basicSalary * 0.08);
+        epfEmployer = Math.round(basicSalary * 0.12);
+        etfEmployer = Math.round(basicSalary * 0.03);
+
+        // Sum any custom (non-statutory) deductions
+        const customDeds = structData.deductions.filter((d: any) => !STATUTORY_NAMES.includes(d.component));
+        otherDeductionsFromStruct = customDeds.reduce((s: number, d: any) => s + (d.amount || 0), 0);
+      } else {
+        // Fall back to global payroll settings
+        basicSalary = cfg.employeeOverrides[String(emp.id)] ?? cfg.salaryScale[emp.designation] ?? 40000;
+        transportAllowance = cfg.transportAllowance;
+        housingAllowance =
+          basicSalary >= cfg.housingHighThreshold ? cfg.housingAllowanceHigh :
+          basicSalary >= cfg.housingMidThreshold ? cfg.housingAllowanceMid :
+          cfg.housingAllowanceLow;
+        otherAllowances = cfg.otherAllowances;
+        epfEmployee = 0; // will be computed after gross
+        epfEmployer = 0;
+        etfEmployer = 0;
+      }
 
       const dailyRate = basicSalary / wdCount;
       const hourlyRate = basicSalary / (wdCount * 8);
@@ -191,12 +251,17 @@ router.post("/generate", async (req, res) => {
         - absenceDeduction - lateDeduction - halfDayDeduction
       );
 
-      const epfEmployee = Math.round(grossSalary * (cfg.epfEmployeePercent / 100));
-      const epfEmployer = Math.round(grossSalary * (cfg.epfEmployerPercent / 100));
-      const etfEmployer = Math.round(grossSalary * (cfg.etfEmployerPercent / 100));
+      // For non-structure employees, calculate EPF/ETF from gross
+      if (!structData) {
+        epfEmployee = Math.round(grossSalary * (cfg.epfEmployeePercent / 100));
+        epfEmployer = Math.round(grossSalary * (cfg.epfEmployerPercent / 100));
+        etfEmployer = Math.round(grossSalary * (cfg.etfEmployerPercent / 100));
+      }
+
       const apit = calcAPIT(grossSalary);
-      const totalDeductions = epfEmployee + apit + lateDeduction + absenceDeduction + halfDayDeduction;
-      const netSalary = grossSalary - epfEmployee - apit;
+      const otherDeductions = otherDeductionsFromStruct;
+      const totalDeductions = epfEmployee + apit + lateDeduction + absenceDeduction + halfDayDeduction + otherDeductions;
+      const netSalary = grossSalary - epfEmployee - apit - otherDeductions;
 
       const record = {
         employeeId: emp.id,
@@ -222,7 +287,7 @@ router.post("/generate", async (req, res) => {
         apit,
         lateDeduction,
         absenceDeduction,
-        otherDeductions: 0,
+        otherDeductions,
         totalDeductions,
         netSalary,
         status: "draft" as const,

@@ -178,7 +178,7 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
                   { label: "Housing Allowance",   val: row.housingAllowance },
                   { label: "Other Allowances",    val: row.otherAllowances },
                   { label: "Overtime Pay",        val: row.overtimePay },
-                ].map(e => (
+                ].filter(e => e.val > 0 || e.label === "Basic Salary").map(e => (
                   <div key={e.label} className="flex justify-between">
                     <span className="text-muted-foreground">{e.label}</span>
                     <span className="font-medium">{fmt(e.val)}</span>
