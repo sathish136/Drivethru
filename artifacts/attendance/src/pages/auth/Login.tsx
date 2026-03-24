@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Mail, Lock, AlertCircle, Shield, Clock, Users, BarChart3, Eye, EyeOff } from "lucide-react";
-import liveuLogo from "@/assets/liveu-logo.png";
-import drivethruLogo from "@/assets/drivethru-logo.png";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -12,7 +10,7 @@ const features = [
   { icon: BarChart3,title: "Smart Analytics",         desc: "Reports and insights at your fingertips"     },
 ];
 
-/* Drivethru brand blue: hsl(200 60% 48%) ≈ #3a9ec2 */
+/* Brand blue */
 const B = "200 60% 48%";
 const primary     = `hsl(${B})`;
 const primaryDim  = `hsl(${B} / .15)`;
@@ -139,16 +137,16 @@ export default function Login() {
 
           {/* Content */}
           <div className="relative z-10 flex flex-col h-full px-12 py-10">
-            {/* Brand — Liveu logo on left side */}
+            {/* Brand */}
             <div className="flex items-center gap-3">
               <div className="relative">
                 <div className="anim-pulse-ring absolute inset-0 rounded-full"
                   style={{ background: primaryGlow }} />
-                <img src={liveuLogo} alt="Live u Pvt Ltd Srilanka" className="w-12 h-12 rounded-full relative object-cover"
-                  style={{ boxShadow: `0 0 20px ${primaryGlow}` }} />
+                <div className="w-12 h-12 rounded-full relative flex items-center justify-center text-white font-bold text-xl"
+                  style={{ background: primary, boxShadow: `0 0 20px ${primaryGlow}` }}>P</div>
               </div>
               <div>
-                <p className="font-bold text-white text-base tracking-tight leading-none">Drivethru</p>
+                <p className="font-bold text-white text-base tracking-tight leading-none">Post Office</p>
                 <p className="text-white/40 text-[11px] mt-0.5">Attendance Management System</p>
               </div>
             </div>

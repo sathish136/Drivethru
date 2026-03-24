@@ -200,7 +200,7 @@ export default function Settings() {
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div>
                 <Label className="text-xs">Organization Name</Label>
-                <Input placeholder="e.g. India Post" defaultValue="" />
+                <Input placeholder="e.g. drivethru" defaultValue="" />
               </div>
               <div>
                 <Label className="text-xs">Short Name / Code</Label>
@@ -208,11 +208,12 @@ export default function Settings() {
               </div>
               <div>
                 <Label className="text-xs">Country</Label>
-                <Input placeholder="e.g. India" defaultValue="" />
+                <Input placeholder="e.g. Sri Lanka" defaultValue="" />
               </div>
               <div>
                 <Label className="text-xs">Timezone</Label>
-                <Select defaultValue="IST">
+                <Select defaultValue="SLST">
+                  <option value="SLST">Sri Lanka Standard Time (GMT+5:30)</option>
                   <option value="IST">India Standard Time (GMT+5:30)</option>
                   <option value="UTC">UTC (GMT+0)</option>
                   <option value="EST">Eastern Standard Time (GMT-5)</option>
@@ -233,7 +234,8 @@ export default function Settings() {
               </div>
               <div>
                 <Label className="text-xs">Currency</Label>
-                <Select defaultValue="INR">
+                <Select defaultValue="LKR">
+                  <option value="LKR">LKR — Sri Lankan Rupee (Rs)</option>
                   <option value="INR">INR — Indian Rupee (₹)</option>
                   <option value="USD">USD — US Dollar ($)</option>
                   <option value="EUR">EUR — Euro (€)</option>
@@ -254,7 +256,7 @@ export default function Settings() {
               </div>
               <div>
                 <Label className="text-xs">Contact Phone</Label>
-                <Input placeholder="+91-XXXXXXXXXX" defaultValue="" />
+                <Input placeholder="+94-XXXXXXXXXX" defaultValue="" />
               </div>
             </div>
             <div className="flex justify-end mt-5">
