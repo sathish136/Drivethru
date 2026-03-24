@@ -19,8 +19,6 @@ const TYPE_STYLE: Record<string, string> = {
   special:   "bg-amber-100 text-amber-700 border border-amber-200",
 };
 
-const POYA_ICON = "🌕";
-function isPoya(name: string) { return name.toLowerCase().includes("poya"); }
 
 type SettingsTab = "organisation" | "attendance" | "hr" | "holidays" | "biometric" | "mockdata";
 
