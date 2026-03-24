@@ -451,7 +451,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                     </div>
                   </div>
                   <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">Last Name <span className="text-red-500">*</span></Label>
+                    <Label className="text-xs font-semibold mb-1.5 block">Last Name</Label>
                     <div className="relative">
                       <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                       <Input className="pl-8" placeholder="e.g. Sharma" value={form.lastName} onChange={e => set("lastName", e.target.value)} />
