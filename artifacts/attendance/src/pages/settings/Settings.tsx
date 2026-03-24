@@ -76,7 +76,7 @@ export default function Settings() {
   const [mockMsg, setMockMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   async function handleImportMock() {
-    if (!confirm("This will import Sri Lanka Post sample data (branches, departments, designations, employees, holidays). Continue?")) return;
+    if (!confirm("This will import sample data (branches, departments, designations, employees, holidays). Continue?")) return;
     setMockImporting(true); setMockMsg(null);
     try {
       const r = await fetch(apiUrl("/mock-data/import"), { method: "POST" });
@@ -125,9 +125,8 @@ export default function Settings() {
     byMonth[m].push(h);
   });
 
-  const poyas    = (holidays || []).filter(h => isPoya(h.name));
-  const national = (holidays || []).filter(h => h.type === "national");
-  const religious = (holidays || []).filter(h => h.type === "religious" && !isPoya(h.name));
+  const national  = (holidays || []).filter(h => h.type === "national");
+  const religious = (holidays || []).filter(h => h.type === "religious");
 
   function saveFn(setter: (v: boolean) => void) {
     setter(true);
@@ -201,45 +200,61 @@ export default function Settings() {
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div>
                 <Label className="text-xs">Organization Name</Label>
-                <Input defaultValue="Sri Lanka Post" />
+                <Input placeholder="e.g. India Post" defaultValue="" />
               </div>
               <div>
-                <Label className="text-xs">Short Name</Label>
-                <Input defaultValue="SLP" />
+                <Label className="text-xs">Short Name / Code</Label>
+                <Input placeholder="e.g. IPO" defaultValue="" />
               </div>
               <div>
                 <Label className="text-xs">Country</Label>
-                <Input defaultValue="Sri Lanka" readOnly className="bg-muted" />
+                <Input placeholder="e.g. India" defaultValue="" />
               </div>
               <div>
                 <Label className="text-xs">Timezone</Label>
-                <Select defaultValue="SLST">
-                  <option value="SLST">Sri Lanka Standard Time (GMT+5:30)</option>
+                <Select defaultValue="IST">
+                  <option value="IST">India Standard Time (GMT+5:30)</option>
                   <option value="UTC">UTC (GMT+0)</option>
+                  <option value="EST">Eastern Standard Time (GMT-5)</option>
+                  <option value="PST">Pacific Standard Time (GMT-8)</option>
+                  <option value="GST">Gulf Standard Time (GMT+4)</option>
+                  <option value="SGT">Singapore Time (GMT+8)</option>
+                  <option value="AEST">Australian Eastern Time (GMT+10)</option>
                 </Select>
               </div>
               <div>
                 <Label className="text-xs">Financial Year Start</Label>
-                <Select defaultValue="jan">
+                <Select defaultValue="apr">
                   <option value="jan">January</option>
                   <option value="apr">April</option>
+                  <option value="jul">July</option>
+                  <option value="oct">October</option>
                 </Select>
               </div>
               <div>
                 <Label className="text-xs">Currency</Label>
-                <Input defaultValue="LKR (Rs.)" readOnly className="bg-muted" />
+                <Select defaultValue="INR">
+                  <option value="INR">INR — Indian Rupee (₹)</option>
+                  <option value="USD">USD — US Dollar ($)</option>
+                  <option value="EUR">EUR — Euro (€)</option>
+                  <option value="GBP">GBP — British Pound (£)</option>
+                  <option value="AED">AED — UAE Dirham</option>
+                  <option value="SGD">SGD — Singapore Dollar</option>
+                  <option value="BDT">BDT — Bangladeshi Taka</option>
+                  <option value="PKR">PKR — Pakistani Rupee</option>
+                </Select>
               </div>
               <div className="col-span-2 md:col-span-3">
                 <Label className="text-xs">Head Office Address</Label>
-                <Input defaultValue="310 D.R. Wijewardena Mawatha, Colombo 10, Sri Lanka" />
+                <Input placeholder="Street, City, State, Country" defaultValue="" />
               </div>
               <div>
                 <Label className="text-xs">Contact Email</Label>
-                <Input type="email" defaultValue="hr@slpost.lk" />
+                <Input type="email" placeholder="hr@yourorg.com" defaultValue="" />
               </div>
               <div>
                 <Label className="text-xs">Contact Phone</Label>
-                <Input defaultValue="+94-11-2326601" />
+                <Input placeholder="+91-XXXXXXXXXX" defaultValue="" />
               </div>
             </div>
             <div className="flex justify-end mt-5">
@@ -391,16 +406,16 @@ export default function Settings() {
                     National <span className="font-bold ml-0.5">({national.length})</span>
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <span className="text-base leading-none">{POYA_ICON}</span>
-                    Poya <span className="font-bold ml-0.5">({poyas.length})</span>
-                  </span>
-                  <span className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block" />
                     Religious <span className="font-bold ml-0.5">({religious.length})</span>
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
                     Special <span className="font-bold ml-0.5">({(holidays || []).filter(h=>h.type==="special").length})</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-gray-400 inline-block" />
+                    Total <span className="font-bold ml-0.5">({(holidays || []).length})</span>
                   </span>
                 </div>
                 <Button onClick={() => setShowAdd(v => !v)} className="text-xs flex items-center gap-1.5 h-8 px-3">
@@ -469,8 +484,7 @@ export default function Settings() {
                                     {new Date(h.date + "T00:00:00").getDate()}
                                   </span>
                                   <div className="min-w-0">
-                                    <p className="text-xs font-medium leading-tight truncate flex items-center gap-1">
-                                      {isPoya(h.name) && <span className="text-sm leading-none">{POYA_ICON}</span>}
+                                    <p className="text-xs font-medium leading-tight truncate">
                                       {h.name}
                                     </p>
                                     <span className={cn("text-xs px-1.5 py-0 rounded", TYPE_STYLE[h.type] || TYPE_STYLE.special)}>
@@ -511,15 +525,13 @@ export default function Settings() {
                     <tbody className="divide-y divide-border/50">
                       {(holidays || []).sort((a, b) => a.date.localeCompare(b.date)).map(h => {
                         const d = new Date(h.date + "T00:00:00");
-                        const day = d.toLocaleDateString("en-IN", { weekday: "long" });
+                        const day = d.toLocaleDateString("en-US", { weekday: "long" });
                         const isSun = d.getDay() === 0;
                         return (
                           <tr key={h.id} className={cn("hover:bg-muted/30", isSun && "bg-amber-50/50")}>
                             <td className="px-3 py-2 font-mono">{h.date}</td>
                             <td className={cn("px-3 py-2", isSun && "text-red-500 font-medium")}>{day}</td>
-                            <td className="px-3 py-2 font-medium flex items-center gap-1">
-                              {isPoya(h.name) && <span>{POYA_ICON}</span>}{h.name}
-                            </td>
+                            <td className="px-3 py-2 font-medium">{h.name}</td>
                             <td className="px-3 py-2">
                               <span className={cn("px-2 py-0.5 rounded text-xs", TYPE_STYLE[h.type] || TYPE_STYLE.special)}>{h.type}</span>
                             </td>
@@ -631,23 +643,21 @@ export default function Settings() {
             <Card className="p-5 border-rose-200 bg-rose-50/30">
               <div className="flex items-center gap-2 mb-3 pb-3 border-b border-rose-100">
                 <Database className="w-4 h-4 text-rose-600" />
-                <span className="text-sm font-bold">Sri Lanka Post — Sample Data</span>
-                <span className="ml-auto text-xs bg-rose-100 text-rose-700 px-2 py-0.5 rounded font-mono">LK / SLP</span>
+                <span className="text-sm font-bold">Sample / Demo Data</span>
+                <span className="ml-auto text-xs bg-rose-100 text-rose-700 px-2 py-0.5 rounded font-mono">Demo</span>
               </div>
               <p className="text-xs text-muted-foreground mb-4">
-                Instantly populate the system with realistic Sri Lanka Post data for testing and demonstration.
-                Includes branches across Sri Lanka, all departments, designations, 50 sample employees, and 2026 public holidays.
+                Instantly populate the system with realistic sample data for testing and demonstration.
+                Includes branches, all departments, designations, 50 sample employees, and 2026 public holidays.
               </p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
                 {[
-                  { label: "Branches", value: "8", note: "Colombo, Kandy, Galle, Jaffna & more" },
-                  { label: "Departments", value: "8", note: "OPS, FIN, HR, IT, PSB & more" },
-                  { label: "Designations", value: "18", note: "PMG to Delivery Agent" },
-                  { label: "Employees", value: "50", note: "Sri Lankan names & NIC numbers" },
-                  { label: "Holidays", value: "26", note: "National, Poya & religious — 2026" },
+                  { label: "Branches", value: "8", note: "Head office, regional & sub branches" },
+                  { label: "Departments", value: "8", note: "OPS, FIN, HR, IT & more" },
+                  { label: "Designations", value: "18", note: "Postmaster to Delivery Agent" },
+                  { label: "Employees", value: "50", note: "Sample employees with full profiles" },
+                  { label: "Holidays", value: "26", note: "National & religious — 2026" },
                   { label: "Shifts", value: "4", note: "General, Morning, Evening, Split" },
-                  { label: "Country", value: "LK", note: "Sri Lanka" },
-                  { label: "Currency", value: "LKR", note: "Sri Lankan Rupee" },
                 ].map(({ label, value, note }) => (
                   <div key={label} className="bg-white rounded-lg border border-rose-100 p-3">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</p>
@@ -663,7 +673,7 @@ export default function Settings() {
                   disabled={mockImporting || mockClearing}
                 >
                   <Download className="w-3.5 h-3.5" />
-                  {mockImporting ? "Importing..." : "Import Sri Lanka Post Data"}
+                  {mockImporting ? "Importing..." : "Import Sample Data"}
                 </Button>
               </div>
             </Card>
