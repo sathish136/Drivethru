@@ -28,7 +28,7 @@ const EMP_TYPE_STYLE: Record<string, string> = {
   casual:    "bg-gray-100 text-gray-600",
 };
 
-const TABS = ["Employee List", "Departments", "Designations"] as const;
+const TABS = ["Employee List", "Departments", "Designations", "Payroll"] as const;
 type Tab = typeof TABS[number];
 
 const DEPT_LIST = ["Operations","Finance & Accounts","Human Resources","Information Technology","Postal Services","Customer Service","Administration","Logistics & Delivery"];
@@ -226,13 +226,18 @@ function DocUploadRow({
 // ── Employee Profile Drawer ────────────────────────────────────────────────────
 const EMPTY_EMP = {
   employeeId:"", firstName:"", lastName:"", gender:"male", dateOfBirth:"", phone:"", email:"",
-  address:"", aadharNumber:"", panNumber:"",
+  address:"", nicNumber:"", panNumber:"",
   designation:"", department:"", branchId:1, shiftId:"", joiningDate:"",
   employeeType:"permanent", reportingManagerId:"", biometricId:"", status:"active",
+  epfNumber:"", etfNumber:"", basicSalary:"",
 };
 
 function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branches: any[]; onClose: () => void; onSaved: () => void }) {
-  const [tab, setTab] = useState<"personal"|"professional"|"documents">("personal");
+  const [tab, setTab] = useState<"personal"|"professional"|"documents"|"payroll">("personal");
+  const { data: deptData } = useGet(["departments"], "/departments");
+  const { data: desigData } = useGet(["designations"], "/designations");
+  const deptOptions: string[] = Array.isArray(deptData) ? deptData.filter((d: any) => d.isActive).map((d: any) => d.name) : [];
+  const desigOptions: string[] = Array.isArray(desigData) ? desigData.filter((d: any) => d.isActive).map((d: any) => d.name) : [];
   const [form, setForm] = useState(emp ? {
     ...EMPTY_EMP, ...emp,
     firstName: emp.firstName || "",
@@ -241,8 +246,11 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
     dateOfBirth: emp.dateOfBirth || "",
     shiftId: emp.shiftId || "",
     reportingManagerId: emp.reportingManagerId || "",
-    aadharNumber: emp.aadharNumber || "",
+    nicNumber: emp.nicNumber || emp.aadharNumber || "",
     panNumber: emp.panNumber || "",
+    epfNumber: emp.epfNumber || "",
+    etfNumber: emp.etfNumber || "",
+    basicSalary: emp.basicSalary || "",
   } : { ...EMPTY_EMP });
   const [photoPreview, setPhotoPreview] = useState<string>(emp?.photoUrl || "");
   const [photoUploading, setPhotoUploading] = useState(false);
