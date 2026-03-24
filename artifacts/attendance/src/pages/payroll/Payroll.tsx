@@ -48,6 +48,7 @@ interface PayrollRow {
   apit: number;
   lateDeduction: number;
   absenceDeduction: number;
+  otherDeductions: number;
   totalDeductions: number;
   netSalary: number;
   status: PayStatus;
@@ -196,11 +197,12 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
               </h3>
               <div className="space-y-1.5 text-sm">
                 {[
-                  { label: "EPF (Employee 8%)",   val: row.epfEmployee },
-                  { label: "APIT (Income Tax)",   val: row.apit },
-                  { label: "Absence Deduction",   val: row.absenceDeduction },
-                  { label: "Late Deduction",      val: row.lateDeduction },
-                ].map(d => (
+                  { label: "EPF – Employee (8%)",  val: row.epfEmployee },
+                  { label: "APIT (Income Tax)",    val: row.apit },
+                  { label: "Absence Deduction",    val: row.absenceDeduction },
+                  { label: "Late Deduction",       val: row.lateDeduction },
+                  { label: "Other Deductions",     val: row.otherDeductions },
+                ].filter(d => d.val > 0 || d.label === "APIT (Income Tax)").map(d => (
                   <div key={d.label} className="flex justify-between">
                     <span className="text-muted-foreground">{d.label}</span>
                     <span className="font-medium text-red-600">{fmt(d.val)}</span>
@@ -220,9 +222,9 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
               <p className="text-2xl font-bold text-primary">{fmt(row.netSalary)}</p>
             </div>
             <div className="text-right text-xs text-muted-foreground space-y-0.5">
-              <p>EPF Employer (12%): {fmt(row.epfEmployer)}</p>
-              <p>ETF Employer (3%): {fmt(row.etfEmployer)}</p>
-              <p>Total Employer Cost: {fmt(row.grossSalary + row.epfEmployer + row.etfEmployer)}</p>
+              <p>EPF – Employer (12%): {fmt(row.epfEmployer)}</p>
+              <p>ETF (3%): {fmt(row.etfEmployer)}</p>
+              <p className="font-semibold text-foreground">Total Employer Cost: {fmt(row.grossSalary + row.epfEmployer + row.etfEmployer)}</p>
             </div>
           </div>
         </div>
