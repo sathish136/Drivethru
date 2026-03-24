@@ -141,7 +141,7 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
         onClick={e => e.stopPropagation()}
       >
         {/* ── Header ── */}
-        <div className="relative rounded-t-2xl px-7 py-6 print:rounded-none" style={{ background: "linear-gradient(135deg, hsl(200,60%,42%) 0%, hsl(200,65%,32%) 100%)" }}>
+        <div className="relative bg-gradient-to-br from-slate-800 to-slate-900 rounded-t-2xl px-7 py-6 print:rounded-none">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center shadow-md p-1.5">
@@ -288,7 +288,7 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
           </div>
 
           {/* ── Net Salary ── */}
-          <div className="rounded-xl px-6 py-5 flex items-center justify-between" style={{ background: "linear-gradient(135deg, hsl(200,60%,42%) 0%, hsl(200,65%,32%) 100%)" }}>
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-xl px-6 py-5 flex items-center justify-between">
             <div>
               <p className="text-white/70 text-xs uppercase tracking-widest font-semibold mb-1">Net Salary (Take Home)</p>
               <p className="text-3xl font-black text-white">{fmt(row.netSalary)}</p>
