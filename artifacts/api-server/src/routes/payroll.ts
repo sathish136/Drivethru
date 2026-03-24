@@ -238,10 +238,14 @@ router.post("/generate", async (req, res) => {
       const offDayRecs     = empAtt.filter(a => a.status === "off_day");
       const presentDays    = presentRecs.length;
       const lateDays       = lateRecs.length;
-      const absentDays     = absentRecs.length;
       const leaveDays      = leaveRecs.length;
       const halfDaysCount  = halfDayRecs.length;
       const holidayDays    = holidayRecs.length;
+
+      /* Any working day with no attendance record is treated as absent */
+      const markedDays  = empAtt.length;
+      const unmarkedAbsentDays = Math.max(0, wdCount - markedDays);
+      const absentDays  = absentRecs.length + unmarkedAbsentDays;
 
       const structData = structureMap.get(emp.id);
 
