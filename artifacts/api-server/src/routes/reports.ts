@@ -97,6 +97,29 @@ router.get("/monthly", async (req, res) => {
     }).from(employees).leftJoin(branches, eq(employees.branchId, branches.id))
       .where(eq(employees.status, "active"));
 
+    // Load shifts + HR rules so we can compute effective status
+    const allShifts = await db.select().from(shifts);
+    const shiftMap = new Map(allShifts.map(s => [s.id, s]));
+    const hrRules = await loadDeptRules();
+
+    function calcEffectiveStatus(
+      rec: typeof attendanceRecords.$inferSelect,
+      empShift: typeof allShifts[0] | undefined,
+      department: string | null,
+    ) {
+      const rule = findRule(hrRules, department || "", empShift?.name);
+      let st = rec.status;
+      if (st === "present" && rec.inTime1) {
+        const shiftStartMins = empShift?.startTime1 ? timeToMins(empShift.startTime1) : 8 * 60;
+        const grace = rule.lateGraceMinutes ?? (empShift?.graceMinutes ?? 15);
+        if (timeToMins(rec.inTime1) > shiftStartMins + grace) st = "late";
+      }
+      if ((st === "present" || st === "late") && rec.totalHours != null) {
+        if (rec.totalHours < (rule.halfDayHours ?? 5)) st = "half_day";
+      }
+      return st;
+    }
+
     const filtered = branchId ? allEmp.filter(r => r.emp.branchId === Number(branchId)) : allEmp;
     const records = await db.select().from(attendanceRecords)
       .where(and(gte(attendanceRecords.date, startDate), lte(attendanceRecords.date, endDate)));
@@ -110,15 +133,17 @@ router.get("/monthly", async (req, res) => {
     const workingDays = daysInMonth;
     const empSummaries = filtered.map(({ emp, branchName }) => {
       const recs = empRecords.get(emp.id) || [];
+      const empShift = emp.shiftId ? shiftMap.get(emp.shiftId) : undefined;
       let presentDays = 0, absentDays = 0, lateDays = 0, halfDays = 0, leaveDays = 0, holidayDays = 0;
       let totalWorkHours = 0, overtimeHours = 0;
       for (const r of recs) {
-        if (r.status === "present") presentDays++;
-        else if (r.status === "absent") absentDays++;
-        else if (r.status === "late") { lateDays++; presentDays++; }
-        else if (r.status === "half_day") halfDays++;
-        else if (r.status === "leave") leaveDays++;
-        else if (r.status === "holiday") holidayDays++;
+        const st = calcEffectiveStatus(r, empShift, emp.department);
+        if (st === "present") presentDays++;
+        else if (st === "absent") absentDays++;
+        else if (st === "late") { lateDays++; presentDays++; }
+        else if (st === "half_day") halfDays++;
+        else if (st === "leave") leaveDays++;
+        else if (st === "holiday") holidayDays++;
         totalWorkHours += r.totalHours || 0;
         overtimeHours += r.overtimeHours || 0;
       }
