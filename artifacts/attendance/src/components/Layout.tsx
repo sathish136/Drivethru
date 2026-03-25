@@ -33,6 +33,7 @@ import {
   ClipboardCheck,
   CalendarClock,
   Banknote,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +63,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/payroll-settings", label: "Payroll Settings", icon: Sliders     },
       { href: "/hr-settings",      label: "HR Settings",      icon: BookOpen    },
       { href: "/shifts",           label: "Shifts",           icon: Timer       },
+      { href: "/holidays",         label: "Holidays",         icon: CalendarDays  },
       { href: "/leave-balances",   label: "Leave Balances",   icon: CalendarClock },
       { href: "/loans",            label: "Loans & Advances", icon: Banknote      },
     ],

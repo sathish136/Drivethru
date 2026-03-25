@@ -18,6 +18,7 @@ import Payroll from "@/pages/payroll/Payroll";
 import PayrollSettings from "@/pages/payroll-settings/PayrollSettings";
 import ActivityLogs from "@/pages/activity-logs/ActivityLogs";
 import HRSettings from "@/pages/hr-settings/HRSettings";
+import Holidays from "@/pages/holidays/Holidays";
 import Approvals from "@/pages/attendance/Approvals";
 import LeaveBalances from "@/pages/leave/LeaveBalances";
 import Loans from "@/pages/loans/Loans";
@@ -56,6 +57,7 @@ function Router() {
       <Route path="/settings"><ProtectedRoute component={Settings} /></Route>
       <Route path="/users"><ProtectedRoute component={Users} /></Route>
       <Route path="/hr-settings"><ProtectedRoute component={HRSettings} /></Route>
+      <Route path="/holidays"><ProtectedRoute component={Holidays} /></Route>
       <Route path="/activity-logs"><ProtectedRoute component={ActivityLogs} /></Route>
       <Route path="/loans"><ProtectedRoute component={Loans} /></Route>
       <Route component={NotFound} />
