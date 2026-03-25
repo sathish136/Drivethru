@@ -55,9 +55,10 @@ export default function MonthlySheet() {
     present:  { bg: "bg-green-100",  text: "text-green-800",  label: "P"  },
     late:     { bg: "bg-amber-100",  text: "text-amber-800",  label: "L"  },
     absent:   { bg: "bg-red-100",    text: "text-red-800",    label: "A"  },
-    half_day: { bg: "bg-yellow-100", text: "text-yellow-800", label: "HD" },
+    half_day: { bg: "bg-yellow-100", text: "text-yellow-800", label: "H"  },
     leave:    { bg: "bg-blue-100",   text: "text-blue-800",   label: "LV" },
-    holiday:  { bg: "bg-gray-200",   text: "text-gray-700",   label: "H"  },
+    holiday:  { bg: "bg-gray-200",   text: "text-gray-700",   label: "HL" },
+    sunday:   { bg: "bg-red-50",     text: "text-red-400",    label: "S"  },
   };
 
   function fmtTime(t: string | null | undefined) {
@@ -91,9 +92,11 @@ export default function MonthlySheet() {
         ${daysArray.map(day => {
           const e = row.dailyStatus?.find((d: any) => d.day === day);
           const st = e?.status || "absent";
-          const colors: Record<string,string> = { present:"#dcfce7", late:"#fef3c7", absent:"#fee2e2", half_day:"#fef9c3", leave:"#dbeafe", holiday:"#f3f4f6" };
-          const labels: Record<string,string> = { present:"P", late:"L", absent:"A", half_day:"HD", leave:"LV", holiday:"H" };
-          return `<td style="padding:2px;text-align:center;border-bottom:1px solid #f0f0f0"><div style="background:${colors[st]||"#f3f4f6"};border-radius:3px;padding:2px;font-size:8px;font-weight:700">${labels[st]||"A"}</div></td>`;
+          const isSun = new Date(year, month - 1, day).getDay() === 0;
+          const effectiveSt2 = (st === "absent" && isSun) ? "sunday" : st;
+          const colors: Record<string,string> = { present:"#dcfce7", late:"#fef3c7", absent:"#fee2e2", half_day:"#fef9c3", leave:"#dbeafe", holiday:"#f3f4f6", sunday:"#fef2f2" };
+          const labels: Record<string,string> = { present:"P", late:"L", absent:"A", half_day:"H", leave:"LV", holiday:"HL", sunday:"S" };
+          return `<td style="padding:2px;text-align:center;border-bottom:1px solid #f0f0f0"><div style="background:${colors[effectiveSt2]||"#f3f4f6"};border-radius:3px;padding:2px;font-size:8px;font-weight:700">${labels[effectiveSt2]||"A"}</div></td>`;
         }).join("")}
         <td style="text-align:center;font-weight:700;color:#16a34a;padding:4px;border-bottom:1px solid #f0f0f0">${row.presentDays??0}</td>
         <td style="text-align:center;font-weight:700;color:#dc2626;padding:4px;border-bottom:1px solid #f0f0f0">${row.absentDays??0}</td>
@@ -131,8 +134,11 @@ export default function MonthlySheet() {
     const csvRows = rows.map((row: any) => {
       const dayStatuses = daysArray.map(day => {
         const e = row.dailyStatus?.find((d: any) => d.day === day);
-        const labels: Record<string,string> = { present:"P", late:"L", absent:"A", half_day:"HD", leave:"LV", holiday:"H" };
-        return labels[e?.status||"absent"]||"A";
+        const isSun = new Date(year, month - 1, day).getDay() === 0;
+        const st = e?.status || "absent";
+        const effectiveSt3 = (st === "absent" && isSun) ? "sunday" : st;
+        const labels: Record<string,string> = { present:"P", late:"L", absent:"A", half_day:"H", leave:"LV", holiday:"HL", sunday:"S" };
+        return labels[effectiveSt3] || "A";
       });
       return [row.employeeCode, row.employeeName, row.designation||"", ...dayStatuses,
         row.presentDays??0, row.absentDays??0, row.lateDays??0,
@@ -227,7 +233,8 @@ export default function MonthlySheet() {
                     {daysArray.map(day => {
                       const entry = row.dailyStatus?.find((d: any) => d.day === day);
                       const st    = entry?.status || "absent";
-                      const cfg   = STATUS_CFG[st] || STATUS_CFG.absent;
+                      const effectiveSt = (st === "absent" && isSunday(day)) ? "sunday" : st;
+                      const cfg   = STATUS_CFG[effectiveSt] || STATUS_CFG.absent;
                       const inT   = fmtTime(entry?.inTime);
                       const outT  = fmtTime(entry?.outTime);
                       const hrs   = entry?.hours;
