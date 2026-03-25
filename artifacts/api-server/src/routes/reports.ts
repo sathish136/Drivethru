@@ -37,8 +37,10 @@ router.get("/attendance", async (req, res) => {
       if ((st === "present" || st === "late") && rec.totalHours != null) {
         const halfDayHrs = rule.halfDayHours ?? 5;
         const minPresentHrs = rule.minPresentHours ?? 8;
+        const earlyExitGraceHrs = (rule.earlyExitGraceMinutes ?? rule.lateGraceMinutes ?? 15) / 60;
+        const presentThreshold = Math.max(halfDayHrs + 0.01, minPresentHrs - earlyExitGraceHrs);
         if (rec.totalHours < halfDayHrs) st = "absent";
-        else if (rec.totalHours < minPresentHrs) st = "half_day";
+        else if (rec.totalHours < presentThreshold) st = "half_day";
       }
       return st;
     }
@@ -131,8 +133,10 @@ router.get("/monthly", async (req, res) => {
       if ((st === "present" || st === "late") && rec.totalHours != null) {
         const halfDayHrs = rule.halfDayHours ?? 5;
         const minPresentHrs = rule.minPresentHours ?? 8;
+        const earlyExitGraceHrs = (rule.earlyExitGraceMinutes ?? rule.lateGraceMinutes ?? 15) / 60;
+        const presentThreshold = Math.max(halfDayHrs + 0.01, minPresentHrs - earlyExitGraceHrs);
         if (rec.totalHours < halfDayHrs) st = "absent";
-        else if (rec.totalHours < minPresentHrs) st = "half_day";
+        else if (rec.totalHours < presentThreshold) st = "half_day";
       }
       return st;
     }
