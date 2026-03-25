@@ -1326,7 +1326,6 @@ export default function Employees() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterDept, setFilterDept] = useState("");
   const [filterType, setFilterType] = useState("");
-  const [filterRegionalId, setFilterRegionalId] = useState("");
   const [filterBranchId, setFilterBranchId] = useState("");
   const [drawerEmp, setDrawerEmp] = useState<any | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -1335,11 +1334,6 @@ export default function Employees() {
   const branches: any[] = branchRes || [];
   const { data: deptData } = useGet(["departments"], "/departments");
   const allDeptNames: string[] = Array.isArray(deptData) ? deptData.filter((d: any) => d.isActive).map((d: any) => d.name) : [];
-
-  const regionalBranches = branches.filter((b: any) => b.type === "regional");
-  const subBranchesOfSelected = branches.filter(
-    (b: any) => b.type === "sub_branch" && String(b.parentId) === filterRegionalId
-  );
 
   const params: any = { limit: 500 };
   if (filterStatus) params.status = filterStatus;
@@ -1351,22 +1345,10 @@ export default function Employees() {
 
   const allEmployees = data?.employees || [];
 
-  // Collect all branch IDs that belong to the selected regional (regional itself + its sub-branches)
-  const regionalBranchIds = useMemo(() => {
-    if (!filterRegionalId) return null;
-    const id = Number(filterRegionalId);
-    const subIds = branches
-      .filter((b: any) => b.type === "sub_branch" && b.parentId === id)
-      .map((b: any) => b.id);
-    return new Set([id, ...subIds]);
-  }, [filterRegionalId, branches]);
-
   const employees = useMemo(() => {
     let list = allEmployees;
     if (filterBranchId) {
       list = list.filter((e: any) => e.branchId === Number(filterBranchId));
-    } else if (regionalBranchIds) {
-      list = list.filter((e: any) => regionalBranchIds.has(e.branchId));
     }
     if (!search) return list;
     const s = search.toLowerCase();
@@ -1377,7 +1359,7 @@ export default function Employees() {
       (e.panNumber || "").toLowerCase().includes(s) ||
       (e.email || "").toLowerCase().includes(s)
     );
-  }, [allEmployees, search, filterBranchId, regionalBranchIds]);
+  }, [allEmployees, search, filterBranchId]);
 
   function exportCSV() {
     const headers = ["Employee ID","First Name","Last Name","Gender","Designation","Department","Branch","Type","Status","Phone","Email","NIC Number","Passport No.","Basic Salary (LKR)","EPF No.","ETF No.","Joining Date"];
@@ -1449,28 +1431,15 @@ export default function Employees() {
               <Input placeholder="Search name, ID, NIC, email..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-8 text-xs" />
             </div>
             <Select
-              value={filterRegionalId}
-              onChange={e => { setFilterRegionalId(e.target.value); setFilterBranchId(""); }}
+              value={filterBranchId}
+              onChange={e => setFilterBranchId(e.target.value)}
               className="h-8 text-xs w-48"
             >
-              <option value="">All Regional Offices</option>
-              {regionalBranches.map((b: any) => (
-                <option key={b.id} value={b.id}>[{b.code}] {b.name}</option>
+              <option value="">All Locations</option>
+              {branches.map((b: any) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
               ))}
             </Select>
-            {filterRegionalId && (
-              <Select
-                value={filterBranchId}
-                onChange={e => setFilterBranchId(e.target.value)}
-                className="h-8 text-xs w-44"
-              >
-                <option value="">All Sub-branches</option>
-                <option value={filterRegionalId}>— Regional Office itself —</option>
-                {subBranchesOfSelected.map((b: any) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </Select>
-            )}
             <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="h-8 text-xs w-32">
               <option value="">All Status</option>
               <option value="active">Active</option>
@@ -1490,9 +1459,9 @@ export default function Employees() {
               <option value="contract">Contract</option>
               <option value="casual">Casual</option>
             </Select>
-            {(search || filterStatus || filterDept || filterType || filterRegionalId || filterBranchId) && (
+            {(search || filterStatus || filterDept || filterType || filterBranchId) && (
               <button
-                onClick={() => { setSearch(""); setFilterStatus(""); setFilterDept(""); setFilterType(""); setFilterRegionalId(""); setFilterBranchId(""); }}
+                onClick={() => { setSearch(""); setFilterStatus(""); setFilterDept(""); setFilterType(""); setFilterBranchId(""); }}
                 className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
               >
                 <X className="w-3.5 h-3.5" /> Clear
