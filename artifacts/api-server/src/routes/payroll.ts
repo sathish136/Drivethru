@@ -350,6 +350,7 @@ router.post("/generate", async (req, res) => {
 
       /* ── Incomplete hours deduction (rules-based) ───────── */
       let incompleteDeduction = 0;
+      let totalIncompleteMinutes = 0;
       if (!isFlexible) {
         for (const rec of [...presentRecs, ...halfDayRecs]) {
           const rawHrs = rec.totalHours ?? 0;
@@ -358,6 +359,7 @@ router.post("/generate", async (req, res) => {
           const required = rec.status === "half_day" ? reqHoursPerDay / 2 : reqHoursPerDay;
           if (effHrs < required) {
             const shortfallMinutes = Math.round((required - effHrs) * 60);
+            totalIncompleteMinutes += shortfallMinutes;
             incompleteDeduction += Math.round(shortfallMinutes * minuteRate);
           }
         }
@@ -504,6 +506,10 @@ router.post("/generate", async (req, res) => {
         loanDeduction,
         totalDeductions,
         netSalary,
+        reqHoursPerDay,
+        lateMinutes: morningLateMinutes,
+        lunchLateMinutes,
+        incompleteMinutes: totalIncompleteMinutes,
         status: "draft" as const,
         generatedAt: new Date(),
       };

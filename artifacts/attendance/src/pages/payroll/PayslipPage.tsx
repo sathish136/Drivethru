@@ -24,6 +24,7 @@ interface PayrollRow {
   presentDays: number;
   absentDays: number;
   lateDays: number;
+  halfDays: number;
   leaveDays: number;
   holidayDays: number;
   overtimeHours: number;
@@ -49,6 +50,11 @@ interface PayrollRow {
   totalDeductions: number;
   netSalary: number;
   status: string;
+  /* Calculation-basis fields */
+  reqHoursPerDay?: number | null;
+  lateMinutes?: number | null;
+  lunchLateMinutes?: number | null;
+  incompleteMinutes?: number | null;
   employee: {
     id: number;
     employeeId: string;
@@ -131,6 +137,12 @@ export default function PayslipPage() {
 
   const epf12 = row.epfEmployer || 0;
   const etf3  = row.etfEmployer || 0;
+
+  /* ── Calculation-basis derived values ── */
+  const reqHrs      = row.reqHoursPerDay || 0;
+  const dailyRate   = row.workingDays > 0 ? row.basicSalary / row.workingDays : 0;
+  const hourlyRate  = row.workingDays > 0 && reqHrs > 0 ? row.basicSalary / (row.workingDays * reqHrs) : 0;
+  const minuteRate  = hourlyRate / 60;
 
   const lastDay = new Date(row.year, row.month, 0);
   const dateStr = `${String(lastDay.getDate()).padStart(2,"0")}-${String(row.month).padStart(2,"0")}-${row.year}`;
@@ -278,6 +290,102 @@ export default function PayslipPage() {
           </div>
         </div>
 
+        {/* Calculation Basis */}
+        {reqHrs > 0 && (
+          <div className="mx-8 mt-4 mb-1">
+            <p style={{ fontSize: "10px", fontWeight: "700", color: "#3a9ec2", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "8px" }}>Calculation Basis</p>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10.5px" }}>
+              <tbody>
+                {/* Rate block */}
+                <tr style={{ background: "#f0f9ff" }}>
+                  <td style={{ padding: "4px 8px", color: "#475569", fontWeight: "600" }}>Daily Rate</td>
+                  <td style={{ padding: "4px 8px", color: "#64748b" }}>
+                    Rs.{row.basicSalary.toLocaleString()} ÷ {row.workingDays} working days
+                  </td>
+                  <td style={{ padding: "4px 8px", textAlign: "right", color: "#0e2a3d", fontWeight: "600" }}>
+                    Rs.{dailyRate.toFixed(2)}/day
+                  </td>
+                </tr>
+                <tr>
+                  <td style={{ padding: "4px 8px", color: "#475569", fontWeight: "600" }}>Hourly Rate</td>
+                  <td style={{ padding: "4px 8px", color: "#64748b" }}>
+                    Rs.{row.basicSalary.toLocaleString()} ÷ ({row.workingDays} days × {reqHrs}h)
+                  </td>
+                  <td style={{ padding: "4px 8px", textAlign: "right", color: "#0e2a3d", fontWeight: "600" }}>
+                    Rs.{hourlyRate.toFixed(2)}/hr
+                  </td>
+                </tr>
+                <tr style={{ background: "#f0f9ff" }}>
+                  <td style={{ padding: "4px 8px", color: "#475569", fontWeight: "600" }}>Minute Rate</td>
+                  <td style={{ padding: "4px 8px", color: "#64748b" }}>
+                    Rs.{hourlyRate.toFixed(2)} ÷ 60 min
+                  </td>
+                  <td style={{ padding: "4px 8px", textAlign: "right", color: "#0e2a3d", fontWeight: "600" }}>
+                    Rs.{minuteRate.toFixed(4)}/min
+                  </td>
+                </tr>
+
+                {/* Deductions breakdown */}
+                {noPayLeave > 0 && (
+                  <tr style={{ borderTop: "1px solid #e2e8f0" }}>
+                    <td style={{ padding: "4px 8px", color: "#475569", fontWeight: "600" }}>Absence Deduction</td>
+                    <td style={{ padding: "4px 8px", color: "#64748b" }}>
+                      {row.absentDays} day{row.absentDays !== 1 ? "s" : ""} × Rs.{dailyRate.toFixed(2)}/day
+                    </td>
+                    <td style={{ padding: "4px 8px", textAlign: "right", color: "#b45309", fontWeight: "600" }}>
+                      Rs.{noPayLeave.toLocaleString()}
+                    </td>
+                  </tr>
+                )}
+                {halfDayDed > 0 && (
+                  <tr style={{ background: "#fffbeb" }}>
+                    <td style={{ padding: "4px 8px", color: "#475569", fontWeight: "600" }}>Half-Day Deduction</td>
+                    <td style={{ padding: "4px 8px", color: "#64748b" }}>
+                      {row.halfDays} day{row.halfDays !== 1 ? "s" : ""} × Rs.{dailyRate.toFixed(2)}/day ÷ 2
+                    </td>
+                    <td style={{ padding: "4px 8px", textAlign: "right", color: "#b45309", fontWeight: "600" }}>
+                      Rs.{halfDayDed.toLocaleString()}
+                    </td>
+                  </tr>
+                )}
+                {lateDeduction > 0 && (row.lateMinutes ?? 0) > 0 && (
+                  <tr>
+                    <td style={{ padding: "4px 8px", color: "#475569", fontWeight: "600" }}>Late Arrival</td>
+                    <td style={{ padding: "4px 8px", color: "#64748b" }}>
+                      {Math.round(row.lateMinutes!)} min × Rs.{minuteRate.toFixed(4)}/min
+                    </td>
+                    <td style={{ padding: "4px 8px", textAlign: "right", color: "#b45309", fontWeight: "600" }}>
+                      Rs.{lateDeduction.toLocaleString()}
+                    </td>
+                  </tr>
+                )}
+                {lunchLateDed > 0 && (row.lunchLateMinutes ?? 0) > 0 && (
+                  <tr style={{ background: "#fffbeb" }}>
+                    <td style={{ padding: "4px 8px", color: "#475569", fontWeight: "600" }}>Lunch Return Late</td>
+                    <td style={{ padding: "4px 8px", color: "#64748b" }}>
+                      {Math.round(row.lunchLateMinutes!)} min × Rs.{minuteRate.toFixed(4)}/min
+                    </td>
+                    <td style={{ padding: "4px 8px", textAlign: "right", color: "#b45309", fontWeight: "600" }}>
+                      Rs.{lunchLateDed.toLocaleString()}
+                    </td>
+                  </tr>
+                )}
+                {earlyExitDed > 0 && (row.incompleteMinutes ?? 0) > 0 && (
+                  <tr>
+                    <td style={{ padding: "4px 8px", color: "#475569", fontWeight: "600" }}>Early Exit / Short Hrs</td>
+                    <td style={{ padding: "4px 8px", color: "#64748b" }}>
+                      {Math.round(row.incompleteMinutes!)} min shortfall × Rs.{minuteRate.toFixed(4)}/min
+                    </td>
+                    <td style={{ padding: "4px 8px", textAlign: "right", color: "#b45309", fontWeight: "600" }}>
+                      Rs.{earlyExitDed.toLocaleString()}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {/* Signature area */}
         <div style={{ padding: "24px 32px 12px" }}>
           <div className="flex justify-between items-end">
@@ -297,19 +405,6 @@ export default function PayslipPage() {
             <p style={{ fontSize: "10px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: "4px" }}>Paying Authority</p>
           </div>
         </div>
-
-        {/* Attendance deductions note */}
-        {(lateDeduction > 0 || lunchLateDed > 0 || earlyExitDed > 0 || halfDayDed > 0) && (
-          <div style={{ margin: "0 32px 12px", padding: "8px 12px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px" }}>
-            <p style={{ fontSize: "9.5px", color: "#92400e", lineHeight: "1.5", margin: 0 }}>
-              <span style={{ fontWeight: "700" }}>Attendance Deductions  ·  </span>
-              {lateDeduction > 0 && <>Late arrivals exceeding the grace period are deducted at the per-minute working rate{row.lateDays > 0 && <span> (<strong>{row.lateDays} day{row.lateDays !== 1 ? "s" : ""}</strong>)</span>}. </>}
-              {lunchLateDed > 0 && <>Returning late from lunch beyond the allocated break time is also deducted at the per-minute rate. </>}
-              {earlyExitDed > 0 && <>Early exit / short hours deducted at the per-minute rate as per HR rules. </>}
-              {halfDayDed > 0 && <>Half-day deduction applied for half-day attendance records. </>}
-            </p>
-          </div>
-        )}
 
         {/* Footer */}
         <div style={{ background: "#f8fafc", borderTop: "1px solid #e2e8f0", padding: "10px 32px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
