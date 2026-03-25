@@ -29,7 +29,7 @@ interface DeptShiftRule {
 }
 
 interface Department { id: number; name: string; isActive: boolean; }
-interface ShiftOption  { id: number; name: string; isActive: boolean; }
+interface ShiftOption  { id: number; name: string; startTime1: string; endTime1: string; isActive: boolean; }
 
 const BLANK_RULE: DeptShiftRule = {
   id: "", department: "", shift: "", minHours: 9, maxHours: 9,
@@ -42,8 +42,8 @@ const BLANK_RULE: DeptShiftRule = {
 };
 
 const COLS = [
-  "Department", "Shift", "Min h", "OT?", "OT After",
-  "Grace", "Lunch h", "Flex", "Multi", "OT ×", "Offday ×", "Hol ×", "Wk Leave", "Half-day h", "Notes", "",
+  "Department", "Shift", "Start Time", "End Time", "Min h", "Break h", "OT?", "OT After",
+  "Grace", "Flex", "Multi", "Wk Leave", "Half-day h", "Holiday OT", "Offday OT", "OT ×", "Notes", "",
 ];
 
 export default function HRSettings() {
@@ -131,6 +131,12 @@ export default function HRSettings() {
     return `${r.lunchMinHours}`;
   }
 
+  function getShiftTimes(shiftName: string): { start: string; end: string } {
+    const s = shiftOptions.find(o => o.name.toLowerCase() === shiftName.toLowerCase());
+    if (!s || !s.startTime1) return { start: "—", end: "—" };
+    return { start: s.startTime1, end: s.endTime1 };
+  }
+
   const YesNo = ({ v, yes = "bg-emerald-100 text-emerald-700", no = "bg-slate-100 text-slate-500" }: { v: boolean; yes?: string; no?: string }) => (
     <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${v ? yes : no}`}>
       {v ? "Yes" : "No"}
@@ -194,7 +200,7 @@ export default function HRSettings() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs min-w-[1100px]">
+            <table className="w-full text-xs min-w-[1300px]">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
                   {COLS.map(h => (
@@ -203,35 +209,43 @@ export default function HRSettings() {
                 </tr>
               </thead>
               <tbody>
-                {rules.map((rule, i) => (
+                {rules.map((rule, i) => {
+                  const times = getShiftTimes(rule.shift);
+                  return (
                   <tr key={rule.id} className={`border-b border-border/50 hover:bg-muted/30 transition-colors ${i % 2 !== 0 ? "bg-muted/10" : ""}`}>
                     <td className="px-3 py-2.5 font-medium text-foreground whitespace-nowrap">{rule.department}</td>
                     <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{rule.shift}</td>
-                    <td className="px-3 py-2.5 text-center">{rule.minHours}</td>
+                    <td className="px-3 py-2.5 text-center font-mono text-xs">
+                      {rule.flexible ? <span className="text-muted-foreground">—</span> : times.start}
+                    </td>
+                    <td className="px-3 py-2.5 text-center font-mono text-xs">
+                      {rule.flexible ? <span className="text-muted-foreground">—</span> : times.end}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">{rule.minHours || <span className="text-muted-foreground">—</span>}</td>
+                    <td className="px-3 py-2.5 text-center">{lunchLabel(rule)}</td>
                     <td className="px-3 py-2.5 text-center"><YesNo v={rule.otEligible} /></td>
                     <td className="px-3 py-2.5 text-center">
                       {rule.otAfterHours != null ? `${rule.otAfterHours}h` : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="px-3 py-2.5 text-center">
-                      {rule.lateGraceMinutes != null ? `${rule.lateGraceMinutes} min` : <span className="text-muted-foreground">No</span>}
+                      {rule.lateGraceMinutes != null ? `${rule.lateGraceMinutes} min` : <span className="text-muted-foreground">—</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-center">{lunchLabel(rule)}</td>
                     <td className="px-3 py-2.5 text-center"><YesNo v={rule.flexible} yes="bg-blue-100 text-blue-700" /></td>
                     <td className="px-3 py-2.5 text-center"><YesNo v={rule.multipleLogin} yes="bg-blue-100 text-blue-700" /></td>
-                    <td className="px-3 py-2.5 text-center">
-                      {rule.otMultiplier != null ? `${rule.otMultiplier}×` : <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      {rule.offdayOtMultiplier != null ? `${rule.offdayOtMultiplier}×` : <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      {rule.holidayOtMultiplier != null ? `${rule.holidayOtMultiplier}×` : <span className="text-muted-foreground">—</span>}
-                    </td>
                     <td className="px-3 py-2.5 text-center">
                       {rule.weeklyLeaveDays != null ? `${rule.weeklyLeaveDays}d` : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       {rule.halfDayHours != null ? `${rule.halfDayHours}h` : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      {rule.holidayOtMultiplier != null ? `${rule.holidayOtMultiplier}×` : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      {rule.offdayOtMultiplier != null ? `${rule.offdayOtMultiplier}×` : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      {rule.otMultiplier != null ? `${rule.otMultiplier}×` : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="px-3 py-2.5 text-muted-foreground max-w-[120px] truncate">{rule.notes || "—"}</td>
                     <td className="px-3 py-2.5">
@@ -245,10 +259,11 @@ export default function HRSettings() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
                 {rules.length === 0 && (
                   <tr>
-                    <td colSpan={16} className="px-3 py-10 text-center text-muted-foreground text-xs">
+                    <td colSpan={18} className="px-3 py-10 text-center text-muted-foreground text-xs">
                       No rules yet.{" "}
                       {noDepts || noShifts
                         ? "Add departments and shifts first, then click Add Rule."
@@ -269,18 +284,19 @@ export default function HRSettings() {
           <span className="text-xs font-semibold text-muted-foreground">Column Legend</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-1 text-xs text-muted-foreground">
+          <span><b>Start / End Time</b> — shift working hours from the shift table</span>
           <span><b>Min h</b> — minimum hours per day for full pay</span>
+          <span><b>Break h</b> — lunch/break hours deducted from total</span>
           <span><b>OT?</b> — overtime eligible</span>
           <span><b>OT After</b> — OT kicks in after these hours</span>
           <span><b>Grace</b> — late grace period (minutes)</span>
-          <span><b>Lunch h</b> — lunch break deducted from hours</span>
-          <span><b>Flex</b> — flexible schedule (no fixed start)</span>
+          <span><b>Flex</b> — flexible schedule (no fixed start/end)</span>
           <span><b>Multi</b> — multiple check-in/out sessions allowed</span>
-          <span><b>OT ×</b> — regular overtime rate multiplier</span>
-          <span><b>Offday ×</b> — off-day worked multiplier</span>
-          <span><b>Hol ×</b> — holiday worked multiplier</span>
           <span><b>Wk Leave</b> — weekly leave days entitlement</span>
           <span><b>Half-day h</b> — hours threshold for half-day</span>
+          <span><b>Holiday OT</b> — holiday worked rate multiplier</span>
+          <span><b>Offday OT</b> — off-day worked rate multiplier</span>
+          <span><b>OT ×</b> — regular overtime rate multiplier</span>
         </div>
       </Card>
 
