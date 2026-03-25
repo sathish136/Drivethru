@@ -10,6 +10,7 @@ export const payrollSettings = pgTable("payroll_settings", {
   etfEmployerPercent: real("etf_employer_percent").notNull().default(3.0),
 
   transportAllowance: real("transport_allowance").notNull().default(0),
+  lunchIncentive: real("lunch_incentive").notNull().default(0),
   housingAllowanceLow: real("housing_allowance_low").notNull().default(0),
   housingAllowanceMid: real("housing_allowance_mid").notNull().default(0),
   housingAllowanceHigh: real("housing_allowance_high").notNull().default(0),

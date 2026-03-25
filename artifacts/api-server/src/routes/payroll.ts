@@ -279,6 +279,7 @@ router.post("/generate", async (req, res) => {
 
       let basicSalary: number;
       let transportAllowance: number;
+      let lunchIncentive: number;
       let housingAllowance: number;
       let otherAllowances: number;
       let epfEmployee: number;
@@ -292,12 +293,14 @@ router.post("/generate", async (req, res) => {
 
         const nonBasicEarnings = structData.earnings.filter((e: any) => e.component !== "Basic");
         transportAllowance = 0;
+        lunchIncentive = 0;
         housingAllowance = 0;
         otherAllowances = 0;
         for (const e of nonBasicEarnings) {
           const name = (e.component ?? "").toLowerCase();
           if (name.includes("transport") || name.includes("travel")) transportAllowance += e.amount || 0;
           else if (name.includes("housing") || name.includes("rent")) housingAllowance += e.amount || 0;
+          else if (name.includes("lunch") || name.includes("incentive")) lunchIncentive += e.amount || 0;
           else otherAllowances += e.amount || 0;
         }
 
@@ -310,6 +313,7 @@ router.post("/generate", async (req, res) => {
       } else {
         basicSalary = cfg.employeeOverrides[String(emp.id)] ?? cfg.salaryScale[emp.designation] ?? 40000;
         transportAllowance = cfg.transportAllowance;
+        lunchIncentive = cfg.lunchIncentive ?? 0;
         housingAllowance =
           basicSalary >= cfg.housingHighThreshold ? cfg.housingAllowanceHigh :
           basicSalary >= cfg.housingMidThreshold ? cfg.housingAllowanceMid :
@@ -417,7 +421,7 @@ router.post("/generate", async (req, res) => {
                         : 0;
 
       const grossSalary = Math.round(
-        basicSalary + transportAllowance + housingAllowance + otherAllowances
+        basicSalary + transportAllowance + lunchIncentive + housingAllowance + otherAllowances
         + overtimePay + holidayOtPay + offDayOtPay
         - absenceDeduction - lateDeduction - halfDayDeduction - incompleteDeduction
       );
@@ -477,6 +481,7 @@ router.post("/generate", async (req, res) => {
         overtimeHours: Math.round(regularOtHours * 100) / 100,
         basicSalary,
         transportAllowance,
+        lunchIncentive,
         housingAllowance,
         otherAllowances,
         overtimePay,

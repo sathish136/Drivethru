@@ -22,6 +22,7 @@ export const payrollRecords = pgTable("payroll_records", {
 
   basicSalary: real("basic_salary").notNull().default(0),
   transportAllowance: real("transport_allowance").notNull().default(0),
+  lunchIncentive: real("lunch_incentive").notNull().default(0),
   housingAllowance: real("housing_allowance").notNull().default(0),
   otherAllowances: real("other_allowances").notNull().default(0),
   overtimePay: real("overtime_pay").notNull().default(0),

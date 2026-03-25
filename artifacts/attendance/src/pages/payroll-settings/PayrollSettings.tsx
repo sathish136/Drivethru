@@ -509,12 +509,18 @@ export default function PayrollSettings() {
                 <p className="text-xs text-muted-foreground">Fixed monthly amounts added on top of basic salary</p>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               <div>
                 <Label className="text-xs font-semibold">Transport Allowance (Rs.)</Label>
                 <Input type="number" min="0" value={cfg.transportAllowance}
                   onChange={e => set("transportAllowance", parseInt(e.target.value))} className="mt-1.5" />
                 <p className="text-[10px] text-muted-foreground mt-1">Same fixed amount for all employees</p>
+              </div>
+              <div>
+                <Label className="text-xs font-semibold">Lunch Incentive Money (Rs.)</Label>
+                <Input type="number" min="0" value={cfg.lunchIncentive ?? 0}
+                  onChange={e => set("lunchIncentive", parseInt(e.target.value))} className="mt-1.5" />
+                <p className="text-[10px] text-muted-foreground mt-1">Fixed monthly lunch incentive for all employees</p>
               </div>
               <div>
                 <Label className="text-xs font-semibold">Other Allowances (Rs.)</Label>

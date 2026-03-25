@@ -899,6 +899,14 @@ export default function Settings() {
                   <p className="text-[10px] text-muted-foreground mt-1">Fixed amount for all employees</p>
                 </div>
                 <div>
+                  <Label className="text-xs font-medium">Lunch Incentive Money (Rs.)</Label>
+                  <Input type="number" min="0"
+                    value={(payrollCfg as any).lunchIncentive ?? 0}
+                    onChange={e => setPay("lunchIncentive", parseInt(e.target.value))}
+                    className="mt-1" />
+                  <p className="text-[10px] text-muted-foreground mt-1">Fixed monthly lunch incentive</p>
+                </div>
+                <div>
                   <Label className="text-xs font-medium">Other Allowances (Rs.)</Label>
                   <Input type="number" min="0"
                     value={payrollCfg.otherAllowances}
