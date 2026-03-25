@@ -181,7 +181,8 @@ export default function Holidays() {
       });
       const d = await r.json();
       if (d.success) {
-        showMsg(`Synced ${syncYear}: ${d.inserted} added, ${d.skipped} already existed`);
+        const src = d.source === "builtin" ? " (using built-in SL data)" : " (from official calendar)";
+        showMsg(`Synced ${syncYear}${src}: ${d.inserted} added, ${d.skipped} already existed`);
         if (syncYear === year) load();
         else setYear(syncYear);
       } else showMsg(d.message || "Sync failed", true);
