@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, boolean, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -15,6 +15,9 @@ export const hrSettings = pgTable("hr_settings", {
   standardLunchMinutes: integer("standard_lunch_minutes").notNull().default(60),
 
   earlyInMinutes: integer("early_in_minutes").notNull().default(30),
+
+  lateDeductionEnabled: boolean("late_deduction_enabled").notNull().default(true),
+  lateDeductionThreshold: integer("late_deduction_threshold").notNull().default(15),
 
   otExemptDesignations: text("ot_exempt_designations").notNull().default(JSON.stringify(["Manager"])),
   incompleteExemptDepartments: text("incomplete_exempt_departments").notNull().default(JSON.stringify(["Surf Instructors - D"])),

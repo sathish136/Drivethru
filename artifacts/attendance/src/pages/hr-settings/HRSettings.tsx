@@ -78,7 +78,11 @@ export default function HRSettings() {
   const [saved, setSaved]           = useState(false);
   const [error, setError]           = useState<string | null>(null);
 
-  const [globalSettings, setGlobalSettings] = useState({ earlyInMinutes: 30 });
+  const [globalSettings, setGlobalSettings] = useState({
+    earlyInMinutes: 30,
+    lateDeductionEnabled: true,
+    lateDeductionThreshold: 15,
+  });
   const [globalSaving, setGlobalSaving] = useState(false);
   const [globalSaved,  setGlobalSaved]  = useState(false);
 
@@ -100,7 +104,11 @@ export default function HRSettings() {
         const r = hrData.departmentRules as DeptShiftRule[];
         if (r[0] && "department" in r[0] && "shift" in r[0]) setRules(r);
       }
-      setGlobalSettings({ earlyInMinutes: hrData.earlyInMinutes ?? 30 });
+      setGlobalSettings({
+        earlyInMinutes: hrData.earlyInMinutes ?? 30,
+        lateDeductionEnabled: hrData.lateDeductionEnabled ?? true,
+        lateDeductionThreshold: hrData.lateDeductionThreshold ?? 15,
+      });
       if (Array.isArray(depts)) setDepartments(depts.filter((d: Department) => d.isActive !== false));
       if (Array.isArray(shiftsData)) setShiftOptions(shiftsData.filter((s: ShiftOption) => s.isActive !== false));
       const emps = Array.isArray(empsData?.employees) ? empsData.employees
@@ -115,7 +123,11 @@ export default function HRSettings() {
       const r = await fetch(apiUrl("/hr-settings"), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ earlyInMinutes: globalSettings.earlyInMinutes }),
+        body: JSON.stringify({
+          earlyInMinutes: globalSettings.earlyInMinutes,
+          lateDeductionEnabled: globalSettings.lateDeductionEnabled,
+          lateDeductionThreshold: globalSettings.lateDeductionThreshold,
+        }),
       });
       const d = await r.json();
       if (d.id || d.earlyInMinutes != null) { setGlobalSaved(true); setTimeout(() => setGlobalSaved(false), 2500); }
@@ -398,7 +410,67 @@ export default function HRSettings() {
         </div>
       )}
 
+      {/* ── Late Arrivals Policy Card ── */}
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-blue-600" />
+            <span className="text-sm font-bold">Late Arrivals Policy</span>
+            <span className="text-xs text-muted-foreground ml-1">— global deduction rule for late check-ins</span>
+          </div>
+          <div className="flex items-center gap-3">
+            {globalSaving && <span className="text-xs text-muted-foreground flex items-center gap-1"><RefreshCw className="w-3 h-3 animate-spin" />Saving…</span>}
+            {globalSaved  && <span className="text-xs text-emerald-600 flex items-center gap-1"><Check className="w-3 h-3" />Saved</span>}
+            <Button className="flex items-center gap-1.5 text-xs h-8" onClick={saveGlobalSettings} disabled={globalSaving}>
+              <Save className="w-3.5 h-3.5" />Save
+            </Button>
+          </div>
+        </div>
 
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium block">Late Arrival Deduction</Label>
+            <Select
+              value={globalSettings.lateDeductionEnabled ? "enabled" : "disabled"}
+              onChange={e => setGlobalSettings(s => ({ ...s, lateDeductionEnabled: e.target.value === "enabled" }))}
+            >
+              <option value="enabled">Enabled — deduct from hourly rate</option>
+              <option value="disabled">Disabled — no deduction</option>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">When enabled, late arrivals exceeding the threshold will result in a deduction from the employee's hourly working rate for each minute late.</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium block">Late Deduction Threshold (minutes)</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                step="1"
+                min="0"
+                value={globalSettings.lateDeductionThreshold}
+                onChange={e => setGlobalSettings(s => ({ ...s, lateDeductionThreshold: parseInt(e.target.value) || 0 }))}
+                disabled={!globalSettings.lateDeductionEnabled}
+                className="w-28"
+              />
+              <span className="text-xs text-muted-foreground">minutes</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">Late arrivals exceeding <strong>{globalSettings.lateDeductionThreshold} minutes</strong> will result in a reduction from the employee's hourly working rate. Arrivals within this window are not penalised.</p>
+          </div>
+        </div>
+
+        {globalSettings.lateDeductionEnabled && (
+          <div className="mt-4 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-800">
+            <Clock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>
+              <strong>Active policy:</strong> Late arrivals exceeding <strong>{globalSettings.lateDeductionThreshold} minutes</strong> will result in a reduction from the employee's hourly working rate for each minute of lateness.
+            </span>
+          </div>
+        )}
+      </Card>
+
+      {activeTab === "policy" && <PolicyTab />}
+
+      {activeTab === "rules" && (<>
       <Card className="p-5">
         <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
           <div className="flex items-center gap-2">
@@ -543,6 +615,7 @@ export default function HRSettings() {
           <span><b>Staff</b> — active employees assigned to this rule (click to view)</span>
         </div>
       </Card>
+      </>)}
 
       {/* ── Add / Edit Modal ── */}
       {showModal && (
