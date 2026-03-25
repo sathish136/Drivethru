@@ -29,9 +29,11 @@ interface PayrollRow {
   overtimeHours: number;
   basicSalary: number;
   transportAllowance: number;
+  lunchIncentive: number;
   housingAllowance: number;
   otherAllowances: number;
   overtimePay: number;
+  holidayOtPay: number;
   grossSalary: number;
   epfEmployee: number;
   epfEmployer: number;
@@ -40,6 +42,8 @@ interface PayrollRow {
   lateDeduction: number;
   lunchLateDeduction: number;
   absenceDeduction: number;
+  halfDayDeduction: number;
+  incompleteDeduction: number;
   otherDeductions: number;
   loanDeduction: number;
   totalDeductions: number;
@@ -107,13 +111,15 @@ export default function PayslipPage() {
   const monthLabel = `${MONTHS[row.month - 1]} ${row.year}`;
   const epfNo = row.employee.epfNumber || row.employee.employeeId;
 
-  const allowances    = (row.transportAllowance || 0) + (row.housingAllowance || 0) + (row.otherAllowances || 0);
+  const allowances    = (row.transportAllowance || 0) + (row.lunchIncentive || 0) + (row.housingAllowance || 0) + (row.otherAllowances || 0);
   const subTotal      = row.basicSalary + allowances;
   const noPayLeave    = row.absenceDeduction || 0;
+  const halfDayDed    = row.halfDayDeduction || 0;
   const lateDeduction = row.lateDeduction || 0;
   const lunchLateDed  = row.lunchLateDeduction || 0;
-  const totalForEPF   = subTotal - noPayLeave - lateDeduction - lunchLateDed;
-  const overtime      = row.overtimePay || 0;
+  const earlyExitDed  = row.incompleteDeduction || 0;
+  const totalForEPF   = subTotal - noPayLeave - halfDayDed - lateDeduction - lunchLateDed - earlyExitDed;
+  const overtime      = (row.overtimePay || 0) + (row.holidayOtPay || 0);
   const totalEarnings = totalForEPF + overtime;
 
   const epf8          = row.epfEmployee || 0;
@@ -138,16 +144,18 @@ export default function PayslipPage() {
   type SlipRow = { label: string; value?: string; indent?: boolean; bold?: boolean; italic?: boolean; borderTop?: boolean; borderBottom?: boolean };
   const slipRows: SlipRow[] = [
     { label: "Basic Salary",            value: fmtAmt(row.basicSalary) },
-    ...(allowances > 0 ? [{ label: "Allowances", value: fmtAmt(allowances) }] : [{ label: "Holiday Pay", value: "" }]),
+    ...(allowances > 0 ? [{ label: "Allowances", value: fmtAmt(allowances) }] : []),
     { label: "Sub Total",               value: fmtAmt(subTotal), italic: true, borderTop: true },
     { label: "Less  :  No Pay Leave",   value: noPayLeave > 0 ? fmtAmt(noPayLeave) : "-", italic: true },
-    ...(lateDeduction > 0 ? [{ label: `Less  :  Late Arrival${lateDayLabel}`, value: fmtAmt(lateDeduction), italic: true }] : []),
-    ...(lunchLateDed > 0 ? [{ label: "Less  :  Lunch Return Late", value: fmtAmt(lunchLateDed), italic: true }] : []),
+    ...(halfDayDed > 0  ? [{ label: "Less  :  Half Day Deduction",                     value: fmtAmt(halfDayDed),    italic: true }] : []),
+    ...(lateDeduction > 0 ? [{ label: `Less  :  Late Arrival${lateDayLabel}`,           value: fmtAmt(lateDeduction), italic: true }] : []),
+    ...(lunchLateDed > 0  ? [{ label: "Less  :  Lunch Return Late",                     value: fmtAmt(lunchLateDed),  italic: true }] : []),
+    ...(earlyExitDed > 0  ? [{ label: "Less  :  Early Exit / Short Hours",              value: fmtAmt(earlyExitDed),  italic: true }] : []),
     { label: "Total for EPF / ETF",     value: fmtAmt(totalForEPF), bold: true },
-    { label: "Add  :  Overtime",        value: overtime > 0 ? fmtAmt(overtime) : "", italic: true },
+    { label: "Add  :  Overtime / Holiday Pay", value: overtime > 0 ? fmtAmt(overtime) : "", italic: true },
     { label: "Total Earnings",          value: fmtAmt(totalEarnings), borderTop: true },
     { label: "Recoveries  :  EPF 8%",   value: fmtAmt(epf8) },
-    ...(loans > 0     ? [{ label: "Loans",              value: fmtAmt(loans),    indent: true }] : []),
+    ...(loans > 0     ? [{ label: "Loans / Advances",   value: fmtAmt(loans),    indent: true }] : []),
     ...(otherDeds > 0 ? [{ label: "Other Deductions",   value: fmtAmt(otherDeds), indent: true }] : []),
     ...(apit > 0      ? [{ label: "APIT (Income Tax)",  value: fmtAmt(apit),     indent: true }] : []),
     { label: "Less  :  Total Recoveries", value: fmtAmt(totalRecoveries), italic: true, borderTop: true },
@@ -290,13 +298,15 @@ export default function PayslipPage() {
           </div>
         </div>
 
-        {/* Late arrivals / lunch return late note */}
-        {(lateDeduction > 0 || lunchLateDed > 0) && (
+        {/* Attendance deductions note */}
+        {(lateDeduction > 0 || lunchLateDed > 0 || earlyExitDed > 0 || halfDayDed > 0) && (
           <div style={{ margin: "0 32px 12px", padding: "8px 12px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px" }}>
             <p style={{ fontSize: "9.5px", color: "#92400e", lineHeight: "1.5", margin: 0 }}>
               <span style={{ fontWeight: "700" }}>Attendance Deductions  ·  </span>
               {lateDeduction > 0 && <>Late arrivals exceeding the grace period are deducted at the per-minute working rate{row.lateDays > 0 && <span> (<strong>{row.lateDays} day{row.lateDays !== 1 ? "s" : ""}</strong>)</span>}. </>}
               {lunchLateDed > 0 && <>Returning late from lunch beyond the allocated break time is also deducted at the per-minute rate. </>}
+              {earlyExitDed > 0 && <>Early exit / short hours deducted at the per-minute rate as per HR rules. </>}
+              {halfDayDed > 0 && <>Half-day deduction applied for half-day attendance records. </>}
             </p>
           </div>
         )}

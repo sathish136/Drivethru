@@ -817,9 +817,12 @@ function OvertimeReport() {
 ══════════════════════════════════════════════════════════ */
 interface PayrollRecord {
   id:number; employeeId:number; month:number; year:number;
+  workingDays:number; presentDays:number; absentDays:number; lateDays:number; halfDays:number;
   basicSalary:number; grossSalary:number; netSalary:number;
   epfEmployee:number; epfEmployer:number; etfEmployer:number; apit:number;
-  totalDeductions:number; overtimePay:number; status:string;
+  lateDeduction:number; lunchLateDeduction:number; absenceDeduction:number;
+  halfDayDeduction:number; incompleteDeduction:number; loanDeduction:number;
+  totalDeductions:number; overtimePay:number; holidayOtPay:number; status:string;
   employee:{ id:number; employeeId:string; fullName:string; designation:string; department:string; employeeType?:string };
 }
 
@@ -852,16 +855,28 @@ function PayrollReport() {
   ), [data, empType, status, empName]);
 
   const totals = useMemo(() => ({
-    gross:       filtered.reduce((s,r)=>s+r.grossSalary,0),
-    net:         filtered.reduce((s,r)=>s+r.netSalary,0),
-    epfEmployee: filtered.reduce((s,r)=>s+r.epfEmployee,0),
-    epfEmployer: filtered.reduce((s,r)=>s+r.epfEmployer,0),
-    etf:         filtered.reduce((s,r)=>s+r.etfEmployer,0),
-    apit:        filtered.reduce((s,r)=>s+r.apit,0),
-    ot:          filtered.reduce((s,r)=>s+r.overtimePay,0),
+    gross:            filtered.reduce((s,r)=>s+r.grossSalary,0),
+    net:              filtered.reduce((s,r)=>s+r.netSalary,0),
+    epfEmployee:      filtered.reduce((s,r)=>s+r.epfEmployee,0),
+    epfEmployer:      filtered.reduce((s,r)=>s+r.epfEmployer,0),
+    etf:              filtered.reduce((s,r)=>s+r.etfEmployer,0),
+    apit:             filtered.reduce((s,r)=>s+r.apit,0),
+    ot:               filtered.reduce((s,r)=>s+(r.overtimePay||0)+(r.holidayOtPay||0),0),
+    lateDed:          filtered.reduce((s,r)=>s+(r.lateDeduction||0)+(r.lunchLateDeduction||0),0),
+    earlyExitDed:     filtered.reduce((s,r)=>s+(r.incompleteDeduction||0),0),
+    absenceDed:       filtered.reduce((s,r)=>s+(r.absenceDeduction||0),0),
+    halfDayDed:       filtered.reduce((s,r)=>s+(r.halfDayDeduction||0),0),
+    loanDed:          filtered.reduce((s,r)=>s+(r.loanDeduction||0),0),
   }), [filtered]);
 
-  const HEADERS = ["Emp ID","Employee","Designation","Department","Type","Basic Salary","Gross Salary","EPF (Emp)","EPF (Employer)","ETF","APIT","OT Pay","Total Deductions","Net Salary","Status"];
+  const HEADERS = [
+    "Emp ID","Employee","Designation","Department","Type",
+    "Working Days","Present","Absent","Late Days","Half Days",
+    "Basic Salary","OT / Holiday Pay","Gross Salary",
+    "Late Deduction","Early Exit Deduction","Absence Deduction","Half Day Deduction","Loan Deduction",
+    "EPF (Emp)","EPF (Employer)","ETF","APIT",
+    "Total Deductions","Net Salary","Status"
+  ];
 
   const handleExport = () => {
     const thead = `<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
@@ -869,26 +884,37 @@ function PayrollReport() {
       <td>${r.employee.employeeId}</td><td>${r.employee.fullName}</td>
       <td>${r.employee.designation}</td><td>${r.employee.department||""}</td>
       <td>${r.employee.employeeType||""}</td>
+      <td>${r.workingDays||0}</td><td>${r.presentDays||0}</td><td>${r.absentDays||0}</td>
+      <td>${r.lateDays||0}</td><td>${r.halfDays||0}</td>
       <td>Rs.${Math.round(r.basicSalary).toLocaleString()}</td>
+      <td>Rs.${Math.round((r.overtimePay||0)+(r.holidayOtPay||0)).toLocaleString()}</td>
       <td>Rs.${Math.round(r.grossSalary).toLocaleString()}</td>
+      <td>${(r.lateDeduction||0)+(r.lunchLateDeduction||0)>0?"Rs."+Math.round((r.lateDeduction||0)+(r.lunchLateDeduction||0)).toLocaleString():"—"}</td>
+      <td>${(r.incompleteDeduction||0)>0?"Rs."+Math.round(r.incompleteDeduction||0).toLocaleString():"—"}</td>
+      <td>${(r.absenceDeduction||0)>0?"Rs."+Math.round(r.absenceDeduction||0).toLocaleString():"—"}</td>
+      <td>${(r.halfDayDeduction||0)>0?"Rs."+Math.round(r.halfDayDeduction||0).toLocaleString():"—"}</td>
+      <td>${(r.loanDeduction||0)>0?"Rs."+Math.round(r.loanDeduction||0).toLocaleString():"—"}</td>
       <td>Rs.${Math.round(r.epfEmployee).toLocaleString()}</td>
       <td>Rs.${Math.round(r.epfEmployer).toLocaleString()}</td>
       <td>Rs.${Math.round(r.etfEmployer).toLocaleString()}</td>
-      <td>Rs.${Math.round(r.apit).toLocaleString()}</td>
-      <td>Rs.${Math.round(r.overtimePay).toLocaleString()}</td>
+      <td>${r.apit>0?"Rs."+Math.round(r.apit).toLocaleString():"—"}</td>
       <td>Rs.${Math.round(r.totalDeductions).toLocaleString()}</td>
       <td><strong>Rs.${Math.round(r.netSalary).toLocaleString()}</strong></td>
       <td>${r.status.toUpperCase()}</td>
     </tr>`).join("");
     const tfoot = `<tr>
-      <td colspan="5"><strong>TOTALS (${filtered.length} employees)</strong></td>
-      <td></td>
+      <td colspan="10"><strong>TOTALS (${filtered.length} employees)</strong></td>
+      <td>Rs.${Math.round(totals.ot).toLocaleString()}</td>
       <td><strong>Rs.${Math.round(totals.gross).toLocaleString()}</strong></td>
+      <td>Rs.${Math.round(totals.lateDed).toLocaleString()}</td>
+      <td>Rs.${Math.round(totals.earlyExitDed).toLocaleString()}</td>
+      <td>Rs.${Math.round(totals.absenceDed).toLocaleString()}</td>
+      <td>Rs.${Math.round(totals.halfDayDed).toLocaleString()}</td>
+      <td>Rs.${Math.round(totals.loanDed).toLocaleString()}</td>
       <td>Rs.${Math.round(totals.epfEmployee).toLocaleString()}</td>
       <td>Rs.${Math.round(totals.epfEmployer).toLocaleString()}</td>
       <td>Rs.${Math.round(totals.etf).toLocaleString()}</td>
       <td>Rs.${Math.round(totals.apit).toLocaleString()}</td>
-      <td>Rs.${Math.round(totals.ot).toLocaleString()}</td>
       <td></td>
       <td><strong>Rs.${Math.round(totals.net).toLocaleString()}</strong></td>
       <td></td>
@@ -904,6 +930,8 @@ function PayrollReport() {
         { label:"EPF (Employer)",   value:`Rs.${Math.round(totals.epfEmployer).toLocaleString()}` },
         { label:"ETF",              value:`Rs.${Math.round(totals.etf).toLocaleString()}` },
         { label:"APIT",             value:`Rs.${Math.round(totals.apit).toLocaleString()}` },
+        { label:"Late Deductions",  value:`Rs.${Math.round(totals.lateDed).toLocaleString()}` },
+        { label:"Early Exit Ded.",  value:`Rs.${Math.round(totals.earlyExitDed).toLocaleString()}` },
       ],
       tableHtml: `<table><thead>${thead}</thead><tbody>${tbody}</tbody><tfoot>${tfoot}</tfoot></table>`,
     });
@@ -913,9 +941,17 @@ function PayrollReport() {
     const rows = filtered.map(r => [
       r.employee.employeeId, r.employee.fullName, r.employee.designation, r.employee.department||"",
       r.employee.employeeType||"",
-      Math.round(r.basicSalary), Math.round(r.grossSalary),
+      r.workingDays||0, r.presentDays||0, r.absentDays||0, r.lateDays||0, r.halfDays||0,
+      Math.round(r.basicSalary),
+      Math.round((r.overtimePay||0)+(r.holidayOtPay||0)),
+      Math.round(r.grossSalary),
+      Math.round((r.lateDeduction||0)+(r.lunchLateDeduction||0)),
+      Math.round(r.incompleteDeduction||0),
+      Math.round(r.absenceDeduction||0),
+      Math.round(r.halfDayDeduction||0),
+      Math.round(r.loanDeduction||0),
       Math.round(r.epfEmployee), Math.round(r.epfEmployer), Math.round(r.etfEmployer),
-      Math.round(r.apit), Math.round(r.overtimePay), Math.round(r.totalDeductions),
+      Math.round(r.apit), Math.round(r.totalDeductions),
       Math.round(r.netSalary), r.status.toUpperCase(),
     ]);
     exportCsv(HEADERS, rows, `payroll-report-${getMonthName(dMonth)}-${dYear}.csv`);
@@ -953,14 +989,18 @@ function PayrollReport() {
       {filtered.length>0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            {label:"Total Employees",val:filtered.length,    fmt:false,cls:"text-primary"},
-            {label:"Total Gross",    val:totals.gross,       fmt:true, cls:"text-emerald-600"},
-            {label:"Total Net Pay",  val:totals.net,         fmt:true, cls:"text-blue-600"},
-            {label:"EPF (Employee)", val:totals.epfEmployee, fmt:true, cls:"text-purple-600"},
-            {label:"EPF (Employer)", val:totals.epfEmployer, fmt:true, cls:"text-indigo-600"},
-            {label:"ETF",            val:totals.etf,         fmt:true, cls:"text-violet-600"},
-            {label:"Total APIT",     val:totals.apit,        fmt:true, cls:"text-amber-600"},
-            {label:"Total OT Pay",   val:totals.ot,          fmt:true, cls:"text-orange-600"},
+            {label:"Total Employees",    val:filtered.length,         fmt:false,cls:"text-primary"},
+            {label:"Total Gross",        val:totals.gross,            fmt:true, cls:"text-emerald-600"},
+            {label:"Total Net Pay",      val:totals.net,              fmt:true, cls:"text-blue-600"},
+            {label:"Total OT / Holiday", val:totals.ot,               fmt:true, cls:"text-orange-600"},
+            {label:"Late Deductions",    val:totals.lateDed,          fmt:true, cls:"text-amber-600"},
+            {label:"Early Exit Ded.",    val:totals.earlyExitDed,     fmt:true, cls:"text-red-500"},
+            {label:"Absence Deductions", val:totals.absenceDed,       fmt:true, cls:"text-red-600"},
+            {label:"EPF (Employee)",     val:totals.epfEmployee,      fmt:true, cls:"text-purple-600"},
+            {label:"EPF (Employer)",     val:totals.epfEmployer,      fmt:true, cls:"text-indigo-600"},
+            {label:"ETF",                val:totals.etf,              fmt:true, cls:"text-violet-600"},
+            {label:"Total APIT",         val:totals.apit,             fmt:true, cls:"text-amber-700"},
+            {label:"Loans / Advances",   val:totals.loanDed,          fmt:true, cls:"text-rose-600"},
           ].map(({label,val,fmt:f,cls})=>(
             <Card key={label} className="p-3">
               <div className={cn("text-lg font-bold",cls)}>{f?fmtAmt(val as number):val}</div>
@@ -975,12 +1015,44 @@ function PayrollReport() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-muted/50">
-                <tr>{["Emp ID","Employee","Designation","Department","Type","Basic","Gross","EPF(Emp)","EPF(Er)","ETF","APIT","OT Pay","Deductions","Net Salary","Status"].map(h=>(
-                  <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
-                ))}</tr>
+                <tr>
+                  {["Emp ID","Employee","Designation","Department","Type"].map(h=>(
+                    <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
+                  ))}
+                  <th className="px-3 py-2.5 text-center font-semibold text-muted-foreground whitespace-nowrap" colSpan={4}>Attendance</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">Basic</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-orange-600 whitespace-nowrap">OT/Holiday</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-emerald-700 whitespace-nowrap">Gross</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-amber-600 whitespace-nowrap">Late Ded.</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-red-500 whitespace-nowrap">Early Exit Ded.</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-red-600 whitespace-nowrap">Absence Ded.</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-yellow-600 whitespace-nowrap">Half Day Ded.</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-rose-600 whitespace-nowrap">Loan Ded.</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-purple-600 whitespace-nowrap">EPF(Emp)</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-indigo-600 whitespace-nowrap">EPF(Er)</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-violet-600 whitespace-nowrap">ETF</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-amber-700 whitespace-nowrap">APIT</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-red-700 whitespace-nowrap">Total Ded.</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-blue-700 whitespace-nowrap">Net Salary</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">Status</th>
+                </tr>
+                <tr className="border-b border-border bg-muted/20">
+                  {["","","","",""].map((_,i)=><th key={i} className="px-3 py-1"/>)}
+                  {["Working","Present","Absent","Late"].map(h=>(
+                    <th key={h} className="px-3 py-1 text-[10px] font-medium text-muted-foreground text-center">{h}</th>
+                  ))}
+                  {Array(13).fill(null).map((_,i)=><th key={i} className="px-3 py-1"/>)}
+                </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filtered.map(r=>(
+                {filtered.map(r=>{
+                  const lateTotalDed = (r.lateDeduction||0)+(r.lunchLateDeduction||0);
+                  const earlyExitD  = r.incompleteDeduction||0;
+                  const absenceD    = r.absenceDeduction||0;
+                  const halfDayD    = r.halfDayDeduction||0;
+                  const loanD       = r.loanDeduction||0;
+                  const otTotal     = (r.overtimePay||0)+(r.holidayOtPay||0);
+                  return (
                   <tr key={r.id} className="hover:bg-muted/30 transition-colors">
                     <td className="px-3 py-2 font-mono whitespace-nowrap text-muted-foreground">{r.employee.employeeId}</td>
                     <td className="px-3 py-2 font-medium whitespace-nowrap">{r.employee.fullName}</td>
@@ -991,14 +1063,23 @@ function PayrollReport() {
                         r.employee.employeeType==="permanent"?"bg-blue-100 text-blue-700":r.employee.employeeType==="contract"?"bg-purple-100 text-purple-700":"bg-orange-100 text-orange-700"
                       )}>{r.employee.employeeType}</span>:"—"}
                     </td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap text-muted-foreground">{r.workingDays||0}</td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap text-green-600 font-semibold">{r.presentDays||0}</td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap text-red-600 font-semibold">{r.absentDays||0}</td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap text-amber-600 font-semibold">{r.lateDays||0}</td>
                     <td className="px-3 py-2 font-mono whitespace-nowrap">{fmtAmt(r.basicSalary)}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-orange-600">{otTotal>0?fmtAmt(otTotal):"—"}</td>
                     <td className="px-3 py-2 font-mono whitespace-nowrap text-emerald-700 font-semibold">{fmtAmt(r.grossSalary)}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-amber-600">{lateTotalDed>0?fmtAmt(lateTotalDed):"—"}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-red-500">{earlyExitD>0?fmtAmt(earlyExitD):"—"}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-red-600">{absenceD>0?fmtAmt(absenceD):"—"}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-yellow-600">{halfDayD>0?fmtAmt(halfDayD):"—"}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-rose-600">{loanD>0?fmtAmt(loanD):"—"}</td>
                     <td className="px-3 py-2 font-mono whitespace-nowrap text-purple-600">{fmtAmt(r.epfEmployee)}</td>
                     <td className="px-3 py-2 font-mono whitespace-nowrap text-indigo-600">{fmtAmt(r.epfEmployer)}</td>
                     <td className="px-3 py-2 font-mono whitespace-nowrap text-violet-600">{fmtAmt(r.etfEmployer)}</td>
-                    <td className="px-3 py-2 font-mono whitespace-nowrap text-amber-600">{fmtAmt(r.apit)}</td>
-                    <td className="px-3 py-2 font-mono whitespace-nowrap text-orange-600">{fmtAmt(r.overtimePay)}</td>
-                    <td className="px-3 py-2 font-mono whitespace-nowrap text-red-600">{fmtAmt(r.totalDeductions)}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-amber-700">{r.apit>0?fmtAmt(r.apit):"—"}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-red-700 font-semibold">{fmtAmt(r.totalDeductions)}</td>
                     <td className="px-3 py-2 font-mono whitespace-nowrap font-bold text-blue-700">{fmtAmt(r.netSalary)}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       <span className={cn("px-2 py-0.5 rounded text-[10px] font-bold uppercase",
@@ -1006,20 +1087,25 @@ function PayrollReport() {
                       )}>{r.status}</span>
                     </td>
                   </tr>
-                ))}
-                {!filtered.length&&<tr><td colSpan={15} className="text-center py-8 text-muted-foreground">No payroll records found for {getMonthName(dMonth)} {dYear}.</td></tr>}
+                  );
+                })}
+                {!filtered.length&&<tr><td colSpan={22} className="text-center py-8 text-muted-foreground">No payroll records found for {getMonthName(dMonth)} {dYear}.</td></tr>}
               </tbody>
               {filtered.length>0 && (
                 <tfoot className="bg-muted/70">
                   <tr>
-                    <td colSpan={5} className="px-3 py-2 text-xs font-bold">TOTALS ({filtered.length} employees)</td>
-                    <td className="px-3 py-2 font-mono text-xs"></td>
+                    <td colSpan={9} className="px-3 py-2 text-xs font-bold">TOTALS ({filtered.length} employees)</td>
+                    <td className="px-3 py-2 font-mono text-xs text-orange-600 font-semibold">{totals.ot>0?fmtAmt(totals.ot):"—"}</td>
                     <td className="px-3 py-2 font-mono text-xs text-emerald-700 font-bold">{fmtAmt(totals.gross)}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-amber-600">{totals.lateDed>0?fmtAmt(totals.lateDed):"—"}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-red-500">{totals.earlyExitDed>0?fmtAmt(totals.earlyExitDed):"—"}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-red-600">{totals.absenceDed>0?fmtAmt(totals.absenceDed):"—"}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-yellow-600">{totals.halfDayDed>0?fmtAmt(totals.halfDayDed):"—"}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-rose-600">{totals.loanDed>0?fmtAmt(totals.loanDed):"—"}</td>
                     <td className="px-3 py-2 font-mono text-xs text-purple-600">{fmtAmt(totals.epfEmployee)}</td>
                     <td className="px-3 py-2 font-mono text-xs text-indigo-600">{fmtAmt(totals.epfEmployer)}</td>
                     <td className="px-3 py-2 font-mono text-xs text-violet-600">{fmtAmt(totals.etf)}</td>
-                    <td className="px-3 py-2 font-mono text-xs text-amber-600">{fmtAmt(totals.apit)}</td>
-                    <td className="px-3 py-2 font-mono text-xs text-orange-600">{fmtAmt(totals.ot)}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-amber-700">{totals.apit>0?fmtAmt(totals.apit):"—"}</td>
                     <td className="px-3 py-2 font-mono text-xs"></td>
                     <td className="px-3 py-2 font-mono text-xs text-blue-700 font-bold">{fmtAmt(totals.net)}</td>
                     <td className="px-3 py-2"></td>
