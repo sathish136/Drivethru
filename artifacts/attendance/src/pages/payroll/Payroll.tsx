@@ -381,168 +381,244 @@ function PayrollDetailModal({ row, onClose }: { row: PayrollRow; onClose: () => 
   const epf12 = row.epfEmployer || 0;
   const etf3 = row.etfEmployer || 0;
   const totalEmployerCost = row.netSalary + epf12 + etf3;
+  const paymentDays = row.presentDays + row.leaveDays + row.holidayDays;
 
-  const tabs: { id: DetailTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-    { id: "details",      label: "Details",            icon: Info },
-    { id: "payment-days", label: "Payment Days",        icon: CalendarDays },
-    { id: "earnings",     label: "Earnings & Deductions", icon: Receipt },
-    { id: "net-pay",      label: "Net Pay Info",        icon: Banknote },
+  const tabs: { id: DetailTab; label: string }[] = [
+    { id: "details",      label: "Details" },
+    { id: "payment-days", label: "Payment Days" },
+    { id: "earnings",     label: "Earnings & Deductions" },
+    { id: "net-pay",      label: "Net Pay Info" },
   ];
 
-  function Field({ label, value, highlight }: { label: string; value: string | number; highlight?: "green" | "red" | "blue" }) {
+  function Field({
+    label, value, required, accent,
+  }: { label: string; value: string | number; required?: boolean; accent?: "emerald" | "red" | "blue" | "amber" | "violet" }) {
+    const accentStyles: Record<string, string> = {
+      emerald: "bg-emerald-50 border-emerald-200 text-emerald-800 font-semibold",
+      red:     "bg-red-50 border-red-200 text-red-700 font-semibold",
+      blue:    "bg-blue-50 border-blue-200 text-blue-800 font-semibold",
+      amber:   "bg-amber-50 border-amber-200 text-amber-800 font-semibold",
+      violet:  "bg-violet-50 border-violet-200 text-violet-800 font-semibold",
+    };
     return (
-      <div className="flex flex-col gap-1">
-        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{label}</p>
+      <div className="flex flex-col gap-1.5">
+        <label className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
+          {label}
+          {required && <span className="text-red-400 text-[10px]">*</span>}
+        </label>
         <div className={cn(
-          "px-3 py-2 rounded-lg border text-sm font-medium bg-background",
-          highlight === "green" && "text-emerald-700 border-emerald-200 bg-emerald-50",
-          highlight === "red"   && "text-red-600 border-red-200 bg-red-50",
-          highlight === "blue"  && "text-blue-700 border-blue-200 bg-blue-50",
-          !highlight && "text-foreground border-border"
+          "px-3.5 py-2.5 rounded-lg border text-sm bg-white shadow-sm transition-colors",
+          accent ? accentStyles[accent] : "border-slate-200 text-slate-700"
         )}>
-          {value}
+          {value === "" || value === null || value === undefined ? <span className="text-slate-300">—</span> : value}
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-background rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+  function SectionTitle({ children, color = "slate" }: { children: React.ReactNode; color?: string }) {
+    const colors: Record<string, string> = {
+      slate:   "text-slate-500 border-slate-200",
+      emerald: "text-emerald-600 border-emerald-200",
+      red:     "text-red-600 border-red-200",
+      violet:  "text-violet-600 border-violet-200",
+    };
+    return (
+      <div className={cn("flex items-center gap-2 pb-2 mb-4 border-b text-[11px] font-bold uppercase tracking-widest", colors[color])}>
+        {children}
+      </div>
+    );
+  }
 
-        {/* Header */}
-        <div className="p-5 border-b border-border flex items-start justify-between shrink-0">
-          <div>
-            <h2 className="font-bold text-lg text-foreground">{row.employee.fullName}</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {row.employee.employeeId} · {row.employee.designation} · {monthLabel}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className={cn("px-3 py-1 rounded-full text-xs font-bold", STATUS_STYLES[row.status])}>
-              {row.status.toUpperCase()}
-            </span>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
-              <X className="w-5 h-5 text-muted-foreground" />
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-3"
+      onClick={onClose}>
+      <div
+        className="bg-slate-50 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[94vh] flex flex-col overflow-hidden"
+        style={{ fontFamily: "'Inter', system-ui, sans-serif" }}
+        onClick={e => e.stopPropagation()}
+      >
+
+        {/* ── Gradient header ── */}
+        <div style={{ background: "linear-gradient(135deg, #0e2a3d 0%, #1a4a6e 55%, #3a9ec2 100%)" }} className="shrink-0 px-6 py-5">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-white/15 flex items-center justify-center text-white font-bold text-lg shadow-inner">
+                {row.employee.fullName.charAt(0)}
+              </div>
+              <div>
+                <h2 className="text-white font-bold text-lg leading-tight">{row.employee.fullName}</h2>
+                <p className="text-white/70 text-xs mt-0.5">{row.employee.employeeId} &nbsp;·&nbsp; {row.employee.designation} &nbsp;·&nbsp; {row.employee.department}</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-white/80">
+              <X className="w-5 h-5" />
             </button>
+          </div>
+
+          {/* Key figures strip */}
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            {[
+              { label: "Gross Salary",  value: fmt(row.grossSalary) },
+              { label: "Total Deductions", value: fmt(totalRecoveries) },
+              { label: "Net Salary",    value: fmt(row.netSalary) },
+            ].map(s => (
+              <div key={s.label} className="bg-white/10 rounded-xl px-4 py-2.5 text-center backdrop-blur-sm">
+                <p className="text-white/60 text-[10px] font-semibold uppercase tracking-wide">{s.label}</p>
+                <p className="text-white font-bold text-base mt-0.5">{s.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Status + period */}
+          <div className="mt-3 flex items-center gap-3">
+            <span className={cn("text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border",
+              row.status === "paid"     ? "bg-emerald-400/20 border-emerald-400/40 text-emerald-200" :
+              row.status === "approved" ? "bg-blue-400/20 border-blue-400/40 text-blue-200" :
+              "bg-amber-400/20 border-amber-400/40 text-amber-200"
+            )}>{row.status}</span>
+            <span className="text-white/50 text-[11px]">{monthLabel}</span>
+            <span className="text-white/40 text-[10px] ml-auto">PV {String(row.id).padStart(5, "0")}</span>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-border shrink-0 px-5 gap-1">
+        {/* ── Tab navigation ── */}
+        <div className="bg-white border-b border-slate-200 shrink-0 px-6 flex gap-0">
           {tabs.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
               className={cn(
-                "flex items-center gap-1.5 text-xs font-semibold px-3 py-3 border-b-2 transition-colors whitespace-nowrap",
+                "text-[13px] font-medium px-4 py-3.5 border-b-2 transition-all whitespace-nowrap",
                 tab === t.id
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                  ? "border-[#3a9ec2] text-[#1a4a6e] font-semibold"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
               )}
             >
-              <t.icon className="w-3.5 h-3.5" />
               {t.label}
             </button>
           ))}
         </div>
 
-        {/* Tab content */}
-        <div className="overflow-y-auto flex-1 p-6">
+        {/* ── Tab body ── */}
+        <div className="overflow-y-auto flex-1 p-6 bg-slate-50">
 
-          {/* ── Details ── */}
+          {/* Details */}
           {tab === "details" && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <Field label="Employee ID"      value={row.employee.employeeId} />
-                <Field label="Full Name"        value={row.employee.fullName} />
-                <Field label="Designation"      value={row.employee.designation} />
-                <Field label="Department"       value={row.employee.department} />
-                <Field label="Employee Type"    value={EMP_TYPE_LABELS[row.employee.employeeType ?? "permanent"] ?? "Permanent"} />
-                <Field label="Pay Period"       value={monthLabel} />
-                <Field label="EPF Number"       value={row.employee.epfNumber || row.employee.employeeId} />
-                <Field label="ETF Number"       value={row.employee.etfNumber || "—"} />
-                <Field label="Status"           value={row.status.toUpperCase()} highlight={row.status === "paid" ? "green" : row.status === "approved" ? "blue" : undefined} />
-                <Field label="Record ID"        value={`PV ${String(row.id).padStart(5, "0")}`} />
-                <Field label="Generated"        value={row.generatedAt ? new Date(row.generatedAt).toLocaleDateString("en-LK") : "—"} />
-                {row.approvedAt && <Field label="Approved" value={new Date(row.approvedAt).toLocaleDateString("en-LK")} />}
-                {row.paidAt     && <Field label="Paid"     value={new Date(row.paidAt).toLocaleDateString("en-LK")} />}
+            <div className="space-y-6">
+              <div>
+                <SectionTitle>Employee Information</SectionTitle>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Employee ID"    value={row.employee.employeeId} required />
+                  <Field label="Full Name"      value={row.employee.fullName} required />
+                  <Field label="Designation"    value={row.employee.designation} />
+                  <Field label="Department"     value={row.employee.department} />
+                  <Field label="Employee Type"  value={EMP_TYPE_LABELS[row.employee.employeeType ?? "permanent"] ?? "Permanent"} />
+                  <Field label="Pay Period"     value={monthLabel} required />
+                </div>
+              </div>
+              <div>
+                <SectionTitle>Statutory Numbers</SectionTitle>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="EPF Number" value={row.employee.epfNumber || row.employee.employeeId} />
+                  <Field label="ETF Number" value={row.employee.etfNumber || "—"} />
+                </div>
+              </div>
+              <div>
+                <SectionTitle>Record Information</SectionTitle>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Record Reference" value={`PV ${String(row.id).padStart(5, "0")}`} />
+                  <Field label="Status" value={row.status.toUpperCase()}
+                    accent={row.status === "paid" ? "emerald" : row.status === "approved" ? "blue" : "amber"} />
+                  <Field label="Generated On" value={row.generatedAt ? new Date(row.generatedAt).toLocaleDateString("en-LK", { year:"numeric", month:"long", day:"2-digit" }) : "—"} />
+                  {row.approvedAt && <Field label="Approved On" value={new Date(row.approvedAt).toLocaleDateString("en-LK", { year:"numeric", month:"long", day:"2-digit" })} />}
+                  {row.paidAt    && <Field label="Paid On"     value={new Date(row.paidAt).toLocaleDateString("en-LK", { year:"numeric", month:"long", day:"2-digit" })} />}
+                </div>
               </div>
             </div>
           )}
 
-          {/* ── Payment Days ── */}
+          {/* Payment Days */}
           {tab === "payment-days" && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Working Days"    value={row.workingDays} />
-                <Field label="Punched Days (Present)" value={row.presentDays} />
-                <Field label="Absent Days"     value={row.absentDays} highlight={row.absentDays > 0 ? "red" : undefined} />
-                <Field label="Late Days"       value={row.lateDays} highlight={row.lateDays > 0 ? "red" : undefined} />
-                <Field label="Leave Days"      value={row.leaveDays} />
-                <Field label="Holiday Days"    value={row.holidayDays} />
-                <Field label="Overtime Hours"  value={`${row.overtimeHours.toFixed(2)} hrs`} highlight={row.overtimeHours > 0 ? "green" : undefined} />
-                <Field label="Loss of Pay Days" value={row.absentDays} highlight={row.absentDays > 0 ? "red" : undefined} />
-                <Field label="Payment Days"    value={row.presentDays + row.leaveDays + row.holidayDays} highlight="green" />
-                <Field label="Late Deduction"  value={lateDeduction > 0 ? fmt(lateDeduction) : "0"} highlight={lateDeduction > 0 ? "red" : undefined} />
+            <div className="space-y-6">
+              <div>
+                <SectionTitle>Attendance Breakdown</SectionTitle>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Working Days"        value={row.workingDays} required />
+                  <Field label="Punched Days"        value={row.presentDays} />
+                  <Field label="Absent Days"         value={row.absentDays}  accent={row.absentDays > 0 ? "red" : undefined} />
+                  <Field label="Late Days"           value={row.lateDays}    accent={row.lateDays > 0 ? "amber" : undefined} />
+                  <Field label="Leave Days"          value={row.leaveDays} />
+                  <Field label="Holiday Days"        value={row.holidayDays} />
+                  <Field label="Overtime Hours"      value={`${row.overtimeHours.toFixed(2)} hrs`} accent={row.overtimeHours > 0 ? "emerald" : undefined} />
+                  <Field label="Loss of Pay Days"    value={row.absentDays}  accent={row.absentDays > 0 ? "red" : undefined} />
+                </div>
+              </div>
+              <div>
+                <SectionTitle color="emerald">Payment Summary</SectionTitle>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Payment Days"        value={paymentDays}   required accent="emerald" />
+                  <Field label="Late Deduction"      value={lateDeduction > 0 ? fmt(lateDeduction) : "0"} accent={lateDeduction > 0 ? "red" : undefined} />
+                  <Field label="No-Pay Deduction"    value={noPayLeave > 0 ? fmt(noPayLeave) : "0"}    accent={noPayLeave > 0 ? "red" : undefined} />
+                  <Field label="Total Deduction Days" value={row.absentDays + row.lateDays} />
+                </div>
               </div>
             </div>
           )}
 
-          {/* ── Earnings & Deductions ── */}
+          {/* Earnings & Deductions */}
           {tab === "earnings" && (
             <div className="space-y-6">
               <div>
-                <p className="text-xs font-bold text-emerald-700 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                  <TrendingUp className="w-3.5 h-3.5" /> Earnings
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Basic Salary"         value={fmt(row.basicSalary)} highlight="green" />
-                  <Field label="Transport Allowance"  value={row.transportAllowance > 0 ? fmt(row.transportAllowance) : "—"} />
-                  <Field label="Housing Allowance"    value={row.housingAllowance > 0 ? fmt(row.housingAllowance) : "—"} />
-                  <Field label="Other Allowances"     value={row.otherAllowances > 0 ? fmt(row.otherAllowances) : "—"} />
-                  <Field label="Sub Total"            value={fmt(subTotal)} />
-                  <Field label="Overtime Pay"         value={overtime > 0 ? fmt(overtime) : "—"} highlight={overtime > 0 ? "green" : undefined} />
-                  <Field label="Total Earnings"       value={fmt(totalEarnings)} highlight="green" />
-                  <Field label="Gross Salary"         value={fmt(row.grossSalary)} highlight="green" />
+                <SectionTitle color="emerald">Earnings</SectionTitle>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Basic Salary"        value={fmt(row.basicSalary)}       accent="emerald" required />
+                  <Field label="Transport Allowance" value={row.transportAllowance > 0 ? fmt(row.transportAllowance) : "0"} />
+                  <Field label="Housing Allowance"   value={row.housingAllowance > 0 ? fmt(row.housingAllowance) : "0"} />
+                  <Field label="Other Allowances"    value={row.otherAllowances > 0 ? fmt(row.otherAllowances) : "0"} />
+                  <Field label="Sub Total"           value={fmt(subTotal)} />
+                  <Field label="Overtime Pay"        value={overtime > 0 ? fmt(overtime) : "0"} accent={overtime > 0 ? "emerald" : undefined} />
+                  <Field label="Total for EPF / ETF" value={fmt(totalForEPF)} />
+                  <Field label="Gross Salary"        value={fmt(row.grossSalary)} accent="emerald" />
                 </div>
               </div>
-              <div className="border-t border-border pt-5">
-                <p className="text-xs font-bold text-red-700 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                  <Minus className="w-3.5 h-3.5" /> Deductions / Recoveries
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="No-Pay (Absence)"    value={noPayLeave > 0 ? fmt(noPayLeave) : "—"} highlight={noPayLeave > 0 ? "red" : undefined} />
-                  <Field label="Late Arrival Deduction" value={lateDeduction > 0 ? fmt(lateDeduction) : "—"} highlight={lateDeduction > 0 ? "red" : undefined} />
-                  <Field label="Total for EPF / ETF" value={fmt(totalForEPF)} />
-                  <Field label="EPF 8% (Employee)"   value={fmt(epf8)} highlight="red" />
-                  <Field label="Loan Recovery"        value={loans > 0 ? fmt(loans) : "—"} highlight={loans > 0 ? "red" : undefined} />
-                  <Field label="Other Deductions"     value={otherDeds > 0 ? fmt(otherDeds) : "—"} highlight={otherDeds > 0 ? "red" : undefined} />
-                  <Field label="APIT (Income Tax)"    value={apit > 0 ? fmt(apit) : "—"} highlight={apit > 0 ? "red" : undefined} />
-                  <Field label="Total Recoveries"     value={fmt(totalRecoveries)} highlight="red" />
+              <div>
+                <SectionTitle color="red">Deductions / Recoveries</SectionTitle>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="No-Pay Leave"         value={noPayLeave > 0 ? fmt(noPayLeave) : "0"}   accent={noPayLeave > 0 ? "red" : undefined} />
+                  <Field label="Late Arrival Deduction" value={lateDeduction > 0 ? fmt(lateDeduction) : "0"} accent={lateDeduction > 0 ? "red" : undefined} />
+                  <Field label="EPF 8% (Employee)"    value={fmt(epf8)}  accent="red" />
+                  <Field label="Loan Recovery"         value={loans > 0 ? fmt(loans) : "0"}       accent={loans > 0 ? "red" : undefined} />
+                  <Field label="Other Deductions"      value={otherDeds > 0 ? fmt(otherDeds) : "0"} accent={otherDeds > 0 ? "red" : undefined} />
+                  <Field label="APIT (Income Tax)"     value={apit > 0 ? fmt(apit) : "0"}         accent={apit > 0 ? "red" : undefined} />
+                  <Field label="Total Recoveries"      value={fmt(totalRecoveries)} accent="red" />
+                  <Field label="Balance Received"      value={fmt(row.netSalary)}   accent="emerald" />
                 </div>
               </div>
             </div>
           )}
 
-          {/* ── Net Pay Info ── */}
+          {/* Net Pay Info */}
           {tab === "net-pay" && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Total Earnings"       value={fmt(totalEarnings)} highlight="green" />
-                <Field label="Total Recoveries"     value={fmt(totalRecoveries)} highlight="red" />
-                <Field label="Net Salary (Take Home)" value={fmt(row.netSalary)} highlight="green" />
-                <Field label="Gross Salary"         value={fmt(row.grossSalary)} />
-              </div>
-              <div className="border-t border-border pt-5">
-                <p className="text-xs font-bold text-violet-700 uppercase tracking-widest mb-3">Statutory Contributions (Employer)</p>
+            <div className="space-y-6">
+              <div>
+                <SectionTitle color="emerald">Summary</SectionTitle>
                 <div className="grid grid-cols-2 gap-4">
-                  <Field label="EPF 12% (Employer)"  value={fmt(epf12)} />
-                  <Field label="ETF 3% (Employer)"   value={fmt(etf3)} />
-                  <Field label="EPF 8% (Employee)"   value={fmt(epf8)} />
-                  <Field label="Total EPF (20%)"     value={fmt(epf8 + epf12)} highlight="blue" />
-                  <Field label="Total Employer Cost" value={fmt(totalEmployerCost)} highlight="blue" />
-                  {apit > 0 && <Field label="APIT (Income Tax)" value={fmt(apit)} highlight="red" />}
+                  <Field label="Total Earnings"         value={fmt(totalEarnings)}    accent="emerald" />
+                  <Field label="Total Recoveries"       value={fmt(totalRecoveries)}  accent="red" />
+                  <Field label="Net Salary (Take Home)" value={fmt(row.netSalary)}    accent="emerald" required />
+                  <Field label="Gross Salary"           value={fmt(row.grossSalary)} />
+                </div>
+              </div>
+              <div>
+                <SectionTitle color="violet">Statutory Contributions</SectionTitle>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="EPF 8% (Employee)"   value={fmt(epf8)}         accent="red" />
+                  <Field label="EPF 12% (Employer)"  value={fmt(epf12)}        accent="violet" />
+                  <Field label="Total EPF (20%)"     value={fmt(epf8 + epf12)} accent="violet" />
+                  <Field label="ETF 3% (Employer)"   value={fmt(etf3)}         accent="violet" />
+                  {apit > 0 && <Field label="APIT (Income Tax)" value={fmt(apit)} accent="red" />}
+                  <Field label="Total Employer Cost" value={fmt(totalEmployerCost)} accent="blue" />
                 </div>
               </div>
             </div>
