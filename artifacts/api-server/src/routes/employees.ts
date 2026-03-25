@@ -1,6 +1,11 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { employees, branches, shifts } from "@workspace/db/schema";
+import {
+  employees, branches, shifts,
+  attendanceRecords, leaveBalances,
+  payrollRecords, employeeSalaryAssignments, staffLoans, staffIncentives,
+  biometricLogs,
+} from "@workspace/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import multer from "multer";
 import path from "path";
@@ -225,10 +230,18 @@ router.put("/:id", async (req, res) => {
 });
 
 router.delete("/:id", async (req, res) => {
+  const empId = Number(req.params.id);
   try {
-    await db.delete(employees).where(eq(employees.id, Number(req.params.id)));
+    await db.delete(biometricLogs).where(eq(biometricLogs.employeeId, empId));
+    await db.delete(attendanceRecords).where(eq(attendanceRecords.employeeId, empId));
+    await db.delete(leaveBalances).where(eq(leaveBalances.employeeId, empId));
+    await db.delete(staffLoans).where(eq(staffLoans.employeeId, empId));
+    await db.delete(staffIncentives).where(eq(staffIncentives.employeeId, empId));
+    await db.delete(payrollRecords).where(eq(payrollRecords.employeeId, empId));
+    await db.delete(employeeSalaryAssignments).where(eq(employeeSalaryAssignments.employeeId, empId));
+    await db.delete(employees).where(eq(employees.id, empId));
     res.json({ message: "Deleted", success: true });
-  } catch (e) { res.status(500).json({ message: "Error", success: false }); }
+  } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
 });
 
 router.post("/:id/documents", upload.fields([
