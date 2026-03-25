@@ -230,20 +230,6 @@ export default function HRSettings() {
         </div>
       )}
 
-      {/* Global Attendance Defaults */}
-      <Card className="p-5">
-        <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
-          <div className="flex items-center gap-2">
-            <Settings2 className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-bold">Global Attendance Defaults</span>
-            <span className="text-xs text-muted-foreground ml-1">— applies to all employees unless overridden</span>
-          </div>
-          <div className="flex items-center gap-3">
-            {globalSaving && <span className="text-xs text-muted-foreground flex items-center gap-1"><RefreshCw className="w-3 h-3 animate-spin" />Saving…</span>}
-            {globalSaved  && <span className="text-xs text-emerald-600 flex items-center gap-1"><Check className="w-3 h-3" />Saved</span>}
-          </div>
-        </div>
-      </Card>
 
       <Card className="p-5">
         <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
