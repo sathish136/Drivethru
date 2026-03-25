@@ -11,7 +11,7 @@ import {
   MapPin, X, Building2, Users, Layers,
   FileText, Upload, CheckCircle2, AlertCircle, UserCircle,
   Briefcase, Phone, Hash, CreditCard, Calendar,
-  IdCard, Home, Shield, Camera, DollarSign, BadgeIndianRupee,
+  IdCard, Home, Shield, Camera, BadgeIndianRupee,
   Banknote, UserCheck, ListChecks, CheckCircle, Clock,
   CircleDashed, BadgeCheck, RefreshCw, ChevronDown, ChevronUp
 } from "lucide-react";
@@ -669,7 +669,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                   <div className="col-span-2">
                     <Label className="text-xs font-semibold mb-1.5 block">Basic Salary (LKR)</Label>
                     <div className="relative">
-                      <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <BadgeIndianRupee className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                       <Input type="number" className="pl-8" placeholder="e.g. 45000" value={form.basicSalary} onChange={e => set("basicSalary", e.target.value)} />
                     </div>
                     <p className="text-[10px] text-muted-foreground mt-1">Monthly basic salary in Sri Lankan Rupees (LKR).</p>

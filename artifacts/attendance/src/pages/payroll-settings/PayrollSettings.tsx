@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { PageHeader, Card, Button, Input, Label } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
-  Percent, DollarSign, Save, RefreshCw, Check,
+  Percent, BadgeIndianRupee, Save, RefreshCw, Check,
   Edit2, X, Info, AlertTriangle, SlidersHorizontal, Users, ChevronRight,
   Search, UserCheck, Undo2, Plus, Trash2, FileText, LayoutList,
   ChevronLeft, Building2, CalendarDays, HelpCircle, Copy, ToggleLeft,
@@ -502,7 +502,7 @@ export default function PayrollSettings() {
           <Card className="p-5">
             <div className="flex items-center gap-2 mb-5 pb-3 border-b border-border">
               <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center">
-                <DollarSign className="w-4 h-4 text-green-600" />
+                <BadgeIndianRupee className="w-4 h-4 text-green-600" />
               </div>
               <div>
                 <p className="text-sm font-bold">Earnings & Allowances</p>
@@ -756,7 +756,7 @@ export default function PayrollSettings() {
                             </td>
                             <td className="px-4 py-3 text-center">
                               <span className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
-                                <DollarSign className="w-3.5 h-3.5 text-green-500" />{s.earnings.length}
+                                <BadgeIndianRupee className="w-3.5 h-3.5 text-green-500" />{s.earnings.length}
                               </span>
                             </td>
                             <td className="px-4 py-3 text-center">
@@ -832,7 +832,7 @@ export default function PayrollSettings() {
           <div className="flex gap-0 border-b border-border">
             {([
               { key: "details" as const,    label: "Details",            icon: FileText },
-              { key: "components" as const, label: "Earnings & Deductions", icon: DollarSign },
+              { key: "components" as const, label: "Earnings & Deductions", icon: BadgeIndianRupee },
               { key: "assign" as const,     label: "Assign to Employee", icon: Users, disabled: isNewStruct },
             ]).map(({ key, label, icon: Icon, disabled }) => (
               <button key={key} disabled={!!disabled}
@@ -898,7 +898,7 @@ export default function PayrollSettings() {
                 {/* ─ Earnings ─ */}
                 <Card className="overflow-hidden">
                   <div className="flex items-center gap-2 px-5 py-3 border-b border-border bg-green-50/40">
-                    <DollarSign className="w-4 h-4 text-green-600" />
+                    <BadgeIndianRupee className="w-4 h-4 text-green-600" />
                     <span className="text-sm font-bold text-green-900">Earnings</span>
                     <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded-full">{selectedStruct.earnings.length}</span>
                   </div>

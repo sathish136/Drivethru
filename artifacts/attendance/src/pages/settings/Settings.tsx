@@ -6,7 +6,7 @@ import {
   Calendar, Plus, Trash2, Copy, Check, Building, Clock,
   Fingerprint, Users, ChevronRight,
   Database, Download, AlertTriangle, CheckCircle2, Upload, X,
-  Banknote, Percent, DollarSign, Save, RefreshCw, Edit2
+  Banknote, Percent, BadgeIndianRupee, Save, RefreshCw, Edit2
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -885,7 +885,7 @@ export default function Settings() {
             {/* Earnings / Allowances */}
             <Card className="p-5">
               <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border">
-                <DollarSign className="w-4 h-4 text-primary" />
+                <BadgeIndianRupee className="w-4 h-4 text-primary" />
                 <span className="text-sm font-bold">Earnings & Allowances</span>
                 <span className="text-xs text-muted-foreground ml-1">— Fixed monthly amounts added to basic salary</span>
               </div>
