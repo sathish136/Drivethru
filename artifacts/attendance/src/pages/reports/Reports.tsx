@@ -439,11 +439,15 @@ function AttendanceReport() {
                         </span>
                         {r.status === "late" && r.inTime1 && (() => {
                           const lm = calcLateMinutes(r.inTime1);
-                          return lm > 0 ? (
+                          if (lm <= 0) return null;
+                          const display = lm >= 60
+                            ? `+${Math.floor(lm/60)}h ${lm%60}m late`
+                            : `+${lm}m late`;
+                          return (
                             <span className="text-[10px] font-semibold text-red-500 text-center">
-                              +{lm}m late
+                              {display}
                             </span>
-                          ) : null;
+                          );
                         })()}
                       </div>
                     </td>
