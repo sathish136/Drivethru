@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { attendanceRecords, employees, branches, shifts } from "@workspace/db/schema";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 import { getDaysInMonth, today } from "../lib/helpers.js";
-import { loadDeptRules, findRule, timeToMins } from "../lib/hr-rules.js";
+import { loadDeptRules, findRule, timeToMins, calcLunchLateMinutes, lateCutoffMins } from "../lib/hr-rules.js";
 
 const router = Router();
 
@@ -70,17 +70,28 @@ router.get("/attendance", async (req, res) => {
       endDate: endDate as string,
       totalRecords: enriched.length,
       summary,
-      records: enriched.map(r => ({
-        ...r.rec,
-        status: r.effectiveStatus,
-        employeeName: r.empName || "",
-        employeeCode: r.empCode || "",
-        designation: r.empDesignation || "",
-        department: r.empDepartment || "",
-        branchName: r.branchName || "",
-        shiftName: null,
-        createdAt: r.rec.createdAt.toISOString(),
-      })),
+      records: enriched.map(r => {
+        const empShift = r.empShiftId ? shiftMap.get(r.empShiftId) : undefined;
+        const rule = findRule(hrRules, r.empDepartment || "", empShift?.name);
+        const lateCutoff = lateCutoffMins(rule, empShift?.startTime1);
+        const morningLateMinutes = (r.effectiveStatus === "late" && r.rec.inTime1)
+          ? Math.max(0, timeToMins(r.rec.inTime1) - lateCutoff)
+          : 0;
+        const lunchLateMinutes = calcLunchLateMinutes(r.rec.outTime1, r.rec.inTime2, rule);
+        return {
+          ...r.rec,
+          status: r.effectiveStatus,
+          employeeName: r.empName || "",
+          employeeCode: r.empCode || "",
+          designation: r.empDesignation || "",
+          department: r.empDepartment || "",
+          branchName: r.branchName || "",
+          shiftName: null,
+          createdAt: r.rec.createdAt.toISOString(),
+          morningLateMinutes,
+          lunchLateMinutes,
+        };
+      }),
     });
   } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
 });
@@ -140,18 +151,26 @@ router.get("/monthly", async (req, res) => {
     const empSummaries = filtered.map(({ emp, branchName }) => {
       const recs = empRecords.get(emp.id) || [];
       const empShift = emp.shiftId ? shiftMap.get(emp.shiftId) : undefined;
+      const rule = findRule(hrRules, emp.department || "", empShift?.name);
+      const lateCutoff = lateCutoffMins(rule, empShift?.startTime1);
       let presentDays = 0, absentDays = 0, lateDays = 0, halfDays = 0, leaveDays = 0, holidayDays = 0;
       let totalWorkHours = 0, overtimeHours = 0;
+      let lunchLateDays = 0, totalMorningLateMinutes = 0, totalLunchLateMinutes = 0;
       for (const r of recs) {
         const st = calcEffectiveStatus(r, empShift, emp.department);
         if (st === "present") presentDays++;
         else if (st === "absent") absentDays++;
-        else if (st === "late") { lateDays++; presentDays++; }
+        else if (st === "late") {
+          lateDays++; presentDays++;
+          if (r.inTime1) totalMorningLateMinutes += Math.max(0, timeToMins(r.inTime1) - lateCutoff);
+        }
         else if (st === "half_day") halfDays++;
         else if (st === "leave") leaveDays++;
         else if (st === "holiday") holidayDays++;
         totalWorkHours += r.totalHours || 0;
         overtimeHours += r.overtimeHours || 0;
+        const ll = calcLunchLateMinutes(r.outTime1, r.inTime2, rule);
+        if (ll > 0) { lunchLateDays++; totalLunchLateMinutes += ll; }
       }
       const effectiveDays = workingDays - holidayDays;
       const attendancePercentage = effectiveDays > 0 ? Math.round(((presentDays + halfDays * 0.5) / effectiveDays) * 100) : 0;
@@ -163,6 +182,9 @@ router.get("/monthly", async (req, res) => {
         totalWorkHours: Math.round(totalWorkHours * 10) / 10,
         overtimeHours: Math.round(overtimeHours * 10) / 10,
         attendancePercentage,
+        lunchLateDays,
+        totalMorningLateMinutes,
+        totalLunchLateMinutes,
       };
     });
 

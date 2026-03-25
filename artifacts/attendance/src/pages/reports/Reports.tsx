@@ -298,12 +298,18 @@ function AttendanceReport() {
       const session2 = r.inTime2&&r.outTime2 ? `${r.inTime2} → ${r.outTime2} = ${fmtHM(s2m)}` : "—";
       const lbStr = lb>0 ? fmtHM(lb) : "—";
       const tot = r.totalHours!=null ? fmtTotal(r.totalHours) : "—";
-      const lateMin = r.status === "late" ? calcLateMinutes(r.inTime1) : 0;
+      const morningLate = r.morningLateMinutes || 0;
+      const lunchLate = r.lunchLateMinutes || 0;
+      const totalLateMin = morningLate + lunchLate;
       const lateStr = (() => {
-        if (lateMin <= 0) return "—";
-        const h = Math.floor(lateMin / 60), m = lateMin % 60;
+        if (totalLateMin <= 0) return "—";
+        const h = Math.floor(totalLateMin / 60), m = totalLateMin % 60;
         const hrsStr = `${h}.${String(m).padStart(2, "0")} hr`;
-        return lateMin < 60 ? `${lateMin} min` : `${lateMin} min / ${hrsStr}`;
+        const tag = (morningLate > 0 && lunchLate > 0) ? " (AM+Lunch)"
+          : lunchLate > 0 ? " (Lunch)" : "";
+        return totalLateMin < 60
+          ? `${totalLateMin} min${tag}`
+          : `${totalLateMin} min / ${hrsStr}${tag}`;
       })();
       return `<tr>
         <td>${r.date}</td><td>${r.employeeCode}</td><td>${r.employeeName}</td>
@@ -338,12 +344,18 @@ function AttendanceReport() {
       const s1m = calcMins(r.inTime1, r.outTime1);
       const s2m = calcMins(r.inTime2, r.outTime2);
       const lb = lunchBreakMins(r);
-      const lateMin = r.status === "late" ? calcLateMinutes(r.inTime1) : 0;
+      const morningLate = r.morningLateMinutes || 0;
+      const lunchLate = r.lunchLateMinutes || 0;
+      const totalLateMin = morningLate + lunchLate;
       const lateStr = (() => {
-        if (lateMin <= 0) return "";
-        const h = Math.floor(lateMin / 60), m = lateMin % 60;
+        if (totalLateMin <= 0) return "";
+        const h = Math.floor(totalLateMin / 60), m = totalLateMin % 60;
         const hrsStr = `${h}.${String(m).padStart(2, "0")} hr`;
-        return lateMin < 60 ? `${lateMin} min` : `${lateMin} min / ${hrsStr}`;
+        const tag = (morningLate > 0 && lunchLate > 0) ? " (AM+Lunch)"
+          : lunchLate > 0 ? " (Lunch)" : "";
+        return totalLateMin < 60
+          ? `${totalLateMin} min${tag}`
+          : `${totalLateMin} min / ${hrsStr}${tag}`;
       })();
       return [
         r.date, r.employeeCode, r.employeeName, r.department||"", r.branchName,
@@ -554,7 +566,7 @@ function MonthlyReport() {
     && (!empName || (e.employeeName || "").toLowerCase().includes(empName.toLowerCase()))
   ), [data, empType, department, empName]);
 
-  const HEADERS = ["Emp ID","Employee","Department","Branch","Designation","Type","Present","Absent","Late","Half Day","Leave","Holiday","Work Hrs","OT Hrs","Att %"];
+  const HEADERS = ["Emp ID","Employee","Department","Branch","Designation","Type","Present","Absent","Late (AM)","Lunch Late Days","Half Day","Leave","Holiday","Work Hrs","OT Hrs","Late (AM) Min","Lunch Late Min","Att %"];
 
   const handleExport = () => {
     const thead = `<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;

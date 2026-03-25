@@ -5,7 +5,7 @@ import {
   salaryStructures, employeeSalaryAssignments, holidays, shifts, staffLoans,
 } from "@workspace/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
-import { loadDeptRules, findRule, effectiveHours, calcOtHours, lateCutoffMins, timeToMins } from "../lib/hr-rules.js";
+import { loadDeptRules, findRule, effectiveHours, calcOtHours, lateCutoffMins, timeToMins, calcLunchLateMinutes } from "../lib/hr-rules.js";
 
 const STATUTORY_NAMES = ["EPF – Employee", "EPF – Employer", "ETF"];
 
@@ -329,11 +329,16 @@ router.post("/generate", async (req, res) => {
       const hourlyRate  = basicSalary / (wdCount * reqHoursPerDay);
       const minuteRate  = hourlyRate / 60;
 
-      /* ── Late deduction: lateMinutes × minuteRate ──────── */
-      /* lateRecs already filtered to records where inTime1 > lateCutoff */
-      const totalLateMinutes = lateRecs.reduce((sum, rec) => {
+      /* ── Late deduction: (morning late + lunch return late) × minuteRate ── */
+      /* Morning late: minutes after cutoff for inTime1 */
+      const morningLateMinutes = lateRecs.reduce((sum, rec) => {
         return sum + (timeToMins(rec.inTime1!) - lateCutoff);
       }, 0);
+      /* Lunch return late: minutes over allocated lunch for ALL present records */
+      const lunchLateMinutes = [...presentRecs, ...lateRecs].reduce((sum, rec) => {
+        return sum + calcLunchLateMinutes(rec.outTime1, rec.inTime2, rule);
+      }, 0);
+      const totalLateMinutes = morningLateMinutes + lunchLateMinutes;
       const lateDeduction = Math.round(totalLateMinutes * minuteRate);
 
       /* ── Absence deduction ─────────────────────────────── */
