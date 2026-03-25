@@ -16,11 +16,16 @@ const MONTHS = ["January","February","March","April","May","June","July","August
 const STATUS_COLORS: Record<string, string> = {
   present:  "bg-green-100 text-green-700",
   absent:   "bg-red-100 text-red-700",
-  late:     "bg-amber-100 text-amber-700",
+  late:     "bg-green-100 text-amber-700",
   half_day: "bg-yellow-100 text-yellow-700",
   leave:    "bg-purple-100 text-purple-700",
   holiday:  "bg-gray-100 text-gray-700",
 };
+function fmtStatus(st: string) {
+  if (st === "late") return "PRESENT (LATE)";
+  if (st === "half_day") return "HALF DAY";
+  return st.replace("_", " ").toUpperCase();
+}
 
 function fmtAmt(n: number) { return `Rs. ${Math.round(n).toLocaleString("en-LK")}`; }
 function getMonthName(m: number) { return MONTHS[m - 1]; }
@@ -253,7 +258,7 @@ function AttendanceReport() {
     const tbody = filtered.map((r: any) => `<tr>
       <td>${r.date}</td><td>${r.employeeCode}</td><td>${r.employeeName}</td>
       <td>${r.department||""}</td><td>${r.branchName}</td><td>${r.designation||""}</td>
-      <td>${r.status.replace("_"," ").toUpperCase()}</td>
+      <td>${r.status==="late"?"PRESENT (LATE)":r.status==="half_day"?"HALF DAY":r.status.replace("_"," ").toUpperCase()}</td>
       <td>${r.inTime1||"—"}</td><td>${r.outTime1||"—"}</td>
       <td>${r.totalHours!=null?r.totalHours.toFixed(1)+"h":"—"}</td>
       <td>${r.overtimeHours>0?r.overtimeHours.toFixed(1)+"h":"—"}</td>
@@ -275,7 +280,7 @@ function AttendanceReport() {
   const handleExportExcel = () => {
     const rows = filtered.map((r: any) => [
       r.date, r.employeeCode, r.employeeName, r.department||"", r.branchName,
-      r.designation||"", r.status.replace("_"," ").toUpperCase(),
+      r.designation||"", r.status==="late"?"PRESENT (LATE)":r.status==="half_day"?"HALF DAY":r.status.replace("_"," ").toUpperCase(),
       r.inTime1||"", r.outTime1||"",
       r.totalHours!=null?r.totalHours.toFixed(1):"",
       r.overtimeHours>0?r.overtimeHours.toFixed(1):"",
@@ -354,8 +359,8 @@ function AttendanceReport() {
                     <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.branchName}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.designation||"—"}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
-                      <span className={cn("px-2 py-0.5 rounded text-xs font-medium uppercase",STATUS_COLORS[r.status]||"bg-gray-100")}>
-                        {r.status.replace("_"," ")}
+                      <span className={cn("px-2 py-0.5 rounded text-xs font-medium",STATUS_COLORS[r.status]||"bg-gray-100")}>
+                        {fmtStatus(r.status)}
                       </span>
                     </td>
                     <td className="px-3 py-2 font-mono whitespace-nowrap">{r.inTime1||"—"}</td>
