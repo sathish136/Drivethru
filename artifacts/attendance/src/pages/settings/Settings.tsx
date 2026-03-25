@@ -21,7 +21,7 @@ const TYPE_STYLE: Record<string, string> = {
 };
 
 
-type SettingsTab = "organisation" | "attendance" | "hr" | "payroll" | "holidays" | "biometric" | "mockdata";
+type SettingsTab = "organisation" | "attendance" | "hr" | "payroll" | "holidays" | "biometric" | "mockdata" | "database";
 
 const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ElementType; description: string; color: string }[] = [
   { key: "organisation", label: "Organisation",       icon: Building,     description: "Name, country, timezone",       color: "text-emerald-600" },
@@ -30,6 +30,7 @@ const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ElementType;
   { key: "holidays",     label: "Holiday Settings",   icon: Calendar,     description: "Public & gazetted holidays",     color: "text-amber-600"   },
   { key: "biometric",   label: "Biometric / ADMS",   icon: Fingerprint,  description: "ZKTeco ZK Push configuration",   color: "text-sky-600"     },
   { key: "mockdata",     label: "Mock Data",          icon: Database,     description: "Import & clear sample data",     color: "text-rose-600"    },
+  { key: "database",     label: "Backup & Restore",   icon: Download,     description: "Backup and restore all data",    color: "text-teal-600"    },
 ];
 
 export default function Settings() {
@@ -78,6 +79,15 @@ export default function Settings() {
 
   const [checkinFile, setCheckinFile] = useState<File | null>(null);
   const [checkinImporting, setCheckinImporting] = useState(false);
+
+  // Database backup/restore state
+  const [dbStats, setDbStats] = useState<Record<string, number> | null>(null);
+  const [dbStatsLoading, setDbStatsLoading] = useState(false);
+  const [backupDownloading, setBackupDownloading] = useState(false);
+  const [restoreFile, setRestoreFile] = useState<File | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  const [restoreMsg, setRestoreMsg] = useState<{ type: "success" | "error"; text: string; log?: string[] } | null>(null);
+  const restoreInputRef = useRef<HTMLInputElement>(null);
   const [checkinMsg, setCheckinMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const checkinInputRef = useRef<HTMLInputElement>(null);
 
@@ -115,6 +125,53 @@ export default function Settings() {
       setMockMsg({ type: d.success ? "success" : "error", text: d.message });
     } catch { setMockMsg({ type: "error", text: "Request failed. Check server connection." }); }
     setMockClearing(false);
+  }
+
+  async function loadDbStats() {
+    setDbStatsLoading(true);
+    try {
+      const r = await fetch(apiUrl("/backup/stats"));
+      const d = await r.json();
+      setDbStats(d);
+    } catch { setDbStats(null); }
+    setDbStatsLoading(false);
+  }
+
+  async function handleBackupDownload() {
+    setBackupDownloading(true);
+    try {
+      const r = await fetch(apiUrl("/backup/export"));
+      if (!r.ok) throw new Error("Export failed");
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `attendance-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch { alert("Backup export failed. Please check server connection."); }
+    setBackupDownloading(false);
+  }
+
+  async function handleRestore() {
+    if (!restoreFile) return;
+    if (!confirm("WARNING: This will overwrite existing data with the backup. All current records will be replaced. Continue?")) return;
+    setRestoring(true); setRestoreMsg(null);
+    try {
+      const form = new FormData();
+      form.append("backup", restoreFile);
+      const r = await fetch(apiUrl("/backup/restore"), { method: "POST", body: form });
+      const d = await r.json();
+      if (d.success) {
+        setRestoreMsg({ type: "success", text: d.message, log: d.log });
+        setRestoreFile(null);
+        if (restoreInputRef.current) restoreInputRef.current.value = "";
+        loadDbStats();
+      } else {
+        setRestoreMsg({ type: "error", text: d.error || "Restore failed", log: d.log });
+      }
+    } catch { setRestoreMsg({ type: "error", text: "Restore request failed. Check server connection." }); }
+    setRestoring(false);
   }
 
   const [hrSettings, setHrSettings] = useState({
@@ -167,6 +224,10 @@ export default function Settings() {
   const [payrollError, setPayrollError] = useState<string | null>(null);
   const [editingDesignation, setEditingDesignation] = useState<string | null>(null);
   const [editSalaryValue, setEditSalaryValue] = useState("");
+
+  useEffect(() => {
+    if (activeTab === "database") { loadDbStats(); }
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab !== "payroll") return;
@@ -1128,6 +1189,186 @@ export default function Settings() {
                 {mockClearing ? "Clearing..." : "Clear All Data"}
               </Button>
             </Card>
+          </div>
+        )}
+
+        {/* ─── Database Backup & Restore ─── */}
+        {activeTab === "database" && (
+          <div className="space-y-4">
+
+            {/* Current Database Stats */}
+            <Card className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-teal-600" />
+                  <span className="text-sm font-bold text-foreground">Current Database</span>
+                </div>
+                <Button
+                  variant="outline"
+                  className="flex items-center gap-1.5 text-xs h-8"
+                  onClick={loadDbStats}
+                  disabled={dbStatsLoading}
+                >
+                  <RefreshCw className={`w-3 h-3 ${dbStatsLoading ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+              </div>
+              {dbStatsLoading ? (
+                <div className="flex items-center justify-center h-20">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+                </div>
+              ) : dbStats ? (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: "Companies",       value: dbStats.companies,      icon: "🏢" },
+                    { label: "Branches",        value: dbStats.branches,       icon: "🏬" },
+                    { label: "Departments",     value: dbStats.departments,    icon: "📂" },
+                    { label: "Designations",    value: dbStats.designations,   icon: "🏷️" },
+                    { label: "Shifts",          value: dbStats.shifts,         icon: "🕐" },
+                    { label: "Employees",       value: dbStats.employees,      icon: "👥" },
+                    { label: "Holidays",        value: dbStats.holidays,       icon: "📅" },
+                    { label: "Payroll Records", value: dbStats.payrollRecords, icon: "💰" },
+                    { label: "Loans",           value: dbStats.staffLoans,     icon: "🏦" },
+                  ].map(item => (
+                    <div key={item.label} className="bg-muted rounded-xl p-3 text-center border border-border">
+                      <div className="text-lg mb-0.5">{item.icon}</div>
+                      <div className="text-xl font-bold text-foreground">{item.value ?? 0}</div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5">{item.label}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">Click Refresh to load statistics</p>
+              )}
+            </Card>
+
+            {/* Backup Export */}
+            <Card className="p-5">
+              <div className="flex items-center gap-2 mb-1">
+                <Download className="w-4 h-4 text-teal-600" />
+                <span className="text-sm font-bold text-foreground">Export Backup</span>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Download a full JSON backup of all your data including employees, branches, payroll records, loans, settings, and holidays.
+                Store this file safely — you can use it to restore the system at any time.
+              </p>
+              <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 flex items-start gap-3 mb-4">
+                <div className="w-8 h-8 bg-teal-100 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                  <Database className="w-4 h-4 text-teal-700" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-teal-800">What's included in the backup:</p>
+                  <ul className="text-xs text-teal-700 mt-1 space-y-0.5 list-disc list-inside">
+                    <li>Companies, branches, departments, designations, shifts</li>
+                    <li>All employee records and profiles</li>
+                    <li>Payroll records and payroll settings</li>
+                    <li>Staff loans and advances</li>
+                    <li>Holidays and system settings</li>
+                  </ul>
+                </div>
+              </div>
+              <Button
+                className="flex items-center gap-2 text-sm bg-teal-600 hover:bg-teal-700 text-white"
+                onClick={handleBackupDownload}
+                disabled={backupDownloading}
+              >
+                <Download className="w-4 h-4" />
+                {backupDownloading ? "Preparing download..." : "Download Backup (.json)"}
+              </Button>
+            </Card>
+
+            {/* Restore */}
+            <Card className="p-5 border-amber-200 bg-amber-50/20">
+              <div className="flex items-center gap-2 mb-1">
+                <Upload className="w-4 h-4 text-amber-600" />
+                <span className="text-sm font-bold text-foreground">Restore from Backup</span>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Upload a previously downloaded backup file to restore your data.
+                <strong className="text-amber-700"> This will replace all existing records</strong> with the data from the backup file.
+              </p>
+
+              {restoreMsg && (
+                <div className={`flex items-start gap-2 p-3 rounded-xl mb-4 text-xs ${
+                  restoreMsg.type === "success"
+                    ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
+                    : "bg-red-50 border border-red-200 text-red-800"
+                }`}>
+                  {restoreMsg.type === "success"
+                    ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+                    : <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />}
+                  <div className="flex-1">
+                    <p className="font-medium">{restoreMsg.text}</p>
+                    {restoreMsg.log && restoreMsg.log.length > 0 && (
+                      <ul className="mt-2 space-y-0.5 opacity-80">
+                        {restoreMsg.log.map((l, i) => <li key={i}>✓ {l}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                  <button onClick={() => setRestoreMsg(null)} className="shrink-0 opacity-50 hover:opacity-100">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row items-start gap-3">
+                <div
+                  className="flex-1 border-2 border-dashed border-amber-300 rounded-xl px-4 py-3 text-xs text-muted-foreground cursor-pointer hover:border-amber-400 hover:bg-amber-50 transition-colors"
+                  onClick={() => restoreInputRef.current?.click()}
+                >
+                  <input
+                    ref={restoreInputRef}
+                    type="file"
+                    accept=".json"
+                    className="hidden"
+                    onChange={e => { setRestoreFile(e.target.files?.[0] ?? null); setRestoreMsg(null); }}
+                  />
+                  {restoreFile
+                    ? <span className="flex items-center gap-2 font-medium text-foreground">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />{restoreFile.name}
+                        <span className="text-muted-foreground font-normal">({(restoreFile.size / 1024).toFixed(1)} KB)</span>
+                      </span>
+                    : <span>Click to select a backup file (.json)…</span>
+                  }
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  {restoreFile && (
+                    <Button
+                      variant="outline"
+                      className="text-xs h-9 px-3"
+                      onClick={() => { setRestoreFile(null); setRestoreMsg(null); if (restoreInputRef.current) restoreInputRef.current.value = ""; }}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                  <Button
+                    className="flex items-center gap-2 text-xs h-9 bg-amber-600 hover:bg-amber-700 text-white"
+                    onClick={handleRestore}
+                    disabled={!restoreFile || restoring}
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    {restoring ? "Restoring..." : "Restore"}
+                  </Button>
+                </div>
+              </div>
+            </Card>
+
+            {/* Warning */}
+            <Card className="p-4 border-red-200 bg-red-50/20">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold text-red-700 mb-1">Important Notes</p>
+                  <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                    <li>Always download a fresh backup before restoring to avoid losing recent data.</li>
+                    <li>The restore process replaces all existing records — there is no partial restore.</li>
+                    <li>Attendance check-in records are <strong>not included</strong> in the backup (use the check-in import separately).</li>
+                    <li>After restore, refresh the page to see updated data.</li>
+                  </ul>
+                </div>
+              </div>
+            </Card>
+
           </div>
         )}
       </div>
