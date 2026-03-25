@@ -232,13 +232,15 @@ router.post("/generate", async (req, res) => {
       const designation = (emp.designation ?? "").toLowerCase();
 
       /* ── Look up HR department rule for this employee ── */
-      const rule = findRule(deptRules, emp.department ?? "");
+      const empShiftName     = emp.shiftId ? shiftMap.get(emp.shiftId)?.name ?? null : null;
+      const rule = findRule(deptRules, emp.department ?? "", empShiftName);
       const reqHoursPerDay   = rule.minHours;                          // required hrs for full pay
       const otAfterHrsRule   = rule.otAfterHours ?? rule.minHours;     // OT threshold (hours)
       const isOtEligible     = rule.otEligible;
       const isFlexible       = rule.flexible;                          // exempt from incomplete deduction
       const ruleOtMult       = rule.otMultiplier ?? cfg.overtimeMultiplier;
       const ruleOffdayOtMult = rule.offdayOtMultiplier ?? cfg.offDayOtMultiplier;
+      const ruleHolidayOtMult = rule.holidayOtMultiplier ?? null;
 
       /* Keep manager allowance for manager-designated employees (regardless of rule) */
       const isManagerDesig = designation.includes("manager") || designation.includes("gm") || designation.includes("general manager");
@@ -373,12 +375,17 @@ router.post("/generate", async (req, res) => {
           isDateInOffSeason(rec.date, cfg.offSeasonStart, cfg.offSeasonEnd);
 
         if (rec.status === "holiday") {
-          /* Holiday pay: hours worked × hourly rate × holiday multiplier */
+          /* Holiday pay: hours worked × hourly rate × holiday multiplier
+             Rule-level holidayOtMultiplier overrides payroll-settings multiplier
+             for the employee's department (except statutory stays at max of both). */
           const hType = holidayDateMap.get(rec.date) ?? "public";
-          const mult =
+          const cfgMult =
             hType === "statutory" ? (cfg.statutoryOtMultiplier ?? 2.0) :
             hType === "poya"      ? (cfg.poyaOtMultiplier ?? 1.5) :
                                     (cfg.publicHolidayOtMultiplier ?? 1.5);
+          const mult = ruleHolidayOtMult != null
+            ? (hType === "statutory" ? Math.max(ruleHolidayOtMult, cfgMult) : ruleHolidayOtMult)
+            : cfgMult;
           if (rawHrs > 0) holidayOtPay += Math.round(rawHrs * hourlyRate * mult);
 
         } else if (rec.status === "off_day") {

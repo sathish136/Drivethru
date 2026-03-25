@@ -17,6 +17,9 @@ export interface DeptShiftRule {
   multipleLogin: boolean;
   otMultiplier: number | null;
   offdayOtMultiplier: number | null;
+  holidayOtMultiplier: number | null;
+  weeklyLeaveDays: number | null;
+  halfDayHours: number | null;
   notes: string;
 }
 
@@ -35,6 +38,9 @@ export const DEFAULT_RULE: DeptShiftRule = {
   multipleLogin: false,
   otMultiplier: 1.5,
   offdayOtMultiplier: 1.5,
+  holidayOtMultiplier: 1.5,
+  weeklyLeaveDays: 1.5,
+  halfDayHours: 5,
   notes: "Default fallback rule",
 };
 
@@ -57,20 +63,35 @@ export async function loadDeptRules(): Promise<DeptShiftRule[]> {
 }
 
 /**
- * Find the best matching rule for an employee's department.
+ * Find the best matching rule for an employee's department AND shift.
  * Matching strategy (case-insensitive):
- *   1. Exact department name match
- *   2. Substring containment match (employee dept contains rule dept or vice-versa)
- *   3. DEFAULT_RULE as fallback
+ *   1. Exact department + exact shift name match
+ *   2. Exact department match (any shift)
+ *   3. Partial department match (substring containment)
+ *   4. DEFAULT_RULE as fallback
  */
-export function findRule(rules: DeptShiftRule[], department: string): DeptShiftRule {
-  const dept = (department ?? "").toLowerCase().trim();
+export function findRule(
+  rules: DeptShiftRule[],
+  department: string,
+  shiftName?: string | null,
+): DeptShiftRule {
+  const dept  = (department ?? "").toLowerCase().trim();
+  const shift = (shiftName  ?? "").toLowerCase().trim();
 
-  // 1. Exact match
-  const exact = rules.find(r => r.department.toLowerCase().trim() === dept);
-  if (exact) return exact;
+  // 1. Exact dept + exact shift
+  if (shift) {
+    const both = rules.find(
+      r => r.department.toLowerCase().trim() === dept &&
+           r.shift.toLowerCase().trim() === shift,
+    );
+    if (both) return both;
+  }
 
-  // 2. Partial match
+  // 2. Exact dept match (first one found)
+  const exactDept = rules.find(r => r.department.toLowerCase().trim() === dept);
+  if (exactDept) return exactDept;
+
+  // 3. Partial match
   const partial = rules.find(r => {
     const rd = r.department.toLowerCase().trim();
     return dept.includes(rd) || rd.includes(dept);
@@ -120,4 +141,11 @@ export function calcOtHours(effHours: number, rule: DeptShiftRule): number {
   if (!rule.otEligible) return 0;
   const threshold = rule.otAfterHours ?? rule.minHours;
   return Math.max(0, Math.round((effHours - threshold) * 100) / 100);
+}
+
+/**
+ * Half-day threshold hours from rule, with fallback.
+ */
+export function halfDayThresholdHours(rule: DeptShiftRule): number {
+  return rule.halfDayHours ?? 5;
 }
