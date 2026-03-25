@@ -763,10 +763,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Scrollable page content — only this area scrolls */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="p-4 md:p-8">
-            <div className="max-w-7xl mx-auto">
-              {children}
-            </div>
+          <div className="p-4 md:p-6">
+            {children}
           </div>
         </div>
       </div>
