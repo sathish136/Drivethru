@@ -283,9 +283,12 @@ function AttendanceReport() {
   }
 
   const handleExport = () => {
-    const present = filtered.filter((r: any) => r.status === "present").length;
-    const absent  = filtered.filter((r: any) => r.status === "absent").length;
-    const late    = filtered.filter((r: any) => r.status === "late").length;
+    const present  = filtered.filter((r: any) => r.status === "present" || r.status === "late").length;
+    const absent   = filtered.filter((r: any) => r.status === "absent").length;
+    const late     = filtered.filter((r: any) => r.status === "late").length;
+    const halfDay  = filtered.filter((r: any) => r.status === "half_day").length;
+    const leave    = filtered.filter((r: any) => r.status === "leave").length;
+    const holiday  = filtered.filter((r: any) => r.status === "holiday").length;
     const thead = `<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
     const tbody = filtered.map((r: any) => {
       const s1m = calcMins(r.inTime1, r.outTime1);
@@ -313,6 +316,9 @@ function AttendanceReport() {
         { label:"Present",       value:String(present) },
         { label:"Absent",        value:String(absent) },
         { label:"Late",          value:String(late) },
+        { label:"Half Day",      value:String(halfDay) },
+        { label:"Leave",         value:String(leave) },
+        { label:"Holiday",       value:String(holiday) },
         { label:"Branch",        value:dBranch?(branches?.find(b=>String(b.id)===dBranch)?.name||"—"):"All Branches" },
       ],
       tableHtml: `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`,
