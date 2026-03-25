@@ -324,45 +324,16 @@ router.post("/generate", async (req, res) => {
         etfEmployer = 0;
       }
 
-      const dailyRate   = basicSalary / wdCount;
-      const hourlyRate  = basicSalary / (wdCount * 8);
-      const minuteRate  = hourlyRate / 60;
+      const hourlyRate  = basicSalary / (24 * 8);
 
-      /* ── Late deduction: lateMinutes × minuteRate ──────── */
-      let totalLateMinutes = 0;
-      for (const rec of lateRecs) {
-        if (rec.inTime1) {
-          const arrivalMinutes = timeToMins(rec.inTime1);
-          if (arrivalMinutes > lateCutoff) {
-            totalLateMinutes += arrivalMinutes - lateCutoff;
-          }
-        } else {
-          totalLateMinutes += rule.lateGraceMinutes ?? 15;
-        }
-      }
-      const lateDeduction = Math.round(totalLateMinutes * minuteRate);
+      /* ── Earned Basic: (Present + Half×0.5) × (Salary / 24) ── */
+      const earnedBasic = Math.round((presentDays + halfDaysCount * 0.5) * (basicSalary / 24));
 
-      /* ── Absence deduction ─────────────────────────────── */
-      const absenceDeduction = Math.round(dailyRate * absentDays);
-
-      /* ── Half-day deduction ────────────────────────────── */
-      const halfDayDeduction = Math.round(halfDaysCount * (dailyRate / 2));
-
-      /* ── Incomplete hours deduction (rules-based) ───────── */
-      let incompleteDeduction = 0;
-      if (!isFlexible) {
-        for (const rec of [...presentRecs, ...halfDayRecs]) {
-          const rawHrs = rec.totalHours ?? 0;
-          if (rawHrs === 0) continue;
-          const effHrs = effectiveHours(rawHrs, rule);
-          const required = rec.status === "half_day" ? reqHoursPerDay / 2 : reqHoursPerDay;
-          if (effHrs < required) {
-            const shortfallMinutes = Math.round((required - effHrs) * 60);
-            incompleteDeduction += Math.round(shortfallMinutes * minuteRate);
-          }
-        }
-        incompleteDeduction = Math.round(incompleteDeduction);
-      }
+      /* Deductions subsumed into earnedBasic formula – set to zero */
+      const lateDeduction       = 0;
+      const absenceDeduction    = 0;
+      const halfDayDeduction    = 0;
+      const incompleteDeduction = 0;
 
       /* ── Off-season: skip standard OT if enabled ────────── */
       const isOffSeason = cfg.offSeasonEnabled && empAtt.some(rec =>
@@ -421,9 +392,8 @@ router.post("/generate", async (req, res) => {
                         : 0;
 
       const grossSalary = Math.round(
-        basicSalary + transportAllowance + lunchIncentive + housingAllowance + otherAllowances
+        earnedBasic + transportAllowance + lunchIncentive + housingAllowance + otherAllowances
         + overtimePay + holidayOtPay + offDayOtPay
-        - absenceDeduction - lateDeduction - halfDayDeduction - incompleteDeduction
       );
 
       /* EPF / ETF always based on actual earned gross (not full basic) */

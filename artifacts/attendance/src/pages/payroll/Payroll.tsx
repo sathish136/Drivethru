@@ -37,11 +37,14 @@ interface PayrollRow {
   leaveDays: number;
   holidayDays: number;
   overtimeHours: number;
+  halfDays: number;
   basicSalary: number;
   transportAllowance: number;
+  lunchIncentive: number;
   housingAllowance: number;
   otherAllowances: number;
   overtimePay: number;
+  holidayOtPay: number;
   grossSalary: number;
   epfEmployee: number;
   epfEmployer: number;
@@ -127,17 +130,16 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
   const monthLabel = `${MONTHS[row.month - 1]} ${row.year}`;
   const epfNo = row.employee.epfNumber || row.employee.employeeId;
 
-  /* ── Calculations matching Excel format ── */
-  const allowances = (row.transportAllowance || 0) + (row.housingAllowance || 0) + (row.otherAllowances || 0);
-  const subTotal      = row.basicSalary + allowances;
-  const noPayLeave    = row.absenceDeduction || 0;
-  const totalForEPF   = subTotal - noPayLeave;
-  const overtime      = row.overtimePay || 0;
-  const totalEarnings = totalForEPF + overtime;
+  /* ── Calculations: Net Salary = (Present + Half×0.5) × (Salary / 24) ── */
+  const earnedBasic   = Math.round((row.presentDays + (row.halfDays || 0) * 0.5) * (row.basicSalary / 24));
+  const allowances    = (row.transportAllowance || 0) + (row.housingAllowance || 0) + (row.lunchIncentive || 0) + (row.otherAllowances || 0);
+  const overtime      = (row.overtimePay || 0) + (row.holidayOtPay || 0);
+  const subTotal      = earnedBasic + allowances;
+  const totalEarnings = subTotal + overtime;
 
   const epf8          = row.epfEmployee || 0;
   const loans         = row.loanDeduction || 0;
-  const fines         = (row.lateDeduction || 0) + (row.otherDeductions || 0);
+  const fines         = row.otherDeductions || 0;
   const apit          = row.apit || 0;
   const totalRecoveries = epf8 + loans + fines + apit;
   const balanceReceived = totalEarnings - totalRecoveries;
@@ -149,21 +151,21 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
   const lastDay = new Date(row.year, row.month, 0);
   const dateStr = `${String(lastDay.getDate()).padStart(2,"0")}-${String(row.month).padStart(2,"0")}-${row.year}`;
 
-  type SlipRow = { label: string; value?: string; indent?: boolean; bold?: boolean; italic?: boolean; borderTop?: boolean; borderBottom?: boolean; rightAlign?: boolean };
+  type SlipRow = { label: string; value?: string; sub?: string; indent?: boolean; bold?: boolean; italic?: boolean; borderTop?: boolean; borderBottom?: boolean; rightAlign?: boolean };
   const rows: SlipRow[] = [
-    { label: "Basic Salary",            value: fmtAmt(row.basicSalary) },
-    ...(allowances > 0 ? [{ label: "Allowances", value: fmtAmt(allowances) }] : [{ label: "Holiday Pay", value: "" }]),
-    { label: "Sub Total",               value: fmtAmt(subTotal), italic: true, borderTop: true },
-    { label: "Less  :  No Pay Leave",   value: noPayLeave > 0 ? fmtAmt(noPayLeave) : "-", italic: true },
-    { label: "Total for EPF / ETF",     value: fmtAmt(totalForEPF), bold: true },
-    { label: "Add  :  Overtime",        value: overtime > 0 ? fmtAmt(overtime) : "", italic: true },
-    { label: "Total Earnings",          value: fmtAmt(totalEarnings), borderTop: true },
+    { label: "Earned Salary",
+      sub: `(${row.presentDays} + ${row.halfDays || 0}×0.5) × (${Math.round(row.basicSalary).toLocaleString("en-LK")} ÷ 24)`,
+      value: fmtAmt(earnedBasic) },
+    ...(allowances > 0 ? [{ label: "Allowances", value: fmtAmt(allowances) }] : []),
+    ...(overtime > 0   ? [{ label: "Add  :  Overtime / Holiday Pay", value: fmtAmt(overtime), italic: true }] : []),
+    { label: "Total Earnings",          value: fmtAmt(totalEarnings), bold: true, borderTop: true },
+    { label: "" },
     { label: "Recoveries  :  EPF 8%",   value: fmtAmt(epf8) },
-    { label: "Loans",                   value: loans > 0 ? fmtAmt(loans) : "", indent: true },
-    { label: "Fines",                   value: fines > 0 ? fmtAmt(fines) : "", indent: true },
-    ...(apit > 0 ? [{ label: "APIT (Income Tax)", value: fmtAmt(apit), indent: true }] : []),
+    ...(loans > 0 ? [{ label: "Loans / Advances", value: fmtAmt(loans), indent: true }] : []),
+    ...(fines > 0 ? [{ label: "Other Deductions", value: fmtAmt(fines), indent: true }] : []),
+    ...(apit  > 0 ? [{ label: "APIT (Income Tax)", value: fmtAmt(apit), indent: true }] : []),
     { label: "Less  :  Total Recoveries", value: fmtAmt(totalRecoveries), italic: true, borderTop: true },
-    { label: "Balance Received",        value: fmtAmt(balanceReceived), bold: true, borderTop: true, borderBottom: true },
+    { label: "Net Salary",              value: fmtAmt(balanceReceived), bold: true, borderTop: true, borderBottom: true },
     { label: "" },
     { label: "EPF 12%",                 value: fmtAmt(epf12) },
     { label: "EPF 8%",                  value: fmtAmt(epf8) },
@@ -271,6 +273,7 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
                       color: r.bold ? "#0e2a3d" : "#374151",
                     }}>
                       {r.label}
+                      {r.sub && <div style={{ fontSize: "10px", color: "#6b7280", fontWeight: "400", fontStyle: "normal", marginTop: "2px" }}>{r.sub}</div>}
                     </td>
                     <td style={{
                       textAlign: "right",
