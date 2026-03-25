@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { attendanceRecords, employees, branches } from "@workspace/db/schema";
+import { attendanceRecords, employees, branches, shifts } from "@workspace/db/schema";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 import { getDaysInMonth, today } from "../lib/helpers.js";
+import { loadDeptRules, findRule, timeToMins } from "../lib/hr-rules.js";
 
 const router = Router();
 
@@ -15,40 +16,64 @@ router.get("/attendance", async (req, res) => {
       empCode: employees.employeeId,
       empDesignation: employees.designation,
       empDepartment: employees.department,
+      empShiftId: employees.shiftId,
       branchName: branches.name,
     }).from(attendanceRecords)
       .leftJoin(employees, eq(attendanceRecords.employeeId, employees.id))
       .leftJoin(branches, eq(attendanceRecords.branchId, branches.id));
 
-    let filtered = all;
-    if (startDate) filtered = filtered.filter(r => r.rec.date >= (startDate as string));
-    if (endDate) filtered = filtered.filter(r => r.rec.date <= (endDate as string));
-    if (branchId) filtered = filtered.filter(r => r.rec.branchId === Number(branchId));
-    if (employeeId) filtered = filtered.filter(r => r.rec.employeeId === Number(employeeId));
-    if (status) filtered = filtered.filter(r => r.rec.status === status);
+    const allShifts = await db.select().from(shifts);
+    const shiftMap = new Map(allShifts.map(s => [s.id, s]));
+    const hrRules = await loadDeptRules();
+
+    function getEffectiveStatus(rec: typeof attendanceRecords.$inferSelect, empShift: typeof allShifts[0] | undefined, department: string | null) {
+      const rule = findRule(hrRules, department || "", empShift?.name);
+      let st = rec.status;
+      if (st === "present" && rec.inTime1) {
+        const shiftStartMins = empShift?.startTime1 ? timeToMins(empShift.startTime1) : 8 * 60;
+        const grace = rule.lateGraceMinutes ?? (empShift?.graceMinutes ?? 15);
+        if (timeToMins(rec.inTime1) > shiftStartMins + grace) st = "late";
+      }
+      if ((st === "present" || st === "late") && rec.totalHours != null) {
+        if (rec.totalHours < (rule.halfDayHours ?? 5)) st = "half_day";
+      }
+      return st;
+    }
+
+    let enriched = all.map(r => ({
+      ...r,
+      effectiveStatus: getEffectiveStatus(r.rec, r.empShiftId ? shiftMap.get(r.empShiftId) ?? undefined : undefined, r.empDepartment),
+    }));
+
+    if (startDate) enriched = enriched.filter(r => r.rec.date >= (startDate as string));
+    if (endDate) enriched = enriched.filter(r => r.rec.date <= (endDate as string));
+    if (branchId) enriched = enriched.filter(r => r.rec.branchId === Number(branchId));
+    if (employeeId) enriched = enriched.filter(r => r.rec.employeeId === Number(employeeId));
+    if (status) enriched = enriched.filter(r => r.effectiveStatus === status);
 
     const summary = { present: 0, absent: 0, late: 0, halfDay: 0, leave: 0, holiday: 0 };
-    for (const r of filtered) {
-      if (r.rec.status === "present") summary.present++;
-      else if (r.rec.status === "absent") summary.absent++;
-      else if (r.rec.status === "late") summary.late++;
-      else if (r.rec.status === "half_day") summary.halfDay++;
-      else if (r.rec.status === "leave") summary.leave++;
-      else if (r.rec.status === "holiday") summary.holiday++;
+    for (const r of enriched) {
+      const st = r.effectiveStatus;
+      if (st === "present") summary.present++;
+      else if (st === "absent") summary.absent++;
+      else if (st === "late") summary.late++;
+      else if (st === "half_day") summary.halfDay++;
+      else if (st === "leave") summary.leave++;
+      else if (st === "holiday") summary.holiday++;
     }
 
     res.json({
       startDate: startDate as string,
       endDate: endDate as string,
-      totalRecords: filtered.length,
+      totalRecords: enriched.length,
       summary,
-      records: filtered.map(r => ({
+      records: enriched.map(r => ({
         ...r.rec,
+        status: r.effectiveStatus,
         employeeName: r.empName || "",
         employeeCode: r.empCode || "",
         designation: r.empDesignation || "",
         department: r.empDepartment || "",
-        employeeType: r.empType || "",
         branchName: r.branchName || "",
         shiftName: null,
         createdAt: r.rec.createdAt.toISOString(),
