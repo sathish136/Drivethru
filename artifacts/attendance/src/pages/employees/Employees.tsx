@@ -13,7 +13,7 @@ import {
   Briefcase, Phone, Hash, CreditCard, Calendar,
   IdCard, Home, Shield, Camera, BadgeIndianRupee,
   Banknote, UserCheck, ListChecks, CheckCircle, Clock,
-  CircleDashed, BadgeCheck, RefreshCw, ChevronDown, ChevronUp, Settings,
+  CircleDashed, BadgeCheck, RefreshCw, ChevronDown, ChevronUp, Settings, Save,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -859,127 +859,182 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                 )}
               </div>
 
-              {/* ── Inline Edit / Create Form ── */}
+              {/* ── Inline Edit / Create Form (mirrors HR Settings modal) ── */}
               {(policyEditMode === "edit" || policyEditMode === "create") && policyForm && (
-                <div className="rounded-xl border border-primary/30 bg-primary/3 overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-2.5 bg-primary/10 border-b border-primary/20">
+                <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+                  <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-muted/30">
                     <div className="flex items-center gap-2">
                       <Edit2 className="w-3.5 h-3.5 text-primary" />
-                      <span className="text-[11px] font-bold text-primary uppercase tracking-widest">
-                        {policyEditMode === "edit" ? "Edit Rule" : "Create Rule"}
+                      <span className="text-sm font-bold">
+                        {policyEditMode === "edit" ? "Edit" : "Create"} Department Rule
                       </span>
                     </div>
-                    <button onClick={() => setPolicyEditMode("view")} className="p-1 rounded hover:bg-primary/10">
-                      <X className="w-3.5 h-3.5 text-primary" />
+                    <button onClick={() => setPolicyEditMode("view")} className="p-1.5 rounded-lg hover:bg-muted">
+                      <X className="w-4 h-4" />
                     </button>
                   </div>
-                  <div className="p-4 space-y-4">
-                    {/* Department / Shift row */}
-                    <div className="grid grid-cols-2 gap-3">
+
+                  <div className="p-5 space-y-4">
+                    {/* Department + Shift */}
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label className="text-xs font-semibold mb-1.5 block">Department</Label>
-                        <Input className="text-xs h-8" value={policyForm.department}
-                          readOnly={policyEditMode === "edit"}
-                          onChange={e => setP("department", e.target.value)} />
-                      </div>
-                      <div>
-                        <Label className="text-xs font-semibold mb-1.5 block">Shift</Label>
-                        {allShifts.length > 0 ? (
-                          <Select className="text-xs h-8" value={policyForm.shift}
-                            onChange={e => setP("shift", e.target.value)}>
-                            {allShifts.map((s: any) => <option key={s.id} value={s.name}>{s.name}</option>)}
+                        <Label className="text-xs font-medium mb-1 block">Department *</Label>
+                        {policyEditMode === "create" ? (
+                          <Select value={policyForm.department} onChange={e => setP("department", e.target.value)}>
+                            <option value="">— Select department —</option>
+                            {deptOptions.map((d: string) => <option key={d} value={d}>{d}</option>)}
                           </Select>
                         ) : (
-                          <Input className="text-xs h-8" value={policyForm.shift}
-                            onChange={e => setP("shift", e.target.value)} />
+                          <Input value={policyForm.department} readOnly className="bg-muted/40 cursor-not-allowed" />
                         )}
                       </div>
-                    </div>
-
-                    {/* Attendance row */}
-                    <div className="grid grid-cols-3 gap-3">
                       <div>
-                        <Label className="text-xs font-semibold mb-1.5 block">Min Hours/Day</Label>
-                        <Input type="number" className="text-xs h-8" value={policyForm.minHours}
-                          onChange={e => setP("minHours", parseFloat(e.target.value))} />
-                      </div>
-                      <div>
-                        <Label className="text-xs font-semibold mb-1.5 block">Late Grace (min)</Label>
-                        <Input type="number" className="text-xs h-8" value={policyForm.lateGraceMinutes}
-                          onChange={e => setP("lateGraceMinutes", parseInt(e.target.value))} />
-                      </div>
-                      <div>
-                        <Label className="text-xs font-semibold mb-1.5 block">Half-Day Hrs</Label>
-                        <Input type="number" className="text-xs h-8" value={policyForm.halfDayHours}
-                          onChange={e => setP("halfDayHours", parseFloat(e.target.value))} />
+                        <Label className="text-xs font-medium mb-1 block">Shift *</Label>
+                        <Select value={policyForm.shift} onChange={e => setP("shift", e.target.value)}>
+                          <option value="">— Select shift —</option>
+                          {allShifts.map((s: any) => <option key={s.id} value={s.name}>{s.name}</option>)}
+                        </Select>
                       </div>
                     </div>
 
-                    {/* OT row */}
-                    <div className="grid grid-cols-3 gap-3">
+                    {/* Hours */}
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label className="text-xs font-semibold mb-1.5 block">OT After (h)</Label>
-                        <Input type="number" step="0.5" className="text-xs h-8" value={policyForm.otAfterHours}
-                          onChange={e => setP("otAfterHours", parseFloat(e.target.value))} />
+                        <Label className="text-xs font-medium mb-1 block">Min Hours / Day</Label>
+                        <Input type="number" step="0.5" min="0"
+                          value={policyForm.minHours}
+                          onChange={e => setP("minHours", parseFloat(e.target.value) || 0)} />
                       </div>
                       <div>
-                        <Label className="text-xs font-semibold mb-1.5 block">OT Multiplier</Label>
-                        <Input type="number" step="0.25" className="text-xs h-8" value={policyForm.otMultiplier}
-                          onChange={e => setP("otMultiplier", parseFloat(e.target.value))} />
-                      </div>
-                      <div>
-                        <Label className="text-xs font-semibold mb-1.5 block">Weekly Leave Days</Label>
-                        <Input type="number" step="0.5" className="text-xs h-8" value={policyForm.weeklyLeaveDays}
-                          onChange={e => setP("weeklyLeaveDays", parseFloat(e.target.value))} />
+                        <Label className="text-xs font-medium mb-1 block">Max Hours / Day <span className="text-muted-foreground font-normal">(blank = unlimited)</span></Label>
+                        <Input type="number" step="0.5" min="0"
+                          value={policyForm.maxHours ?? ""}
+                          onChange={e => setP("maxHours", e.target.value === "" ? null : parseFloat(e.target.value))}
+                          placeholder="—" />
                       </div>
                     </div>
 
-                    {/* Holiday/Offday OT */}
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* OT settings */}
+                    <div className="grid grid-cols-3 gap-4">
                       <div>
-                        <Label className="text-xs font-semibold mb-1.5 block">Holiday OT Multiplier</Label>
-                        <Input type="number" step="0.25" className="text-xs h-8" value={policyForm.holidayOtMultiplier}
-                          onChange={e => setP("holidayOtMultiplier", parseFloat(e.target.value))} />
+                        <Label className="text-xs font-medium mb-1 block">OT Eligible</Label>
+                        <Select value={policyForm.otEligible ? "yes" : "no"} onChange={e => setP("otEligible", e.target.value === "yes")}>
+                          <option value="yes">Yes</option>
+                          <option value="no">No</option>
+                        </Select>
                       </div>
                       <div>
-                        <Label className="text-xs font-semibold mb-1.5 block">Off-Day OT Multiplier</Label>
-                        <Input type="number" step="0.25" className="text-xs h-8" value={policyForm.offdayOtMultiplier}
-                          onChange={e => setP("offdayOtMultiplier", parseFloat(e.target.value))} />
+                        <Label className="text-xs font-medium mb-1 block">OT After (hours) <span className="text-muted-foreground font-normal">(blank = N/A)</span></Label>
+                        <Input type="number" step="0.5" min="0"
+                          value={policyForm.otAfterHours ?? ""}
+                          onChange={e => setP("otAfterHours", e.target.value === "" ? null : parseFloat(e.target.value))}
+                          placeholder="—" />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">OT Multiplier <span className="text-muted-foreground font-normal">(blank = N/A)</span></Label>
+                        <Input type="number" step="0.1" min="0"
+                          value={policyForm.otMultiplier ?? ""}
+                          onChange={e => setP("otMultiplier", e.target.value === "" ? null : parseFloat(e.target.value))}
+                          placeholder="—" />
                       </div>
                     </div>
 
-                    {/* Toggles */}
-                    <div className="flex flex-wrap gap-3">
-                      {[
-                        { label: "OT Eligible", key: "otEligible" },
-                        { label: "Flexible Hours", key: "flexible" },
-                        { label: "Multiple Login", key: "multipleLogin" },
-                      ].map(({ label, key }) => (
-                        <label key={key} className="flex items-center gap-1.5 cursor-pointer select-none">
-                          <input type="checkbox" className="w-3.5 h-3.5 accent-primary"
-                            checked={!!policyForm[key]}
-                            onChange={e => setP(key, e.target.checked)} />
-                          <span className="text-xs font-medium">{label}</span>
-                        </label>
-                      ))}
+                    {/* Off-day + Holiday OT */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">Off-Day OT Multiplier <span className="text-muted-foreground font-normal">(blank = use global)</span></Label>
+                        <Input type="number" step="0.1" min="0"
+                          value={policyForm.offdayOtMultiplier ?? ""}
+                          onChange={e => setP("offdayOtMultiplier", e.target.value === "" ? null : parseFloat(e.target.value))}
+                          placeholder="—" />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">Holiday OT Multiplier <span className="text-muted-foreground font-normal">(blank = use global)</span></Label>
+                        <Input type="number" step="0.1" min="0"
+                          value={policyForm.holidayOtMultiplier ?? ""}
+                          onChange={e => setP("holidayOtMultiplier", e.target.value === "" ? null : parseFloat(e.target.value))}
+                          placeholder="—" />
+                      </div>
+                    </div>
+
+                    {/* Grace + Lunch */}
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">Late Grace (min) <span className="text-muted-foreground font-normal">(blank = no grace)</span></Label>
+                        <Input type="number" step="1" min="0"
+                          value={policyForm.lateGraceMinutes ?? ""}
+                          onChange={e => setP("lateGraceMinutes", e.target.value === "" ? null : parseInt(e.target.value))}
+                          placeholder="—" />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">Lunch Min (hrs)</Label>
+                        <Input type="number" step="0.5" min="0"
+                          value={policyForm.lunchMinHours ?? ""}
+                          onChange={e => setP("lunchMinHours", e.target.value === "" ? null : parseFloat(e.target.value))}
+                          placeholder="—" />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">Lunch Max (hrs) <span className="text-muted-foreground font-normal">(blank = same)</span></Label>
+                        <Input type="number" step="0.5" min="0"
+                          value={policyForm.lunchMaxHours ?? ""}
+                          onChange={e => setP("lunchMaxHours", e.target.value === "" ? null : parseFloat(e.target.value))}
+                          placeholder="—" />
+                      </div>
+                    </div>
+
+                    {/* Leave + Half-day */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">Weekly Leave Days <span className="text-muted-foreground font-normal">(e.g. 1.5, 0 for night shift)</span></Label>
+                        <Input type="number" step="0.5" min="0"
+                          value={policyForm.weeklyLeaveDays ?? ""}
+                          onChange={e => setP("weeklyLeaveDays", e.target.value === "" ? null : parseFloat(e.target.value))}
+                          placeholder="1.5" />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">Half-Day Threshold (hrs) <span className="text-muted-foreground font-normal">(hours that count as half-day)</span></Label>
+                        <Input type="number" step="0.5" min="0"
+                          value={policyForm.halfDayHours ?? ""}
+                          onChange={e => setP("halfDayHours", e.target.value === "" ? null : parseFloat(e.target.value))}
+                          placeholder="5" />
+                      </div>
+                    </div>
+
+                    {/* Flexible + Multi-login */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">Flexible Hours</Label>
+                        <Select value={policyForm.flexible ? "yes" : "no"} onChange={e => setP("flexible", e.target.value === "yes")}>
+                          <option value="no">No</option>
+                          <option value="yes">Yes</option>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">Multiple Login Allowed</Label>
+                        <Select value={policyForm.multipleLogin ? "yes" : "no"} onChange={e => setP("multipleLogin", e.target.value === "yes")}>
+                          <option value="no">No</option>
+                          <option value="yes">Yes</option>
+                        </Select>
+                      </div>
                     </div>
 
                     {/* Notes */}
                     <div>
-                      <Label className="text-xs font-semibold mb-1.5 block">Notes</Label>
-                      <Input className="text-xs h-8" placeholder="Optional rule notes…" value={policyForm.notes || ""}
-                        onChange={e => setP("notes", e.target.value)} />
+                      <Label className="text-xs font-medium mb-1 block">Notes</Label>
+                      <Input value={policyForm.notes || ""} onChange={e => setP("notes", e.target.value)} placeholder="Any additional notes…" />
                     </div>
+                  </div>
 
-                    {/* Actions */}
-                    <div className="flex justify-end gap-2 pt-1">
-                      <Button variant="outline" className="text-xs h-8" onClick={() => setPolicyEditMode("view")}>
-                        Cancel
-                      </Button>
-                      <Button className="text-xs h-8" onClick={handleSavePolicyRule} disabled={saveHrRules.isPending}>
-                        {saveHrRules.isPending ? "Saving…" : policyEditMode === "edit" ? "Save Changes" : "Create Rule"}
-                      </Button>
-                    </div>
+                  <div className="flex justify-end gap-2 px-5 py-4 border-t border-border bg-muted/20">
+                    <Button variant="outline" className="text-xs h-9" onClick={() => setPolicyEditMode("view")}>Cancel</Button>
+                    <Button
+                      className="text-xs h-9 flex items-center gap-1.5"
+                      onClick={handleSavePolicyRule}
+                      disabled={saveHrRules.isPending || !policyForm.department || !policyForm.shift}
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      {saveHrRules.isPending ? "Saving…" : policyEditMode === "edit" ? "Save Changes" : "Create Rule"}
+                    </Button>
                   </div>
                 </div>
               )}
