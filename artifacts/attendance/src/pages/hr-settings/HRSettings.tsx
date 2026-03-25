@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { PageHeader, Card, Button, Input, Label, Select } from "@/components/ui";
 import {
-  Plus, Trash2, Save, RefreshCw, Check, AlertTriangle, X, Edit2, Users, Settings, Zap,
+  Plus, Trash2, Save, RefreshCw, Check, AlertTriangle, X, Edit2, Users, Settings,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -37,7 +37,7 @@ const BLANK_RULE: DeptShiftRule = {
   lunchMinHours: 1, lunchMaxHours: 1,
   flexible: false, multipleLogin: false,
   otMultiplier: 1.5, offdayOtMultiplier: 1.5,
-  holidayOtMultiplier: 1.5, weeklyLeaveDays: 1.5, halfDayHours: 4.5,
+  holidayOtMultiplier: 1.5, weeklyLeaveDays: 1.5, halfDayHours: 5,
   notes: "",
 };
 
@@ -112,26 +112,6 @@ export default function HRSettings() {
       else setError(d.message || "Save failed");
     } catch { setError("Failed to save"); }
     setSaving(false);
-  }
-
-  function generateAllShifts() {
-    const firstDept = departments[0]?.name ?? "General";
-    const existing = new Set(rules.map(r => `${r.department}|${r.shift}`));
-    const newRules: DeptShiftRule[] = shiftOptions
-      .filter(s => !existing.has(`${firstDept}|${s.name}`))
-      .map(s => ({
-        ...BLANK_RULE,
-        id: crypto.randomUUID(),
-        department: firstDept,
-        shift: s.name,
-      }));
-    if (newRules.length === 0) {
-      setError("Rules for all shifts in this department already exist.");
-      return;
-    }
-    const updated = [...rules, ...newRules];
-    setRules(updated);
-    persistRules(updated);
   }
 
   function openAdd() {
@@ -239,15 +219,6 @@ export default function HRSettings() {
           <div className="flex items-center gap-3">
             {saving && <span className="text-xs text-muted-foreground flex items-center gap-1"><RefreshCw className="w-3 h-3 animate-spin" />Saving…</span>}
             {saved  && <span className="text-xs text-emerald-600 flex items-center gap-1"><Check className="w-3 h-3" />Saved</span>}
-            <Button
-              variant="outline"
-              className="flex items-center gap-1.5 text-xs h-8"
-              onClick={generateAllShifts}
-              disabled={noDepts || noShifts || saving}
-              title="Create one rule per shift category for the first department"
-            >
-              <Zap className="w-3.5 h-3.5" />Generate All Shifts
-            </Button>
             <Button
               className="flex items-center gap-1.5 text-xs h-8"
               onClick={openAdd}
@@ -524,11 +495,11 @@ export default function HRSettings() {
                     placeholder="1.5" />
                 </div>
                 <div>
-                  <Label className="text-xs font-medium mb-1 block">Half-Day Threshold (hrs) <span className="text-muted-foreground font-normal">(below this = half-day)</span></Label>
-                  <Input type="number" step="0.25" min="0"
+                  <Label className="text-xs font-medium mb-1 block">Half-Day Threshold (hrs) <span className="text-muted-foreground font-normal">(hours that count as half-day)</span></Label>
+                  <Input type="number" step="0.5" min="0"
                     value={editing.halfDayHours ?? ""}
                     onChange={e => setE("halfDayHours", e.target.value === "" ? null : parseFloat(e.target.value))}
-                    placeholder="4.5" />
+                    placeholder="5" />
                 </div>
               </div>
 

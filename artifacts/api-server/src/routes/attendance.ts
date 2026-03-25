@@ -144,7 +144,7 @@ router.get("/monthly-sheet", async (req, res) => {
         const rec = empRecs.get(d);
         if (rec) {
           const effectiveStatus = calcEffectiveStatus(rec, empShift, emp.department);
-          dailyStatus.push({ day: d, status: effectiveStatus, inTime: rec.inTime1, outTime: rec.outTime1, hours: rec.totalHours });
+          dailyStatus.push({ day: d, status: effectiveStatus, inTime: rec.inTime1, outTime: rec.outTime1, inTime2: rec.inTime2, outTime2: rec.outTime2, hours: rec.totalHours });
           if (effectiveStatus === "present") presentDays++;
           else if (effectiveStatus === "absent") absentDays++;
           else if (effectiveStatus === "late") { lateDays++; presentDays++; }

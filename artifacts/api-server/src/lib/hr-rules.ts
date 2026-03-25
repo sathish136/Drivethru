@@ -40,7 +40,7 @@ export const DEFAULT_RULE: DeptShiftRule = {
   offdayOtMultiplier: 1.5,
   holidayOtMultiplier: 1.5,
   weeklyLeaveDays: 1.5,
-  halfDayHours: 4.5,
+  halfDayHours: 5,
   notes: "Default fallback rule",
 };
 
@@ -147,5 +147,5 @@ export function calcOtHours(effHours: number, rule: DeptShiftRule): number {
  * Half-day threshold hours from rule, with fallback.
  */
 export function halfDayThresholdHours(rule: DeptShiftRule): number {
-  return rule.halfDayHours ?? 4.5;
+  return rule.halfDayHours ?? 5;
 }

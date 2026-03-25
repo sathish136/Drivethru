@@ -207,7 +207,7 @@ export default function MonthlySheet() {
                   {daysArray.map(day => (
                     <th key={day} className={cn(
                       "px-1 py-1 bg-muted/60 font-semibold border-b border-border text-center",
-                      showTimes ? "min-w-[72px]" : "min-w-[34px]",
+                      showTimes ? "min-w-[68px]" : "min-w-[34px]",
                       isSunday(day) && "bg-red-50/80 text-red-600"
                     )}>
                       <div className="font-bold leading-tight">{day}</div>
@@ -237,6 +237,8 @@ export default function MonthlySheet() {
                       const cfg   = STATUS_CFG[effectiveSt] || STATUS_CFG.absent;
                       const inT   = fmtTime(entry?.inTime);
                       const outT  = fmtTime(entry?.outTime);
+                      const inT2  = fmtTime(entry?.inTime2);
+                      const outT2 = fmtTime(entry?.outTime2);
                       const hrs   = entry?.hours;
 
                       return (
@@ -247,11 +249,19 @@ export default function MonthlySheet() {
                           {showTimes ? (
                             <div className={cn("rounded px-0.5 py-0.5 flex flex-col items-center gap-0", cfg.bg)}>
                               <span className={cn("text-[10px] font-bold leading-tight", cfg.text)}>{cfg.label}</span>
+                              {/* Session 1 */}
                               {inT && (
-                                <span className="text-[8px] leading-tight text-gray-600 font-mono">{inT}</span>
+                                <span className="text-[8px] leading-tight text-blue-600 font-mono">{inT}</span>
                               )}
                               {outT && (
-                                <span className="text-[8px] leading-tight text-gray-500 font-mono">{outT}</span>
+                                <span className="text-[8px] leading-tight text-blue-400 font-mono">{outT}</span>
+                              )}
+                              {/* Session 2 */}
+                              {inT2 && (
+                                <span className="text-[8px] leading-tight text-orange-600 font-mono">{inT2}</span>
+                              )}
+                              {outT2 && (
+                                <span className="text-[8px] leading-tight text-orange-400 font-mono">{outT2}</span>
                               )}
                               {hrs != null && (
                                 <span className="text-[8px] leading-tight font-semibold text-gray-700">{fmtHrs(hrs)}</span>
