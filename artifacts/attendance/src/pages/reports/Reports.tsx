@@ -16,7 +16,7 @@ const MONTHS = ["January","February","March","April","May","June","July","August
 const STATUS_COLORS: Record<string, string> = {
   present:  "bg-green-100 text-green-700",
   absent:   "bg-red-100 text-red-700",
-  late:     "bg-green-100 text-amber-700",
+  late:     "bg-amber-50 text-amber-700",
   half_day: "bg-yellow-100 text-yellow-700",
   leave:    "bg-purple-100 text-purple-700",
   holiday:  "bg-gray-100 text-gray-700",
@@ -25,6 +25,13 @@ function fmtStatus(st: string) {
   if (st === "late") return "PRESENT (LATE)";
   if (st === "half_day") return "HALF DAY";
   return st.replace("_", " ").toUpperCase();
+}
+function calcLateMinutes(inTime: string | null): number {
+  if (!inTime) return 0;
+  const [h, m] = inTime.split(":").map(Number);
+  const inMins = h * 60 + m;
+  const cutoff = 8 * 60 + 15;
+  return Math.max(0, inMins - cutoff);
 }
 
 function fmtAmt(n: number) { return `Rs. ${Math.round(n).toLocaleString("en-LK")}`; }
@@ -426,9 +433,19 @@ function AttendanceReport() {
                     <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.branchName}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.designation||"—"}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
-                      <span className={cn("px-2 py-0.5 rounded text-xs font-medium",STATUS_COLORS[r.status]||"bg-gray-100")}>
-                        {fmtStatus(r.status)}
-                      </span>
+                      <div className="flex flex-col gap-0.5">
+                        <span className={cn("px-2 py-0.5 rounded text-xs font-medium",STATUS_COLORS[r.status]||"bg-gray-100")}>
+                          {fmtStatus(r.status)}
+                        </span>
+                        {r.status === "late" && r.inTime1 && (() => {
+                          const lm = calcLateMinutes(r.inTime1);
+                          return lm > 0 ? (
+                            <span className="text-[10px] font-semibold text-red-500 text-center">
+                              +{lm}m late
+                            </span>
+                          ) : null;
+                        })()}
+                      </div>
                     </td>
                     <td className="px-3 py-2 font-mono whitespace-nowrap text-blue-700 bg-blue-50/20">
                       {r.inTime1||"—"}
