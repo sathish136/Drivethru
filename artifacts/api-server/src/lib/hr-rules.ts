@@ -136,13 +136,33 @@ export function effectiveHours(rawHours: number, rule: DeptShiftRule): number {
 }
 
 /**
- * Calculate OT hours for a given record's effective hours.
- * Returns 0 if not OT-eligible.
+ * Calculate OT hours for a given attendance record.
+ *
+ * Policy:
+ *  - otAfterHours is the TOTAL CLOCK TIME threshold (including lunch break).
+ *    e.g. 9.5 = 8h scheduled work + 1h lunch + 0.5h minimum OT buffer.
+ *  - OT only accrues when rawHours exceeds this threshold.
+ *  - OT hours = effective work hours beyond (threshold − lunchHours).
+ *  - earlyMinutes: minutes signed-in BEFORE shift start are excluded from OT.
  */
-export function calcOtHours(effHours: number, rule: DeptShiftRule): number {
+export function calcOtHours(
+  rawHours: number,
+  rule: DeptShiftRule,
+  earlyMinutes = 0,
+): number {
   if (!rule.otEligible) return 0;
-  const threshold = rule.otAfterHours ?? rule.minHours;
-  return Math.max(0, Math.round((effHours - threshold) * 100) / 100);
+
+  /* Remove early-sign-in time (before shift start) from raw hours */
+  const adjustedRaw = Math.max(0, rawHours - earlyMinutes / 60);
+
+  const threshold = rule.otAfterHours ?? rule.minHours; // total clock-time threshold
+  if (adjustedRaw <= threshold) return 0;
+
+  const lunchH       = lunchDeductHours(rule);
+  const effHours     = Math.max(0, adjustedRaw - lunchH);
+  const effThreshold = Math.max(0, threshold - lunchH);
+
+  return Math.round(Math.max(0, effHours - effThreshold) * 100) / 100;
 }
 
 /**

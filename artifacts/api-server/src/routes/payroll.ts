@@ -399,9 +399,13 @@ router.post("/generate", async (req, res) => {
           if (rawHrs > 0) offDayOtPay += Math.round(dailyRate * ruleOffdayOtMult);
 
         } else if (!recInOffSeason && isOtEligible) {
-          /* Regular day OT: use effective hours (after lunch deduction) */
-          const effHrs = effectiveHours(rawHrs, rule);
-          const ot = calcOtHours(effHrs, rule);
+          /* Regular day OT:
+             - Exclude early sign-in (time before shift start) per policy.
+             - otAfterHours is total clock-time threshold (incl. lunch). */
+          const earlyMins = (rec.inTime1 && shiftStart1 && timeToMins(rec.inTime1) < timeToMins(shiftStart1))
+            ? timeToMins(shiftStart1) - timeToMins(rec.inTime1)
+            : 0;
+          const ot = calcOtHours(rawHrs, rule, earlyMins);
           if (ot > 0) {
             regularOtHours += ot;
             regularOtPay   += Math.round(ot * hourlyRate * ruleOtMult);
