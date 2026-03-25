@@ -137,9 +137,10 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
 
   const epf8          = row.epfEmployee || 0;
   const loans         = row.loanDeduction || 0;
-  const fines         = (row.lateDeduction || 0) + (row.otherDeductions || 0);
+  const lateDeduction = row.lateDeduction || 0;
+  const otherDeds     = row.otherDeductions || 0;
   const apit          = row.apit || 0;
-  const totalRecoveries = epf8 + loans + fines + apit;
+  const totalRecoveries = epf8 + loans + lateDeduction + otherDeds + apit;
   const balanceReceived = totalEarnings - totalRecoveries;
 
   const epf12 = row.epfEmployer || 0;
@@ -159,9 +160,10 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
     { label: "Add  :  Overtime",        value: overtime > 0 ? fmtAmt(overtime) : "", italic: true },
     { label: "Total Earnings",          value: fmtAmt(totalEarnings), borderTop: true },
     { label: "Recoveries  :  EPF 8%",   value: fmtAmt(epf8) },
-    { label: "Loans",                   value: loans > 0 ? fmtAmt(loans) : "", indent: true },
-    { label: "Fines",                   value: fines > 0 ? fmtAmt(fines) : "", indent: true },
-    ...(apit > 0 ? [{ label: "APIT (Income Tax)", value: fmtAmt(apit), indent: true }] : []),
+    ...(loans > 0       ? [{ label: "Loans",                                         value: fmtAmt(loans),       indent: true }] : []),
+    ...(lateDeduction > 0 ? [{ label: `Late Arrival Deduction (${row.lateDays} day${row.lateDays !== 1 ? "s" : ""})`, value: fmtAmt(lateDeduction), indent: true }] : []),
+    ...(otherDeds > 0   ? [{ label: "Other Deductions",                              value: fmtAmt(otherDeds),   indent: true }] : []),
+    ...(apit > 0        ? [{ label: "APIT (Income Tax)",                             value: fmtAmt(apit),        indent: true }] : []),
     { label: "Less  :  Total Recoveries", value: fmtAmt(totalRecoveries), italic: true, borderTop: true },
     { label: "Balance Received",        value: fmtAmt(balanceReceived), bold: true, borderTop: true, borderBottom: true },
     { label: "" },

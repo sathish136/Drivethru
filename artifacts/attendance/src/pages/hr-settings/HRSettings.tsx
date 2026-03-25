@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { PageHeader, Card, Button, Input, Label, Select } from "@/components/ui";
 import {
   Plus, Trash2, Save, RefreshCw, Check, AlertTriangle, X, Edit2, Users, Settings, Settings2,
+  BookOpen, Clock, Zap, Calendar, ShieldCheck, ChevronRight,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -80,6 +81,8 @@ export default function HRSettings() {
   const [globalSettings, setGlobalSettings] = useState({ earlyInMinutes: 30 });
   const [globalSaving, setGlobalSaving] = useState(false);
   const [globalSaved,  setGlobalSaved]  = useState(false);
+
+  const [activeTab, setActiveTab]   = useState<"rules" | "policy">("rules");
 
   const [showModal, setShowModal]   = useState(false);
   const [modalMode, setModalMode]   = useState<"add" | "edit">("add");
@@ -203,12 +206,177 @@ export default function HRSettings() {
   const noDepts  = !loading && departments.length === 0;
   const noShifts = !loading && shiftOptions.length === 0;
 
+  /* ── HR Policy tab content ── */
+  function PolicyTab() {
+    const DEFAULT_RULE_DISPLAY: DeptShiftRule = rules[0] ?? BLANK_RULE;
+
+    function PolicySection({ icon: Icon, title, color, children }: {
+      icon: any; title: string; color: string; children: React.ReactNode;
+    }) {
+      return (
+        <div className="border border-border rounded-xl overflow-hidden">
+          <div className={`flex items-center gap-3 px-5 py-3 ${color}`}>
+            <Icon className="w-4 h-4" />
+            <span className="font-semibold text-sm">{title}</span>
+          </div>
+          <div className="px-5 py-4 space-y-3">{children}</div>
+        </div>
+      );
+    }
+
+    function PolicyItem({ label, value, note }: { label: string; value: string; note?: string }) {
+      return (
+        <div className="flex items-start justify-between gap-4 py-2 border-b border-border/40 last:border-0">
+          <div>
+            <p className="text-sm font-medium text-foreground">{label}</p>
+            {note && <p className="text-xs text-muted-foreground mt-0.5">{note}</p>}
+          </div>
+          <span className="text-sm font-semibold text-primary shrink-0">{value}</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-5">
+        {/* Header banner */}
+        <div className="rounded-2xl overflow-hidden border border-border">
+          <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 px-6 py-5">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                <BookOpen className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <p className="text-white font-bold text-lg leading-tight">HR Policy Document</p>
+                <p className="text-white/70 text-xs mt-0.5">Attendance, Overtime & Payroll Rules — effective for all employees</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-emerald-50 dark:bg-emerald-950/20 px-6 py-3 border-t border-emerald-200 dark:border-emerald-800">
+            <p className="text-xs text-emerald-700 dark:text-emerald-400">
+              These policies apply per department rule. Values shown are defaults — see <span className="font-semibold">Department Rules</span> tab for per-department overrides.
+            </p>
+          </div>
+        </div>
+
+        {/* Attendance Policy */}
+        <PolicySection icon={Clock} title="Attendance Policy" color="bg-blue-50 dark:bg-blue-950/20 text-blue-700 dark:text-blue-300 border-b border-blue-200 dark:border-blue-800">
+          <PolicyItem
+            label="Late Arrival Grace Period"
+            value={`${DEFAULT_RULE_DISPLAY.lateGraceMinutes ?? 15} minutes`}
+            note="Employees arriving after this grace period are marked Late."
+          />
+          <PolicyItem
+            label="Late Arrival Deduction"
+            value="Hourly rate × late minutes"
+            note="Late arrivals exceeding the grace period will result in a deduction from the employee's hourly working rate for each minute late."
+          />
+          <PolicyItem
+            label="Lunch Break"
+            value={`${DEFAULT_RULE_DISPLAY.lunchMinHours ?? 1}h${DEFAULT_RULE_DISPLAY.lunchMaxHours && DEFAULT_RULE_DISPLAY.lunchMaxHours !== DEFAULT_RULE_DISPLAY.lunchMinHours ? ` – ${DEFAULT_RULE_DISPLAY.lunchMaxHours}h` : ""}`}
+            note="This duration is deducted from total clock time when computing effective work hours."
+          />
+          <PolicyItem
+            label="Minimum Hours / Day"
+            value={`${DEFAULT_RULE_DISPLAY.minHours} hours`}
+            note="Employees must clock this many effective hours for a full-pay day."
+          />
+          <PolicyItem
+            label="Half-Day Threshold"
+            value={`Below ${DEFAULT_RULE_DISPLAY.halfDayHours ?? 5}h → Absent`}
+            note="Attendance below this threshold is treated as Absent."
+          />
+          <PolicyItem
+            label="Minimum Present Hours"
+            value={`Below ${DEFAULT_RULE_DISPLAY.minPresentHours ?? 8}h → Half-Day`}
+            note="Attendance below this but above the half-day threshold is marked as a Half-Day."
+          />
+          <PolicyItem
+            label="Weekly Leave Entitlement"
+            value={`${DEFAULT_RULE_DISPLAY.weeklyLeaveDays ?? 1.5} days / week`}
+            note="Automatically allocated weekly leave days (0 for night shift workers)."
+          />
+        </PolicySection>
+
+        {/* Overtime Policy */}
+        <PolicySection icon={Zap} title="Overtime Policy" color="bg-orange-50 dark:bg-orange-950/20 text-orange-700 dark:text-orange-300 border-b border-orange-200 dark:border-orange-800">
+          <PolicyItem
+            label="OT Eligible"
+            value={DEFAULT_RULE_DISPLAY.otEligible ? "Yes" : "No"}
+            note="Only employees marked OT eligible will receive overtime pay."
+          />
+          <PolicyItem
+            label="OT Starts After"
+            value={`${DEFAULT_RULE_DISPLAY.otAfterHours ?? DEFAULT_RULE_DISPLAY.minHours} total hours (incl. lunch)`}
+            note="Total clock time threshold including lunch break. Early sign-in before shift start is excluded."
+          />
+          <PolicyItem
+            label="OT Rate (Regular Day)"
+            value={`${DEFAULT_RULE_DISPLAY.otMultiplier ?? 1.5}× hourly rate`}
+          />
+          <PolicyItem
+            label="OT Rate (Off-Day)"
+            value={`${DEFAULT_RULE_DISPLAY.offdayOtMultiplier ?? 1.5}× daily rate`}
+          />
+          <PolicyItem
+            label="OT Rate (Holiday)"
+            value={`${DEFAULT_RULE_DISPLAY.holidayOtMultiplier ?? 1.5}× hourly rate`}
+          />
+        </PolicySection>
+
+        {/* Per-department summary */}
+        {rules.length > 0 && (
+          <PolicySection icon={ShieldCheck} title="Per-Department Rules Summary" color="bg-violet-50 dark:bg-violet-950/20 text-violet-700 dark:text-violet-300 border-b border-violet-200 dark:border-violet-800">
+            <div className="space-y-2">
+              {rules.map(r => (
+                <div key={r.id} className="flex items-center gap-3 py-2 px-3 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors">
+                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{r.department} <span className="font-normal text-muted-foreground">— {r.shift}</span></p>
+                    <p className="text-xs text-muted-foreground">
+                      Grace {r.lateGraceMinutes ?? 15}min · OT after {r.otAfterHours ?? r.minHours}h · {r.otMultiplier ?? 1.5}× rate
+                      {r.flexible ? " · Flexible" : ""}
+                    </p>
+                  </div>
+                  <button
+                    className="text-xs text-primary hover:underline shrink-0"
+                    onClick={() => { openEdit(r); setActiveTab("rules"); }}
+                  >Edit</button>
+                </div>
+              ))}
+            </div>
+          </PolicySection>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5 max-w-full">
       <PageHeader
         title="HR Settings"
         description="Per-department attendance, overtime, and shift rules — used across attendance, reports, and payroll"
       />
+
+      {/* Tab bar */}
+      <div className="flex gap-1 p-1 bg-muted/50 rounded-xl w-fit border border-border">
+        {([
+          { id: "rules",  label: "Department Rules", icon: Settings2 },
+          { id: "policy", label: "HR Policy",        icon: BookOpen  },
+        ] as const).map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === tab.id
+                ? "bg-card shadow-sm text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
       {error && (
         <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm bg-red-50 text-red-700 border border-red-200">
