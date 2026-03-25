@@ -378,191 +378,216 @@ export default function HRSettings() {
 
       {/* ── Add / Edit Modal ── */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-border">
-            <div className="flex items-center justify-between p-5 border-b border-border">
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-violet-600" />
-                <span className="font-bold text-sm">{modalMode === "add" ? "Add" : "Edit"} Department Rule</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-2xl border border-border flex flex-col max-h-[92vh]">
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+                  <Users className="w-4 h-4 text-violet-600" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm leading-tight">{modalMode === "add" ? "Add" : "Edit"} Department Rule</p>
+                  <p className="text-[11px] text-muted-foreground leading-tight">Configure attendance & payroll rules for a department shift</p>
+                </div>
               </div>
-              <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg hover:bg-muted">
+              <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-5 space-y-4">
-              {/* Department + Shift — dropdowns from DB */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs font-medium mb-1 block">Department *</Label>
-                  <Select
-                    value={editing.department}
-                    onChange={e => setE("department", e.target.value)}
-                  >
-                    <option value="">— Select department —</option>
-                    {departments.map(d => (
-                      <option key={d.id} value={d.name}>{d.name}</option>
-                    ))}
-                  </Select>
-                  {departments.length === 0 && (
-                    <p className="text-[10px] text-amber-600 mt-1">No departments configured yet.</p>
-                  )}
-                </div>
-                <div>
-                  <Label className="text-xs font-medium mb-1 block">Shift *</Label>
-                  <Select
-                    value={editing.shift}
-                    onChange={e => setE("shift", e.target.value)}
-                  >
-                    <option value="">— Select shift —</option>
-                    {shiftOptions.map(s => (
-                      <option key={s.id} value={s.name}>{s.name}</option>
-                    ))}
-                  </Select>
-                  {shiftOptions.length === 0 && (
-                    <p className="text-[10px] text-amber-600 mt-1">No shifts configured yet.</p>
-                  )}
-                </div>
-              </div>
+            {/* Body */}
+            <div className="overflow-y-auto flex-1 px-6 py-5 space-y-6">
 
-              {/* Hours */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs font-medium mb-1 block">Min Hours / Day</Label>
-                  <Input type="number" step="0.5" min="0"
-                    value={editing.minHours}
-                    onChange={e => setE("minHours", parseFloat(e.target.value) || 0)} />
-                </div>
-                <div>
-                  <Label className="text-xs font-medium mb-1 block">Max Hours / Day <span className="text-muted-foreground font-normal">(blank = unlimited)</span></Label>
-                  <Input type="number" step="0.5" min="0"
-                    value={editing.maxHours ?? ""}
-                    onChange={e => setE("maxHours", e.target.value === "" ? null : parseFloat(e.target.value))}
-                    placeholder="—" />
-                </div>
-              </div>
-
-              {/* OT settings */}
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <Label className="text-xs font-medium mb-1 block">OT Eligible</Label>
-                  <Select value={editing.otEligible ? "yes" : "no"} onChange={e => setE("otEligible", e.target.value === "yes")}>
-                    <option value="yes">Yes</option>
-                    <option value="no">No</option>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs font-medium mb-1 block">OT After (hours) <span className="text-muted-foreground font-normal">(blank = N/A)</span></Label>
-                  <Input type="number" step="0.5" min="0"
-                    value={editing.otAfterHours ?? ""}
-                    onChange={e => setE("otAfterHours", e.target.value === "" ? null : parseFloat(e.target.value))}
-                    placeholder="—" />
-                </div>
-                <div>
-                  <Label className="text-xs font-medium mb-1 block">OT Multiplier <span className="text-muted-foreground font-normal">(blank = N/A)</span></Label>
-                  <Input type="number" step="0.1" min="0"
-                    value={editing.otMultiplier ?? ""}
-                    onChange={e => setE("otMultiplier", e.target.value === "" ? null : parseFloat(e.target.value))}
-                    placeholder="—" />
-                </div>
-              </div>
-
-              {/* Off-day + Holiday OT */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs font-medium mb-1 block">Off-Day OT Multiplier <span className="text-muted-foreground font-normal">(blank = use global)</span></Label>
-                  <Input type="number" step="0.1" min="0"
-                    value={editing.offdayOtMultiplier ?? ""}
-                    onChange={e => setE("offdayOtMultiplier", e.target.value === "" ? null : parseFloat(e.target.value))}
-                    placeholder="—" />
-                </div>
-                <div>
-                  <Label className="text-xs font-medium mb-1 block">Holiday OT Multiplier <span className="text-muted-foreground font-normal">(blank = use global)</span></Label>
-                  <Input type="number" step="0.1" min="0"
-                    value={editing.holidayOtMultiplier ?? ""}
-                    onChange={e => setE("holidayOtMultiplier", e.target.value === "" ? null : parseFloat(e.target.value))}
-                    placeholder="—" />
-                </div>
-              </div>
-
-              {/* Grace + Lunch */}
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <Label className="text-xs font-medium mb-1 block">Late Grace (min) <span className="text-muted-foreground font-normal">(blank = no grace)</span></Label>
-                  <Input type="number" step="1" min="0"
-                    value={editing.lateGraceMinutes ?? ""}
-                    onChange={e => setE("lateGraceMinutes", e.target.value === "" ? null : parseInt(e.target.value))}
-                    placeholder="—" />
-                </div>
-                <div>
-                  <Label className="text-xs font-medium mb-1 block">Lunch Min (hrs)</Label>
-                  <Input type="number" step="0.5" min="0"
-                    value={editing.lunchMinHours ?? ""}
-                    onChange={e => setE("lunchMinHours", e.target.value === "" ? null : parseFloat(e.target.value))}
-                    placeholder="—" />
-                </div>
-                <div>
-                  <Label className="text-xs font-medium mb-1 block">Lunch Max (hrs) <span className="text-muted-foreground font-normal">(blank = same)</span></Label>
-                  <Input type="number" step="0.5" min="0"
-                    value={editing.lunchMaxHours ?? ""}
-                    onChange={e => setE("lunchMaxHours", e.target.value === "" ? null : parseFloat(e.target.value))}
-                    placeholder="—" />
-                </div>
-              </div>
-
-              {/* Leave + Half-day */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs font-medium mb-1 block">Weekly Leave Days <span className="text-muted-foreground font-normal">(e.g. 1.5, 0 for night shift)</span></Label>
-                  <Input type="number" step="0.5" min="0"
-                    value={editing.weeklyLeaveDays ?? ""}
-                    onChange={e => setE("weeklyLeaveDays", e.target.value === "" ? null : parseFloat(e.target.value))}
-                    placeholder="1.5" />
-                </div>
-                <div>
-                  <Label className="text-xs font-medium mb-1 block">Half-Day Threshold (hrs) <span className="text-muted-foreground font-normal">(below this → absent)</span></Label>
-                  <Input type="number" step="0.5" min="0"
-                    value={editing.halfDayHours ?? ""}
-                    onChange={e => setE("halfDayHours", e.target.value === "" ? null : parseFloat(e.target.value))}
-                    placeholder="5" />
-                </div>
-                <div>
-                  <Label className="text-xs font-medium mb-1 block">Min Present Hours <span className="text-muted-foreground font-normal">(below this → half-day)</span></Label>
-                  <Input type="number" step="0.5" min="0"
-                    value={editing.minPresentHours ?? ""}
-                    onChange={e => setE("minPresentHours", e.target.value === "" ? null : parseFloat(e.target.value))}
-                    placeholder="8" />
-                </div>
-              </div>
-
-              {/* Flexible + Multi-login */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs font-medium mb-1 block">Flexible Hours</Label>
-                  <Select value={editing.flexible ? "yes" : "no"} onChange={e => setE("flexible", e.target.value === "yes")}>
-                    <option value="no">No</option>
-                    <option value="yes">Yes</option>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs font-medium mb-1 block">Multiple Login Allowed</Label>
-                  <Select value={editing.multipleLogin ? "yes" : "no"} onChange={e => setE("multipleLogin", e.target.value === "yes")}>
-                    <option value="no">No</option>
-                    <option value="yes">Yes</option>
-                  </Select>
-                </div>
-              </div>
-
+              {/* Section: Identification */}
               <div>
-                <Label className="text-xs font-medium mb-1 block">Notes</Label>
-                <Input value={editing.notes} onChange={e => setE("notes", e.target.value)} placeholder="Any additional notes…" />
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-1 h-4 rounded-full bg-violet-500" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Identification</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">Department <span className="text-red-500">*</span></Label>
+                    <Select value={editing.department} onChange={e => setE("department", e.target.value)}>
+                      <option value="">— Select department —</option>
+                      {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                    </Select>
+                    {departments.length === 0 && <p className="text-[10px] text-amber-600 mt-1">No departments configured yet.</p>}
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">Shift <span className="text-red-500">*</span></Label>
+                    <Select value={editing.shift} onChange={e => setE("shift", e.target.value)}>
+                      <option value="">— Select shift —</option>
+                      {shiftOptions.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                    </Select>
+                    {shiftOptions.length === 0 && <p className="text-[10px] text-amber-600 mt-1">No shifts configured yet.</p>}
+                  </div>
+                </div>
               </div>
+
+              {/* Section: Working Hours */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-1 h-4 rounded-full bg-blue-500" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Working Hours</span>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">Min Hours / Day</Label>
+                    <Input type="number" step="0.5" min="0"
+                      value={editing.minHours}
+                      onChange={e => setE("minHours", parseFloat(e.target.value) || 0)} />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">Max Hours / Day</Label>
+                    <Input type="number" step="0.5" min="0"
+                      value={editing.maxHours ?? ""}
+                      onChange={e => setE("maxHours", e.target.value === "" ? null : parseFloat(e.target.value))}
+                      placeholder="Unlimited" />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">Late Grace (min)</Label>
+                    <Input type="number" step="1" min="0"
+                      value={editing.lateGraceMinutes ?? ""}
+                      onChange={e => setE("lateGraceMinutes", e.target.value === "" ? null : parseInt(e.target.value))}
+                      placeholder="No grace" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">Lunch Break Min (hrs)</Label>
+                    <Input type="number" step="0.5" min="0"
+                      value={editing.lunchMinHours ?? ""}
+                      onChange={e => setE("lunchMinHours", e.target.value === "" ? null : parseFloat(e.target.value))}
+                      placeholder="—" />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">Lunch Break Max (hrs)</Label>
+                    <Input type="number" step="0.5" min="0"
+                      value={editing.lunchMaxHours ?? ""}
+                      onChange={e => setE("lunchMaxHours", e.target.value === "" ? null : parseFloat(e.target.value))}
+                      placeholder="Same as min" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section: Overtime */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-1 h-4 rounded-full bg-orange-500" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Overtime</span>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">OT Eligible</Label>
+                    <Select value={editing.otEligible ? "yes" : "no"} onChange={e => setE("otEligible", e.target.value === "yes")}>
+                      <option value="yes">Yes</option>
+                      <option value="no">No</option>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">OT Starts After (hrs)</Label>
+                    <Input type="number" step="0.5" min="0"
+                      value={editing.otAfterHours ?? ""}
+                      onChange={e => setE("otAfterHours", e.target.value === "" ? null : parseFloat(e.target.value))}
+                      placeholder="N/A" />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">OT Rate Multiplier</Label>
+                    <Input type="number" step="0.1" min="0"
+                      value={editing.otMultiplier ?? ""}
+                      onChange={e => setE("otMultiplier", e.target.value === "" ? null : parseFloat(e.target.value))}
+                      placeholder="N/A" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">Off-Day OT Multiplier</Label>
+                    <Input type="number" step="0.1" min="0"
+                      value={editing.offdayOtMultiplier ?? ""}
+                      onChange={e => setE("offdayOtMultiplier", e.target.value === "" ? null : parseFloat(e.target.value))}
+                      placeholder="Use global" />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">Holiday OT Multiplier</Label>
+                    <Input type="number" step="0.1" min="0"
+                      value={editing.holidayOtMultiplier ?? ""}
+                      onChange={e => setE("holidayOtMultiplier", e.target.value === "" ? null : parseFloat(e.target.value))}
+                      placeholder="Use global" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section: Attendance Rules */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-1 h-4 rounded-full bg-emerald-500" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Attendance Rules</span>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">Weekly Leave Days</Label>
+                    <Input type="number" step="0.5" min="0"
+                      value={editing.weeklyLeaveDays ?? ""}
+                      onChange={e => setE("weeklyLeaveDays", e.target.value === "" ? null : parseFloat(e.target.value))}
+                      placeholder="1.5" />
+                    <p className="text-[10px] text-muted-foreground mt-1">0 for night shift</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">Half-Day Threshold (hrs)</Label>
+                    <Input type="number" step="0.5" min="0"
+                      value={editing.halfDayHours ?? ""}
+                      onChange={e => setE("halfDayHours", e.target.value === "" ? null : parseFloat(e.target.value))}
+                      placeholder="5" />
+                    <p className="text-[10px] text-muted-foreground mt-1">Below this → absent</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">Min Present Hours</Label>
+                    <Input type="number" step="0.5" min="0"
+                      value={editing.minPresentHours ?? ""}
+                      onChange={e => setE("minPresentHours", e.target.value === "" ? null : parseFloat(e.target.value))}
+                      placeholder="8" />
+                    <p className="text-[10px] text-muted-foreground mt-1">Below this → half-day</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section: Options */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-1 h-4 rounded-full bg-slate-400" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Options</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">Flexible Hours</Label>
+                    <Select value={editing.flexible ? "yes" : "no"} onChange={e => setE("flexible", e.target.value === "yes")}>
+                      <option value="no">No — fixed start/end</option>
+                      <option value="yes">Yes — flexible schedule</option>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">Multiple Check-ins Allowed</Label>
+                    <Select value={editing.multipleLogin ? "yes" : "no"} onChange={e => setE("multipleLogin", e.target.value === "yes")}>
+                      <option value="no">No</option>
+                      <option value="yes">Yes</option>
+                    </Select>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <Label className="text-xs font-medium mb-1.5 block">Notes</Label>
+                  <Input value={editing.notes} onChange={e => setE("notes", e.target.value)} placeholder="Any additional notes about this rule…" />
+                </div>
+              </div>
+
             </div>
 
-            <div className="flex justify-end gap-2 p-5 border-t border-border">
-              <Button variant="outline" className="text-xs h-9" onClick={() => setShowModal(false)}>Cancel</Button>
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border shrink-0 bg-muted/30 rounded-b-2xl">
+              <Button variant="outline" className="text-xs h-9 px-4" onClick={() => setShowModal(false)}>Cancel</Button>
               <Button
-                className="text-xs h-9 flex items-center gap-1.5"
+                className="text-xs h-9 px-4 flex items-center gap-1.5"
                 onClick={commitModal}
                 disabled={!editing.department || !editing.shift || saving}
               >
@@ -570,6 +595,7 @@ export default function HRSettings() {
                 {saving ? "Saving…" : modalMode === "add" ? "Add Rule" : "Save Changes"}
               </Button>
             </div>
+
           </div>
         </div>
       )}
