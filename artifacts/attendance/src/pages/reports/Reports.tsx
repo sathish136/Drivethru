@@ -373,7 +373,7 @@ function AttendanceReport() {
       {data && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
           {[
-            {label:"Present",  val:filtered.filter((r:any)=>r.status==="present").length,  cls:"text-green-600"},
+            {label:"Present",  val:filtered.filter((r:any)=>r.status==="present"||r.status==="late").length,  cls:"text-green-600"},
             {label:"Absent",   val:filtered.filter((r:any)=>r.status==="absent").length,   cls:"text-red-600"},
             {label:"Late",     val:filtered.filter((r:any)=>r.status==="late").length,     cls:"text-amber-600"},
             {label:"Half Day", val:filtered.filter((r:any)=>r.status==="half_day").length, cls:"text-yellow-600"},
