@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { attendanceRecords, employees, branches, shifts } from "@workspace/db/schema";
 import { eq, and, gte, lte } from "drizzle-orm";
 import { calcWorkHours, getDaysInMonth, today } from "../lib/helpers.js";
+import { loadDeptRules, findRule, timeToMins } from "../lib/hr-rules.js";
 
 const router = Router();
 
@@ -109,8 +110,32 @@ router.get("/monthly-sheet", async (req, res) => {
       empRecords.get(r.employeeId)!.set(day, r);
     }
 
+    const allShifts = await db.select().from(shifts);
+    const shiftMap = new Map(allShifts.map(s => [s.id, s]));
+    const hrRules = await loadDeptRules();
+
+    function calcEffectiveStatus(rec: typeof records[0], empShift: typeof allShifts[0] | undefined, department: string | null) {
+      const rule = findRule(hrRules, department || "", empShift?.name);
+      let status = rec.status;
+
+      if (status === "present" && rec.inTime1) {
+        const shiftStartMins = empShift?.startTime1 ? timeToMins(empShift.startTime1) : 8 * 60;
+        const graceMinutes = rule.lateGraceMinutes ?? (empShift?.graceMinutes ?? 15);
+        const cutoffMins = shiftStartMins + graceMinutes;
+        if (timeToMins(rec.inTime1) > cutoffMins) status = "late";
+      }
+
+      if ((status === "present" || status === "late") && rec.totalHours != null) {
+        const halfDayHrs = rule.halfDayHours ?? 5;
+        if (rec.totalHours < halfDayHrs) status = "half_day";
+      }
+
+      return status;
+    }
+
     const rows = filtered.map(({ emp, branchName }) => {
       const empRecs = empRecords.get(emp.id) || new Map();
+      const empShift = emp.shiftId ? shiftMap.get(emp.shiftId) : undefined;
       const dailyStatus = [];
       let presentDays = 0, absentDays = 0, lateDays = 0, halfDays = 0, leaveDays = 0, holidayDays = 0;
       let totalWorkHours = 0, overtimeHours = 0;
@@ -118,13 +143,14 @@ router.get("/monthly-sheet", async (req, res) => {
       for (let d = 1; d <= daysInMonth; d++) {
         const rec = empRecs.get(d);
         if (rec) {
-          dailyStatus.push({ day: d, status: rec.status, inTime: rec.inTime1, outTime: rec.outTime1, hours: rec.totalHours });
-          if (rec.status === "present") presentDays++;
-          else if (rec.status === "absent") absentDays++;
-          else if (rec.status === "late") { lateDays++; presentDays++; }
-          else if (rec.status === "half_day") halfDays++;
-          else if (rec.status === "leave") leaveDays++;
-          else if (rec.status === "holiday") holidayDays++;
+          const effectiveStatus = calcEffectiveStatus(rec, empShift, emp.department);
+          dailyStatus.push({ day: d, status: effectiveStatus, inTime: rec.inTime1, outTime: rec.outTime1, hours: rec.totalHours });
+          if (effectiveStatus === "present") presentDays++;
+          else if (effectiveStatus === "absent") absentDays++;
+          else if (effectiveStatus === "late") { lateDays++; presentDays++; }
+          else if (effectiveStatus === "half_day") halfDays++;
+          else if (effectiveStatus === "leave") leaveDays++;
+          else if (effectiveStatus === "holiday") holidayDays++;
           totalWorkHours += rec.totalHours || 0;
           overtimeHours += rec.overtimeHours || 0;
         } else {

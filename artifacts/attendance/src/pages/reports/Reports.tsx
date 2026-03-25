@@ -243,7 +243,7 @@ function AttendanceReport() {
     && (!empName || (r.employeeName || "").toLowerCase().includes(empName.toLowerCase()))
   ), [data, empType, department, empName]);
 
-  const HEADERS = ["Date","Emp ID","Employee","Department","Branch","Designation","Type","Status","In Time","Out Time","Total Hrs","OT Hrs"];
+  const HEADERS = ["Date","Emp ID","Employee","Department","Branch","Designation","Status","In Time","Out Time","Total Hrs","OT Hrs"];
 
   const handleExport = () => {
     const present = filtered.filter((r: any) => r.status === "present").length;
@@ -253,7 +253,7 @@ function AttendanceReport() {
     const tbody = filtered.map((r: any) => `<tr>
       <td>${r.date}</td><td>${r.employeeCode}</td><td>${r.employeeName}</td>
       <td>${r.department||""}</td><td>${r.branchName}</td><td>${r.designation||""}</td>
-      <td>${r.employeeType||""}</td><td>${r.status.replace("_"," ").toUpperCase()}</td>
+      <td>${r.status.replace("_"," ").toUpperCase()}</td>
       <td>${r.inTime1||"—"}</td><td>${r.outTime1||"—"}</td>
       <td>${r.totalHours!=null?r.totalHours.toFixed(1)+"h":"—"}</td>
       <td>${r.overtimeHours>0?r.overtimeHours.toFixed(1)+"h":"—"}</td>
@@ -275,7 +275,7 @@ function AttendanceReport() {
   const handleExportExcel = () => {
     const rows = filtered.map((r: any) => [
       r.date, r.employeeCode, r.employeeName, r.department||"", r.branchName,
-      r.designation||"", r.employeeType||"", r.status.replace("_"," ").toUpperCase(),
+      r.designation||"", r.status.replace("_"," ").toUpperCase(),
       r.inTime1||"", r.outTime1||"",
       r.totalHours!=null?r.totalHours.toFixed(1):"",
       r.overtimeHours>0?r.overtimeHours.toFixed(1):"",
@@ -353,11 +353,6 @@ function AttendanceReport() {
                     <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.department||"—"}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.branchName}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.designation||"—"}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {r.employeeType?<span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium capitalize",
-                        r.employeeType==="permanent"?"bg-blue-100 text-blue-700":r.employeeType==="contract"?"bg-purple-100 text-purple-700":"bg-orange-100 text-orange-700"
-                      )}>{r.employeeType}</span>:"—"}
-                    </td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       <span className={cn("px-2 py-0.5 rounded text-xs font-medium uppercase",STATUS_COLORS[r.status]||"bg-gray-100")}>
                         {r.status.replace("_"," ")}
