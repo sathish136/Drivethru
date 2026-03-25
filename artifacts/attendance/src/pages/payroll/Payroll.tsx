@@ -131,16 +131,17 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
   const allowances = (row.transportAllowance || 0) + (row.housingAllowance || 0) + (row.otherAllowances || 0);
   const subTotal      = row.basicSalary + allowances;
   const noPayLeave    = row.absenceDeduction || 0;
-  const totalForEPF   = subTotal - noPayLeave;
+  const lateDeduction = row.lateDeduction || 0;
+  /* totalForEPF matches backend: lateDeduction already reduces grossSalary before EPF is computed */
+  const totalForEPF   = subTotal - noPayLeave - lateDeduction;
   const overtime      = row.overtimePay || 0;
   const totalEarnings = totalForEPF + overtime;
 
   const epf8          = row.epfEmployee || 0;
   const loans         = row.loanDeduction || 0;
-  const lateDeduction = row.lateDeduction || 0;
   const otherDeds     = row.otherDeductions || 0;
   const apit          = row.apit || 0;
-  const totalRecoveries = epf8 + loans + lateDeduction + otherDeds + apit;
+  const totalRecoveries = epf8 + loans + otherDeds + apit;
   const balanceReceived = totalEarnings - totalRecoveries;
 
   const epf12 = row.epfEmployer || 0;
@@ -151,19 +152,20 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
   const dateStr = `${String(lastDay.getDate()).padStart(2,"0")}-${String(row.month).padStart(2,"0")}-${row.year}`;
 
   type SlipRow = { label: string; value?: string; indent?: boolean; bold?: boolean; italic?: boolean; borderTop?: boolean; borderBottom?: boolean; rightAlign?: boolean };
+  const lateDayLabel = row.lateDays > 0 ? ` (${row.lateDays} day${row.lateDays !== 1 ? "s" : ""})` : "";
   const rows: SlipRow[] = [
     { label: "Basic Salary",            value: fmtAmt(row.basicSalary) },
     ...(allowances > 0 ? [{ label: "Allowances", value: fmtAmt(allowances) }] : [{ label: "Holiday Pay", value: "" }]),
     { label: "Sub Total",               value: fmtAmt(subTotal), italic: true, borderTop: true },
     { label: "Less  :  No Pay Leave",   value: noPayLeave > 0 ? fmtAmt(noPayLeave) : "-", italic: true },
+    ...(lateDeduction > 0 ? [{ label: `Less  :  Late Arrival${lateDayLabel}`, value: fmtAmt(lateDeduction), italic: true }] : []),
     { label: "Total for EPF / ETF",     value: fmtAmt(totalForEPF), bold: true },
     { label: "Add  :  Overtime",        value: overtime > 0 ? fmtAmt(overtime) : "", italic: true },
     { label: "Total Earnings",          value: fmtAmt(totalEarnings), borderTop: true },
     { label: "Recoveries  :  EPF 8%",   value: fmtAmt(epf8) },
-    ...(loans > 0       ? [{ label: "Loans",                                         value: fmtAmt(loans),       indent: true }] : []),
-    ...(lateDeduction > 0 ? [{ label: `Late Arrival Deduction (${row.lateDays} day${row.lateDays !== 1 ? "s" : ""})`, value: fmtAmt(lateDeduction), indent: true }] : []),
-    ...(otherDeds > 0   ? [{ label: "Other Deductions",                              value: fmtAmt(otherDeds),   indent: true }] : []),
-    ...(apit > 0        ? [{ label: "APIT (Income Tax)",                             value: fmtAmt(apit),        indent: true }] : []),
+    ...(loans > 0       ? [{ label: "Loans",              value: fmtAmt(loans),    indent: true }] : []),
+    ...(otherDeds > 0   ? [{ label: "Other Deductions",   value: fmtAmt(otherDeds), indent: true }] : []),
+    ...(apit > 0        ? [{ label: "APIT (Income Tax)",  value: fmtAmt(apit),     indent: true }] : []),
     { label: "Less  :  Total Recoveries", value: fmtAmt(totalRecoveries), italic: true, borderTop: true },
     { label: "Balance Received",        value: fmtAmt(balanceReceived), bold: true, borderTop: true, borderBottom: true },
     { label: "" },
@@ -328,6 +330,17 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
               <p style={{ fontSize: "10px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: "4px" }}>Paying Authority</p>
             </div>
           </div>
+
+          {/* ── Late arrivals policy note ── */}
+          {lateDeduction > 0 && (
+            <div style={{ margin: "0 32px 12px", padding: "8px 12px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px" }}>
+              <p style={{ fontSize: "9.5px", color: "#92400e", lineHeight: "1.5", margin: 0 }}>
+                <span style={{ fontWeight: "700" }}>Late Arrivals  ·  </span>
+                Late arrivals exceeding the grace period will result in a reduction from the employee's hourly working rate.
+                {row.lateDays > 0 && <span> This payslip reflects a deduction for <strong>{row.lateDays} late day{row.lateDays !== 1 ? "s" : ""}</strong>.</span>}
+              </p>
+            </div>
+          )}
 
           {/* ── System generated footer ── */}
           <div style={{ background: "#f8fafc", borderTop: "1px solid #e2e8f0", padding: "10px 32px", borderRadius: "0 0 16px 16px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
