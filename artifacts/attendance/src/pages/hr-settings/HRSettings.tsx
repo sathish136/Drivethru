@@ -243,21 +243,6 @@ export default function HRSettings() {
             {globalSaved  && <span className="text-xs text-emerald-600 flex items-center gap-1"><Check className="w-3 h-3" />Saved</span>}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-6 max-w-lg">
-          <div>
-            <label className="text-xs font-medium block mb-1">Early-In Window (minutes) <span className="text-muted-foreground font-normal">(before shift start)</span></label>
-            <div className="flex items-center gap-2">
-              <input
-                type="number" min="0" step="1"
-                className="border border-border rounded-md px-3 py-1.5 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-ring"
-                value={globalSettings.earlyInMinutes}
-                onChange={e => setGlobalSettings(g => ({ ...g, earlyInMinutes: parseInt(e.target.value) || 0 }))}
-              />
-              <Button className="h-8 text-xs" onClick={saveGlobalSettings} disabled={globalSaving}>Save</Button>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">Attendance is not recorded earlier than this many minutes before the shift starts.</p>
-          </div>
-        </div>
       </Card>
 
       <Card className="p-5">
