@@ -325,7 +325,7 @@ router.post("/generate", async (req, res) => {
       }
 
       const dailyRate   = basicSalary / wdCount;
-      const hourlyRate  = basicSalary / (wdCount * 8);
+      const hourlyRate  = basicSalary / (wdCount * reqHoursPerDay);
       const minuteRate  = hourlyRate / 60;
 
       /* ── Late deduction: lateMinutes × minuteRate ──────── */
