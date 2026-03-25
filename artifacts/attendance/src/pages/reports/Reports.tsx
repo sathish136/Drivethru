@@ -258,7 +258,7 @@ function AttendanceReport() {
     && (!empName || (r.employeeName || "").toLowerCase().includes(empName.toLowerCase()))
   ), [data, empType, department, empName]);
 
-  const HEADERS = ["Date","Emp ID","Employee","Department","Branch","Designation","Status","In 1","Out 1 (Lunch)","In 2 (After Lunch)","Out 2","Lunch Break","Total Hrs","OT Hrs"];
+  const HEADERS = ["Date","Emp ID","Employee","Department","Branch","Designation","Status","In 1","Out 1 (Lunch)","In 2 (After Lunch)","Out 2","Lunch Break","Total Hrs","Late","OT Hrs"];
 
   function calcMins(inT: string|null, outT: string|null): number {
     if (!inT || !outT) return 0;
@@ -298,6 +298,13 @@ function AttendanceReport() {
       const session2 = r.inTime2&&r.outTime2 ? `${r.inTime2} → ${r.outTime2} = ${fmtHM(s2m)}` : "—";
       const lbStr = lb>0 ? fmtHM(lb) : "—";
       const tot = r.totalHours!=null ? fmtTotal(r.totalHours) : "—";
+      const lateMin = r.status === "late" ? calcLateMinutes(r.inTime1) : 0;
+      const lateStr = (() => {
+        if (lateMin <= 0) return "—";
+        const h = Math.floor(lateMin / 60), m = lateMin % 60;
+        const hrsStr = `${h}.${String(m).padStart(2, "0")} hr`;
+        return lateMin < 60 ? `${lateMin} min` : `${lateMin} min / ${hrsStr}`;
+      })();
       return `<tr>
         <td>${r.date}</td><td>${r.employeeCode}</td><td>${r.employeeName}</td>
         <td>${r.department||""}</td><td>${r.branchName}</td><td>${r.designation||""}</td>
@@ -305,6 +312,7 @@ function AttendanceReport() {
         <td>${r.inTime1||"—"}</td><td>${r.outTime1||"—"}</td>
         <td>${r.inTime2||"—"}</td><td>${r.outTime2||"—"}</td>
         <td>${lbStr}</td><td>${tot}</td>
+        <td>${lateStr}</td>
         <td>${r.overtimeHours>0?r.overtimeHours.toFixed(1)+"h":"—"}</td>
       </tr>`;
     }).join("");
@@ -330,12 +338,20 @@ function AttendanceReport() {
       const s1m = calcMins(r.inTime1, r.outTime1);
       const s2m = calcMins(r.inTime2, r.outTime2);
       const lb = lunchBreakMins(r);
+      const lateMin = r.status === "late" ? calcLateMinutes(r.inTime1) : 0;
+      const lateStr = (() => {
+        if (lateMin <= 0) return "";
+        const h = Math.floor(lateMin / 60), m = lateMin % 60;
+        const hrsStr = `${h}.${String(m).padStart(2, "0")} hr`;
+        return lateMin < 60 ? `${lateMin} min` : `${lateMin} min / ${hrsStr}`;
+      })();
       return [
         r.date, r.employeeCode, r.employeeName, r.department||"", r.branchName,
         r.designation||"", r.status==="late"?"PRESENT (LATE)":r.status==="half_day"?"HALF DAY":r.status.replace("_"," ").toUpperCase(),
         r.inTime1||"", r.outTime1||"", r.inTime2||"", r.outTime2||"",
         lb>0?fmtHM(lb):"",
         r.totalHours!=null?fmtTotal(r.totalHours):"",
+        lateStr,
         r.overtimeHours>0?r.overtimeHours.toFixed(1):"",
       ];
     });
