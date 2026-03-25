@@ -87,7 +87,8 @@ function printReport(opts: {
   .footer-note{font-size:8.5px;color:#9ca3af}
   .footer-right{display:flex;align-items:center;gap:6px}
   .footer-powered{font-size:9px;color:#9ca3af}
-  .footer-liveu{height:18px;object-fit:contain;opacity:.75}
+  .footer-liveu{height:20px;object-fit:contain;opacity:.85}
+  .footer-liveu-name{font-size:9.5px;font-weight:700;color:#1565a8;letter-spacing:.02em}
   @media print{@page{margin:8mm;size:landscape} body{font-size:9px}}
 </style>
 </head><body>
@@ -111,6 +112,7 @@ ${tableHtml}
   <div class="footer-right">
     <span class="footer-powered">Powered by</span>
     <img src="${liveuLogo}" class="footer-liveu" alt="Live U Pvt Ltd"/>
+    <span class="footer-liveu-name">Live U Pvt Ltd</span>
   </div>
 </div>
 <script>window.addEventListener("load",function(){setTimeout(function(){window.print();},350);});<\/script>
