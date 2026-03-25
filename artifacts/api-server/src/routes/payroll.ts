@@ -5,6 +5,7 @@ import {
   salaryStructures, employeeSalaryAssignments, holidays, shifts, staffLoans,
 } from "@workspace/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
+import { loadDeptRules, findRule, effectiveHours, calcOtHours, lateCutoffMins, timeToMins } from "../lib/hr-rules.js";
 
 const STATUTORY_NAMES = ["EPF – Employee", "EPF – Employer", "ETF"];
 
@@ -202,6 +203,9 @@ router.post("/generate", async (req, res) => {
     const allShifts = await db.select().from(shifts);
     const shiftMap = new Map(allShifts.map(s => [s.id, s]));
 
+    /* ── Load HR department rules ── */
+    const deptRules = await loadDeptRules();
+
     /* ── Fetch active loans for target employees ── */
     const activeLoans = await db.select().from(staffLoans)
       .where(and(eq(staffLoans.status, "active"), inArray(staffLoans.employeeId, empIds)));
@@ -223,21 +227,31 @@ router.post("/generate", async (req, res) => {
       )
     );
 
-    const LATE_CUTOFF_MINUTES = 8 * 60 + 15;
-
     for (const emp of targetEmps) {
       const empAtt = filteredAtt.filter(a => a.employeeId === emp.id);
-      const dept = (emp.department ?? "").toLowerCase();
       const designation = (emp.designation ?? "").toLowerCase();
 
-      const isManager = designation.includes("manager") || designation.includes("gm") || designation.includes("general manager");
-      const isSurfInstructor = dept.includes("surf") || designation.includes("surf");
-      const isNightWatcher = designation.includes("night watcher") || designation.includes("night watch");
+      /* ── Look up HR department rule for this employee ── */
+      const rule = findRule(deptRules, emp.department ?? "");
+      const reqHoursPerDay   = rule.minHours;                          // required hrs for full pay
+      const otAfterHrsRule   = rule.otAfterHours ?? rule.minHours;     // OT threshold (hours)
+      const isOtEligible     = rule.otEligible;
+      const isFlexible       = rule.flexible;                          // exempt from incomplete deduction
+      const ruleOtMult       = rule.otMultiplier ?? cfg.overtimeMultiplier;
+      const ruleOffdayOtMult = rule.offdayOtMultiplier ?? cfg.offDayOtMultiplier;
+
+      /* Keep manager allowance for manager-designated employees (regardless of rule) */
+      const isManagerDesig = designation.includes("manager") || designation.includes("gm") || designation.includes("general manager");
 
       const empShift = emp.shiftId ? shiftMap.get(emp.shiftId) : null;
-      const shiftStartMinutes = empShift?.startTime ? timeToMinutes(empShift.startTime) : 8 * 60;
-      const shiftEndMinutes   = empShift?.endTime   ? timeToMinutes(empShift.endTime)   : 17 * 60;
-      const shiftWorkMinutes  = shiftEndMinutes - shiftStartMinutes;
+      const shiftStart1 = empShift?.startTime1 ?? null;
+      const shiftEnd1   = empShift?.endTime1   ?? null;
+      const shiftWorkMinutes = (shiftStart1 && shiftEnd1)
+        ? Math.max(0, timeToMins(shiftEnd1) - timeToMins(shiftStart1))
+        : reqHoursPerDay * 60;
+
+      /* Late cutoff based on shift start + rule grace period */
+      const lateCutoff = lateCutoffMins(rule, shiftStart1);
 
       const presentRecs    = empAtt.filter(a => a.status === "present" || a.status === "late");
       const lateRecs       = empAtt.filter(a => a.status === "late");
@@ -310,12 +324,12 @@ router.post("/generate", async (req, res) => {
       let totalLateMinutes = 0;
       for (const rec of lateRecs) {
         if (rec.inTime1) {
-          const arrivalMinutes = timeToMinutes(rec.inTime1);
-          if (arrivalMinutes > LATE_CUTOFF_MINUTES) {
-            totalLateMinutes += arrivalMinutes - LATE_CUTOFF_MINUTES;
+          const arrivalMinutes = timeToMins(rec.inTime1);
+          if (arrivalMinutes > lateCutoff) {
+            totalLateMinutes += arrivalMinutes - lateCutoff;
           }
         } else {
-          totalLateMinutes += 15;
+          totalLateMinutes += rule.lateGraceMinutes ?? 15;
         }
       }
       const lateDeduction = Math.round(totalLateMinutes * minuteRate);
@@ -326,15 +340,16 @@ router.post("/generate", async (req, res) => {
       /* ── Half-day deduction ────────────────────────────── */
       const halfDayDeduction = Math.round(halfDaysCount * (dailyRate / 2));
 
-      /* ── Incomplete hours deduction (non-exempt only) ──── */
+      /* ── Incomplete hours deduction (rules-based) ───────── */
       let incompleteDeduction = 0;
-      if (!isSurfInstructor) {
-        const requiredHoursPerDay = 8;
+      if (!isFlexible) {
         for (const rec of [...presentRecs, ...halfDayRecs]) {
-          const hours = rec.totalHours ?? 0;
-          const required = rec.status === "half_day" ? 4 : requiredHoursPerDay;
-          if (hours < required && hours > 0) {
-            const shortfallMinutes = Math.round((required - hours) * 60);
+          const rawHrs = rec.totalHours ?? 0;
+          if (rawHrs === 0) continue;
+          const effHrs = effectiveHours(rawHrs, rule);
+          const required = rec.status === "half_day" ? reqHoursPerDay / 2 : reqHoursPerDay;
+          if (effHrs < required) {
+            const shortfallMinutes = Math.round((required - effHrs) * 60);
             incompleteDeduction += Math.round(shortfallMinutes * minuteRate);
           }
         }
@@ -346,73 +361,51 @@ router.post("/generate", async (req, res) => {
         isDateInOffSeason(rec.date, cfg.offSeasonStart, cfg.offSeasonEnd)
       );
 
-      /* ── Regular OT (non-holiday days) ─────────────────── */
+      /* ── OT and holiday pay (rules-based) ───────────────── */
       let regularOtHours = 0;
       let holidayOtPay   = 0;
       let offDayOtPay    = 0;
       let regularOtPay   = 0;
 
       for (const rec of empAtt) {
-        const recHours = rec.totalHours ?? 0;
-        const recOt    = rec.overtimeHours ?? 0;
+        const rawHrs = rec.totalHours ?? 0;
         const recInOffSeason = cfg.offSeasonEnabled &&
           isDateInOffSeason(rec.date, cfg.offSeasonStart, cfg.offSeasonEnd);
 
         if (rec.status === "holiday") {
+          /* Holiday pay: hours worked × hourly rate × holiday multiplier */
           const hType = holidayDateMap.get(rec.date) ?? "public";
           const mult =
             hType === "statutory" ? (cfg.statutoryOtMultiplier ?? 2.0) :
             hType === "poya"      ? (cfg.poyaOtMultiplier ?? 1.5) :
                                     (cfg.publicHolidayOtMultiplier ?? 1.5);
-          if (recHours > 0) {
-            holidayOtPay += Math.round(recHours * hourlyRate * mult);
-          }
+          if (rawHrs > 0) holidayOtPay += Math.round(rawHrs * hourlyRate * mult);
+
         } else if (rec.status === "off_day") {
-          /* Off-day worked: Daily Rate × offDayOtMultiplier */
-          if (recHours > 0) {
-            offDayOtPay += Math.round(dailyRate * (cfg.offDayOtMultiplier ?? 1.5));
-          }
-        } else if (rec.status === "half_day") {
-          if (!isManager && !recInOffSeason && recHours > 5) {
-            const halfDayOt = recHours - 5;
-            regularOtHours += halfDayOt;
-            regularOtPay   += Math.round(halfDayOt * hourlyRate * cfg.overtimeMultiplier);
-          }
-        } else if (recOt > 0 && !recInOffSeason) {
-          /* Clip OT: ensure OT starts no earlier than scheduled shift end */
-          let ot = recOt;
+          /* Off-day worked: full daily rate × offday OT multiplier */
+          if (rawHrs > 0) offDayOtPay += Math.round(dailyRate * ruleOffdayOtMult);
 
-          /* Early sign-in clip: recalculate effective OT using shift schedule */
-          if (rec.inTime1 && empShift?.startTime && empShift?.endTime) {
-            const actualInMins = timeToMinutes(rec.inTime1);
-            const effectiveInMins = Math.max(actualInMins, shiftStartMinutes);
-            const outTime = rec.outTime1;
-            if (outTime) {
-              const outMins = timeToMinutes(outTime);
-              const effectiveWorkMins = Math.max(0, outMins - effectiveInMins);
-              const shiftWorkHours = shiftWorkMinutes / 60;
-              ot = Math.max(0, effectiveWorkMins / 60 - shiftWorkHours);
-              ot = Math.round(ot * 100) / 100;
-            }
-          }
-
-          /* Night Watcher: cap OT at 3 hours */
-          if (isNightWatcher && ot > 3) ot = 3;
-
-          if (!isManager && ot > 0) {
+        } else if (!recInOffSeason && isOtEligible) {
+          /* Regular day OT: use effective hours (after lunch deduction) */
+          const effHrs = effectiveHours(rawHrs, rule);
+          const ot = calcOtHours(effHrs, rule);
+          if (ot > 0) {
             regularOtHours += ot;
-            regularOtPay   += Math.round(ot * hourlyRate * cfg.overtimeMultiplier);
+            regularOtPay   += Math.round(ot * hourlyRate * ruleOtMult);
           }
         }
       }
 
-      /* ── Manager gets fixed allowance instead of OT ───── */
+      /* ── Manager gets fixed allowance instead of regular OT ── */
       let managerFixedAllowance = 0;
-      if (isManager) {
+      if (isManagerDesig) {
         managerFixedAllowance = Math.round(basicSalary * 0.1);
       }
 
-      const overtimePay = isManager ? managerFixedAllowance : regularOtPay;
+      /* If OT-ineligible by rule, override regular OT pay to 0 */
+      const overtimePay = isManagerDesig ? managerFixedAllowance
+                        : isOtEligible   ? regularOtPay
+                        : 0;
 
       const grossSalary = Math.round(
         basicSalary + transportAllowance + housingAllowance + otherAllowances
