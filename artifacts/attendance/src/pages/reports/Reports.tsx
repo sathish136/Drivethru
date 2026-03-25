@@ -248,21 +248,53 @@ function AttendanceReport() {
     && (!empName || (r.employeeName || "").toLowerCase().includes(empName.toLowerCase()))
   ), [data, empType, department, empName]);
 
-  const HEADERS = ["Date","Emp ID","Employee","Department","Branch","Designation","Status","In Time","Out Time","Total Hrs","OT Hrs"];
+  const HEADERS = ["Date","Emp ID","Employee","Department","Branch","Designation","Status","In 1","Out 1 (Lunch)","In 2 (After Lunch)","Out 2","Lunch Break","Total Hrs","OT Hrs"];
+
+  function calcMins(inT: string|null, outT: string|null): number {
+    if (!inT || !outT) return 0;
+    const [ih,im] = inT.split(":").map(Number);
+    const [oh,om] = outT.split(":").map(Number);
+    return Math.max(0, (oh*60+om)-(ih*60+im));
+  }
+  function fmtHM(mins: number): string {
+    const h = Math.floor(mins/60), m = mins%60;
+    return `${h}h ${String(m).padStart(2,"0")}m`;
+  }
+  function fmtTotal(totalHours: number|null): string {
+    if (totalHours==null) return "—";
+    const h = Math.floor(totalHours), m = Math.round((totalHours-h)*60);
+    return `${h}:${String(m).padStart(2,"0")} hrs`;
+  }
+  function lunchBreakMins(r: any): number {
+    if (!r.outTime1 || !r.inTime2) return 0;
+    const [oh,om] = r.outTime1.split(":").map(Number);
+    const [ih,im] = r.inTime2.split(":").map(Number);
+    return Math.max(0,(ih*60+im)-(oh*60+om));
+  }
 
   const handleExport = () => {
     const present = filtered.filter((r: any) => r.status === "present").length;
     const absent  = filtered.filter((r: any) => r.status === "absent").length;
     const late    = filtered.filter((r: any) => r.status === "late").length;
     const thead = `<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
-    const tbody = filtered.map((r: any) => `<tr>
-      <td>${r.date}</td><td>${r.employeeCode}</td><td>${r.employeeName}</td>
-      <td>${r.department||""}</td><td>${r.branchName}</td><td>${r.designation||""}</td>
-      <td>${r.status==="late"?"PRESENT (LATE)":r.status==="half_day"?"HALF DAY":r.status.replace("_"," ").toUpperCase()}</td>
-      <td>${r.inTime1||"—"}</td><td>${r.outTime1||"—"}</td>
-      <td>${r.totalHours!=null?r.totalHours.toFixed(1)+"h":"—"}</td>
-      <td>${r.overtimeHours>0?r.overtimeHours.toFixed(1)+"h":"—"}</td>
-    </tr>`).join("");
+    const tbody = filtered.map((r: any) => {
+      const s1m = calcMins(r.inTime1, r.outTime1);
+      const s2m = calcMins(r.inTime2, r.outTime2);
+      const lb  = lunchBreakMins(r);
+      const session1 = r.inTime1&&r.outTime1 ? `${r.inTime1} → ${r.outTime1} = ${fmtHM(s1m)}` : "—";
+      const session2 = r.inTime2&&r.outTime2 ? `${r.inTime2} → ${r.outTime2} = ${fmtHM(s2m)}` : "—";
+      const lbStr = lb>0 ? fmtHM(lb) : "—";
+      const tot = r.totalHours!=null ? fmtTotal(r.totalHours) : "—";
+      return `<tr>
+        <td>${r.date}</td><td>${r.employeeCode}</td><td>${r.employeeName}</td>
+        <td>${r.department||""}</td><td>${r.branchName}</td><td>${r.designation||""}</td>
+        <td>${r.status==="late"?"PRESENT (LATE)":r.status==="half_day"?"HALF DAY":r.status.replace("_"," ").toUpperCase()}</td>
+        <td>${r.inTime1||"—"}</td><td>${r.outTime1||"—"}</td>
+        <td>${r.inTime2||"—"}</td><td>${r.outTime2||"—"}</td>
+        <td>${lbStr}</td><td>${tot}</td>
+        <td>${r.overtimeHours>0?r.overtimeHours.toFixed(1)+"h":"—"}</td>
+      </tr>`;
+    }).join("");
     printReport({
       title: "Attendance Report",
       meta: [
@@ -278,13 +310,19 @@ function AttendanceReport() {
   };
 
   const handleExportExcel = () => {
-    const rows = filtered.map((r: any) => [
-      r.date, r.employeeCode, r.employeeName, r.department||"", r.branchName,
-      r.designation||"", r.status==="late"?"PRESENT (LATE)":r.status==="half_day"?"HALF DAY":r.status.replace("_"," ").toUpperCase(),
-      r.inTime1||"", r.outTime1||"",
-      r.totalHours!=null?r.totalHours.toFixed(1):"",
-      r.overtimeHours>0?r.overtimeHours.toFixed(1):"",
-    ]);
+    const rows = filtered.map((r: any) => {
+      const s1m = calcMins(r.inTime1, r.outTime1);
+      const s2m = calcMins(r.inTime2, r.outTime2);
+      const lb = lunchBreakMins(r);
+      return [
+        r.date, r.employeeCode, r.employeeName, r.department||"", r.branchName,
+        r.designation||"", r.status==="late"?"PRESENT (LATE)":r.status==="half_day"?"HALF DAY":r.status.replace("_"," ").toUpperCase(),
+        r.inTime1||"", r.outTime1||"", r.inTime2||"", r.outTime2||"",
+        lb>0?fmtHM(lb):"",
+        r.totalHours!=null?fmtTotal(r.totalHours):"",
+        r.overtimeHours>0?r.overtimeHours.toFixed(1):"",
+      ];
+    });
     exportCsv(HEADERS, rows, `attendance-report-${dStart}-${dEnd}.csv`);
   };
 
@@ -347,10 +385,38 @@ function AttendanceReport() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-muted/50">
-                <tr>{HEADERS.map(h=><th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>)}</tr>
+                <tr>
+                  {["Date","Emp ID","Employee","Department","Branch","Designation","Status"].map(h=>(
+                    <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
+                  ))}
+                  <th className="px-3 py-2.5 text-center font-semibold text-blue-600 whitespace-nowrap bg-blue-50/50" colSpan={2}>Morning Session</th>
+                  <th className="px-3 py-2.5 text-center font-semibold text-orange-600 whitespace-nowrap bg-orange-50/50" colSpan={2}>Afternoon Session</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-purple-600 whitespace-nowrap bg-purple-50/50">Lunch Break</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-green-700 whitespace-nowrap bg-green-50/50">Total Hrs</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">OT Hrs</th>
+                </tr>
+                <tr className="border-b border-border">
+                  {["Date","Emp ID","Employee","Department","Branch","Designation","Status"].map(h=>(
+                    <th key={h} className="px-3 py-1"></th>
+                  ))}
+                  <th className="px-3 py-1 text-xs font-medium text-blue-500 bg-blue-50/30 text-center">In</th>
+                  <th className="px-3 py-1 text-xs font-medium text-blue-500 bg-blue-50/30 text-center">Out (Lunch)</th>
+                  <th className="px-3 py-1 text-xs font-medium text-orange-500 bg-orange-50/30 text-center">In</th>
+                  <th className="px-3 py-1 text-xs font-medium text-orange-500 bg-orange-50/30 text-center">Out</th>
+                  <th className="px-3 py-1 bg-purple-50/30"></th>
+                  <th className="px-3 py-1 bg-green-50/30"></th>
+                  <th className="px-3 py-1"></th>
+                </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filtered.slice(0,300).map((r:any)=>(
+                {filtered.slice(0,300).map((r:any)=>{
+                  const s1m = calcMins(r.inTime1, r.outTime1);
+                  const s2m = calcMins(r.inTime2, r.outTime2);
+                  const lb  = lunchBreakMins(r);
+                  const hasSession2 = r.inTime2 && r.outTime2;
+                  const totalMins = s1m + s2m;
+                  const totalH = Math.floor(totalMins/60), totalMin = totalMins%60;
+                  return (
                   <tr key={r.id} className="hover:bg-muted/30 transition-colors">
                     <td className="px-3 py-2 font-mono whitespace-nowrap">{r.date}</td>
                     <td className="px-3 py-2 font-mono whitespace-nowrap text-muted-foreground">{r.employeeCode}</td>
@@ -363,13 +429,43 @@ function AttendanceReport() {
                         {fmtStatus(r.status)}
                       </span>
                     </td>
-                    <td className="px-3 py-2 font-mono whitespace-nowrap">{r.inTime1||"—"}</td>
-                    <td className="px-3 py-2 font-mono whitespace-nowrap">{r.outTime1||"—"}</td>
-                    <td className="px-3 py-2 font-mono whitespace-nowrap">{r.totalHours!=null?`${r.totalHours.toFixed(1)}h`:"—"}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-blue-700 bg-blue-50/20">
+                      {r.inTime1||"—"}
+                    </td>
+                    <td className="px-3 py-2 bg-blue-50/20 whitespace-nowrap">
+                      {r.inTime1&&r.outTime1 ? (
+                        <div className="font-mono text-blue-700">{r.outTime1}</div>
+                      ) : <span className="text-muted-foreground">—</span>}
+                      {s1m>0&&<div className="text-[10px] text-blue-500 font-medium">{fmtHM(s1m)}</div>}
+                    </td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-orange-700 bg-orange-50/20">
+                      {r.inTime2||"—"}
+                    </td>
+                    <td className="px-3 py-2 bg-orange-50/20 whitespace-nowrap">
+                      {r.inTime2&&r.outTime2 ? (
+                        <div className="font-mono text-orange-700">{r.outTime2}</div>
+                      ) : <span className="text-muted-foreground">—</span>}
+                      {s2m>0&&<div className="text-[10px] text-orange-500 font-medium">{fmtHM(s2m)}</div>}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap bg-purple-50/20">
+                      {lb>0 ? (
+                        <span className="text-purple-700 font-medium">{fmtHM(lb)}</span>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap bg-green-50/20">
+                      {r.totalHours!=null ? (
+                        <div>
+                          {s1m>0&&<div className="text-[10px] text-muted-foreground">{r.inTime1} → {r.outTime1} = {fmtHM(s1m)}</div>}
+                          {s2m>0&&<div className="text-[10px] text-muted-foreground">{r.inTime2} → {r.outTime2} = {fmtHM(s2m)}</div>}
+                          <div className="font-semibold text-green-700 text-xs">✅ {totalH}:{String(totalMin).padStart(2,"0")} hrs</div>
+                        </div>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </td>
                     <td className="px-3 py-2 font-mono whitespace-nowrap">{r.overtimeHours>0?`${r.overtimeHours.toFixed(1)}h`:"—"}</td>
                   </tr>
-                ))}
-                {!filtered.length&&<tr><td colSpan={12} className="text-center py-8 text-muted-foreground">No records found for the selected filters.</td></tr>}
+                  );
+                })}
+                {!filtered.length&&<tr><td colSpan={14} className="text-center py-8 text-muted-foreground">No records found for the selected filters.</td></tr>}
               </tbody>
             </table>
           </div>
