@@ -591,6 +591,18 @@ router.patch("/bulk-status", async (req, res) => {
   }
 });
 
+router.delete("/bulk", async (req, res) => {
+  try {
+    const { ids } = req.body as { ids: number[] };
+    if (!ids || ids.length === 0) return res.status(400).json({ message: "No IDs provided" });
+    await db.delete(payrollRecords).where(inArray(payrollRecords.id, ids));
+    res.json({ success: true, deleted: ids.length });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Failed to delete records" });
+  }
+});
+
 router.patch("/:id/status", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -603,6 +615,17 @@ router.patch("/:id/status", async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: "Failed to update status" });
+  }
+});
+
+router.delete("/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    await db.delete(payrollRecords).where(eq(payrollRecords.id, id));
+    res.json({ success: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Failed to delete payroll record" });
   }
 });
 

@@ -10,6 +10,7 @@ import {
   Search, Filter, Building2, Briefcase, ListChecks,
   BadgeCheck, Clock, CircleDashed, ChevronRight,
   RotateCcw, FileText, CalendarDays, Receipt, Info,
+  Trash2, TriangleAlert,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -1028,6 +1029,36 @@ export default function Payroll() {
     setMsg({ type: "success", text: `${ids.length} records updated to ${status}` });
   };
 
+  const deleteRecord = async (id: number) => {
+    if (!confirm("Delete this payroll record? This cannot be undone.")) return;
+    const res = await fetch(apiUrl(`/payroll/${id}`), { method: "DELETE" });
+    if (res.ok) {
+      setPayroll(prev => prev.filter(r => r.id !== id));
+      setSelected(prev => { const s = new Set(prev); s.delete(id); return s; });
+      setMsg({ type: "success", text: "Payroll record deleted." });
+    } else {
+      setMsg({ type: "error", text: "Failed to delete record." });
+    }
+  };
+
+  const bulkDelete = async () => {
+    const ids = Array.from(selected);
+    if (!ids.length) return;
+    if (!confirm(`Delete ${ids.length} selected payroll record(s)? This cannot be undone.`)) return;
+    const res = await fetch(apiUrl("/payroll/bulk"), {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    if (res.ok) {
+      setPayroll(prev => prev.filter(r => !ids.includes(r.id)));
+      setSelected(new Set());
+      setMsg({ type: "success", text: `${ids.length} payroll record(s) deleted.` });
+    } else {
+      setMsg({ type: "error", text: "Failed to delete records." });
+    }
+  };
+
   const toggleSort = (field: string) => {
     if (sortField === field) setSortAsc(!sortAsc);
     else { setSortField(field); setSortAsc(true); }
@@ -1112,6 +1143,12 @@ export default function Payroll() {
               >
                 <CreditCard className="w-3.5 h-3.5" />Mark Paid ({selected.size})
               </Button>
+              <Button
+                onClick={bulkDelete}
+                className="text-xs flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white"
+              >
+                <Trash2 className="w-3.5 h-3.5" />Delete ({selected.size})
+              </Button>
             </>
           )}
         </div>
@@ -1159,6 +1196,24 @@ export default function Payroll() {
             </button>
           </div>
         </>
+      )}
+
+      {payroll.length > 0 && payroll.every(r => (r.presentDays ?? 0) === 0) && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 flex gap-3 items-start">
+          <TriangleAlert className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-amber-800">All Employees Showing as Absent</p>
+            <p className="text-xs text-amber-700 mt-1">
+              No attendance records were found for <strong>{MONTHS[month - 1]} {year}</strong> when payroll was generated,
+              so everyone was counted as 0 present days. To fix this:
+            </p>
+            <ol className="text-xs text-amber-700 mt-1.5 ml-3 list-decimal space-y-0.5">
+              <li>Go to <strong>Today's Attendance</strong> or <strong>Monthly Sheet</strong> and record attendance for {MONTHS[month - 1]} {year}.</li>
+              <li>Come back here, select all records (checkbox at top), and click <strong>Delete</strong> to remove the incorrect records.</li>
+              <li>Click <strong>Assign &amp; Generate Payroll</strong> again to regenerate with correct attendance data.</li>
+            </ol>
+          </div>
+        </div>
       )}
 
       {payroll.length > 0 && (
@@ -1325,6 +1380,13 @@ export default function Payroll() {
                                 <RotateCcw className="w-3.5 h-3.5" />
                               </button>
                             )}
+                            <button
+                              onClick={() => deleteRecord(row.id)}
+                              className="p-1.5 rounded-lg hover:bg-red-50 transition-colors text-red-500"
+                              title="Delete record"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </td>
                       </tr>
