@@ -3,8 +3,6 @@ import { Calendar as CalendarIcon, Clock } from "lucide-react";
 import { PageHeader, Card, Select } from "@/components/ui";
 import { useMonthlySheet } from "@/hooks/use-attendance";
 import { cn } from "@/lib/utils";
-import drivethruLogo from "@/assets/drivethru-logo.png";
-import liveuLogo from "@/assets/liveu-logo.png";
 
 /* ─── Mini PDF icon button ─── */
 function PdfIconButton({ onClick }: { onClick: () => void }) {
@@ -87,130 +85,45 @@ export default function MonthlySheet() {
   const monthName = new Date(year, month - 1, 1).toLocaleString("default", { month: "long" });
 
   const handleExportPdf = () => {
-    const colors: Record<string,string> = { present:"#dcfce7", late:"#fef3c7", absent:"#fee2e2", half_day:"#fef9c3", leave:"#dbeafe", holiday:"#f3f4f6", sunday:"#f1f5f9" };
-    const textColors: Record<string,string> = { present:"#15803d", late:"#b45309", absent:"#dc2626", half_day:"#a16207", leave:"#1d4ed8", holiday:"#6b7280", sunday:"#94a3b8" };
-    const labels: Record<string,string> = { present:"P", late:"P(L)", absent:"A", half_day:"H", leave:"LV", holiday:"HL", sunday:"DO" };
-
-    const dayHeader = daysArray.map(d => {
-      const isSun = new Date(year, month - 1, d).getDay() === 0;
-      return `<th class="day-th${isSun?" sun-col":""}">${d}<br/><span class="day-name">${getDayName(d)}</span></th>`;
-    }).join("");
-
-    const bodyRows = rows.map((row: any, idx: number) => {
-      const cells = daysArray.map(day => {
-        const e = row.dailyStatus?.find((d: any) => d.day === day);
-        const st = e?.status || "absent";
-        const isSun = new Date(year, month - 1, day).getDay() === 0;
-        const eff = (st === "absent" && isSun) ? "sunday" : st;
-        const bg = colors[eff] || "#f3f4f6";
-        const tc = textColors[eff] || "#6b7280";
-        const lbl = labels[eff] || "A";
-        const isSunCol = new Date(year, month - 1, day).getDay() === 0;
-        return `<td class="day-cell${isSunCol?" sun-col":""}"><div style="background:${bg};color:${tc};border-radius:3px;padding:2px 1px;font-size:7.5px;font-weight:700;line-height:1.2;text-align:center">${lbl}</div></td>`;
-      }).join("");
-      const evenRow = idx % 2 === 1 ? "background:#f8fbff;" : "";
-      return `<tr style="${evenRow}">
-        <td class="emp-cell">${row.employeeName}<br/><span class="emp-code">${row.employeeCode} · ${row.designation||""}</span></td>
-        ${cells}
-        <td class="sum-cell" style="color:#15803d">${row.presentDays??0}</td>
-        <td class="sum-cell" style="color:#dc2626">${row.absentDays??0}</td>
-        <td class="sum-cell" style="color:#b45309">${row.lateDays??0}</td>
-        <td class="sum-cell" style="color:#a16207">${row.halfDays??0}</td>
-        <td class="sum-cell" style="color:#1d4ed8;font-family:monospace">${fmtHrs(row.totalWorkHours)}</td>
-        <td class="sum-cell" style="color:#ea580c;font-family:monospace">${row.overtimeHours>0?fmtHrs(row.overtimeHours):"—"}</td>
-      </tr>`;
-    }).join("");
-
-    const w = window.open("", "_blank", "width=1600,height=900");
+    const dayHeader = daysArray.map(d => `<th style="min-width:28px;text-align:center;padding:4px 2px;font-size:8px;background:#1565a8;color:#fff;">${d}<br/><span style="font-size:7px;opacity:.8">${getDayName(d)}</span></th>`).join("");
+    const bodyRows = rows.map((row: any) =>
+      `<tr>
+        <td style="padding:4px 8px;white-space:nowrap;font-weight:600;border-bottom:1px solid #f0f0f0">${row.employeeName}<br/><span style="font-size:8px;color:#9ca3af">${row.employeeCode}</span></td>
+        ${daysArray.map(day => {
+          const e = row.dailyStatus?.find((d: any) => d.day === day);
+          const st = e?.status || "absent";
+          const isSun = new Date(year, month - 1, day).getDay() === 0;
+          const effectiveSt2 = (st === "absent" && isSun) ? "sunday" : st;
+          const colors: Record<string,string> = { present:"#dcfce7", late:"#dcfce7", absent:"#fee2e2", half_day:"#fef9c3", leave:"#dbeafe", holiday:"#f3f4f6", sunday:"#f1f5f9" };
+          const labels: Record<string,string> = { present:"P", late:"P(L)", absent:"A", half_day:"H", leave:"LV", holiday:"HL", sunday:"DO" };
+          return `<td style="padding:2px;text-align:center;border-bottom:1px solid #f0f0f0"><div style="background:${colors[effectiveSt2]||"#f3f4f6"};border-radius:3px;padding:2px;font-size:8px;font-weight:700">${labels[effectiveSt2]||"A"}</div></td>`;
+        }).join("")}
+        <td style="text-align:center;font-weight:700;color:#16a34a;padding:4px;border-bottom:1px solid #f0f0f0">${row.presentDays??0}</td>
+        <td style="text-align:center;font-weight:700;color:#dc2626;padding:4px;border-bottom:1px solid #f0f0f0">${row.absentDays??0}</td>
+        <td style="text-align:center;font-weight:700;color:#d97706;padding:4px;border-bottom:1px solid #f0f0f0">${row.lateDays??0}</td>
+        <td style="text-align:center;font-family:monospace;color:#1d4ed8;padding:4px;border-bottom:1px solid #f0f0f0">${fmtHrs(row.totalWorkHours)}</td>
+        <td style="text-align:center;font-family:monospace;color:#ea580c;padding:4px;border-bottom:1px solid #f0f0f0">${row.overtimeHours>0?fmtHrs(row.overtimeHours):"—"}</td>
+      </tr>`
+    ).join("");
+    const w = window.open("", "_blank", "width=1400,height=900");
     if (!w) { alert("Please allow popups to export PDF."); return; }
-    w.document.write(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>
-<title>Monthly Attendance Sheet – ${monthName} ${year}</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;background:#fff;font-size:9px}
-  .page-header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px 10px;border-bottom:3px solid #1565a8;background:#f5f8ff}
-  .header-left{display:flex;align-items:center;gap:10px}
-  .header-logo{width:40px;height:40px;object-fit:contain;border-radius:10px;background:#fff;padding:3px;box-shadow:0 2px 6px rgba(0,0,0,.1)}
-  .company{font-size:16px;font-weight:700;color:#1565a8;line-height:1.15}
-  .company-sub{font-size:8.5px;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-top:1px}
-  .header-right{text-align:right}
-  .report-title{font-size:12px;font-weight:700;color:#1565a8}
-  .report-date{font-size:8px;color:#9ca3af;margin-top:2px}
-  .meta-bar{display:flex;background:#fff;border-bottom:1px solid #e5e7eb}
-  .meta-item{padding:7px 16px;border-right:1px solid #f0f0f0}
-  .meta-label{display:block;font-size:8px;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;font-weight:600}
-  .meta-value{display:block;font-size:10.5px;font-weight:700;color:#111827;margin-top:1px}
-  .legend{display:flex;gap:10px;padding:5px 20px;background:#fafafa;border-bottom:1px solid #e5e7eb;flex-wrap:wrap}
-  .legend-item{display:flex;align-items:center;gap:4px;font-size:7.5px;color:#6b7280}
-  .legend-dot{width:12px;height:12px;border-radius:2px;display:inline-block}
-  table{width:100%;border-collapse:collapse;table-layout:fixed}
-  .emp-th{text-align:left;width:160px;padding:5px 8px;font-size:8px;background:#1565a8;color:#fff;white-space:nowrap}
-  .day-th{width:22px;text-align:center;padding:3px 1px;font-size:7.5px;font-weight:700;background:#1565a8;color:#fff;white-space:nowrap}
-  .day-name{font-size:6.5px;opacity:.8;display:block;margin-top:1px}
-  .sun-col{background:#0f4c8a !important}
-  .sum-th{width:38px;text-align:center;padding:4px 2px;font-size:7.5px;font-weight:700;background:#374151;color:#fff;white-space:nowrap}
-  .emp-cell{padding:4px 8px;white-space:nowrap;font-weight:600;font-size:8.5px;border-bottom:1px solid #f0f0f0;overflow:hidden;text-overflow:ellipsis;max-width:160px}
-  .emp-code{font-size:7px;color:#9ca3af;font-weight:400;display:block;margin-top:1px}
-  .day-cell{padding:2px 1px;text-align:center;border-bottom:1px solid #f0f0f0;border-right:1px solid #f5f5f5}
-  .sum-cell{text-align:center;font-weight:700;font-size:8.5px;padding:4px 2px;border-bottom:1px solid #f0f0f0;border-left:1px solid #e5e7eb;white-space:nowrap}
-  .footer{display:flex;align-items:center;justify-content:space-between;padding:8px 20px;border-top:1px solid #e5e7eb;background:#f5f8ff;margin-top:auto}
-  .footer-note{font-size:7.5px;color:#9ca3af}
-  .footer-right{display:flex;align-items:center;gap:5px}
-  .footer-powered{font-size:8px;color:#9ca3af}
-  .footer-liveu{height:18px;object-fit:contain;opacity:.8}
-  .footer-liveu-name{font-size:8.5px;font-weight:700;color:#1565a8}
-  @media print{@page{margin:5mm;size:landscape} body{font-size:8px} .day-th{width:18px} .emp-th{width:140px} .sum-th{width:32px}}
-</style></head><body>
-<div class="page-header">
-  <div class="header-left">
-    <img src="${drivethruLogo}" class="header-logo" alt="Drivethru"/>
-    <div>
-      <div class="company">Drivethru Pvt Ltd</div>
-      <div class="company-sub">Attendance Management System</div>
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Monthly Sheet – ${monthName} ${year}</title>
+    <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:9px;color:#1a1a1a}
+    table{width:100%;border-collapse:collapse}th{background:#1565a8;color:#fff;padding:5px 4px;font-size:8px}
+    @media print{@page{margin:6mm;size:landscape}}</style></head><body>
+    <div style="padding:12px 20px 8px;border-bottom:3px solid #1565a8;background:#f5f8ff;display:flex;justify-content:space-between;align-items:center">
+      <div><div style="font-size:16px;font-weight:700;color:#1565a8">Monthly Attendance Sheet</div>
+      <div style="font-size:10px;color:#6b7280">${monthName} ${year} · ${rows.length} Employees</div></div>
+      <div style="font-size:9px;color:#9ca3af">Generated: ${new Date().toLocaleString()}</div>
     </div>
-  </div>
-  <div class="header-right">
-    <div class="report-title">Monthly Attendance Sheet</div>
-    <div class="report-date">Generated: ${new Date().toLocaleString("en-LK",{dateStyle:"long",timeStyle:"short"})}</div>
-  </div>
-</div>
-<div class="meta-bar">
-  <div class="meta-item"><span class="meta-label">Period</span><span class="meta-value">${monthName} ${year}</span></div>
-  <div class="meta-item"><span class="meta-label">Total Employees</span><span class="meta-value">${rows.length}</span></div>
-  <div class="meta-item"><span class="meta-label">Working Days</span><span class="meta-value">${daysInMonth}</span></div>
-</div>
-<div class="legend">
-  <span class="legend-item"><span class="legend-dot" style="background:#dcfce7"></span> P = Present</span>
-  <span class="legend-item"><span class="legend-dot" style="background:#fef3c7"></span> P(L) = Present (Late)</span>
-  <span class="legend-item"><span class="legend-dot" style="background:#fee2e2"></span> A = Absent</span>
-  <span class="legend-item"><span class="legend-dot" style="background:#fef9c3"></span> H = Half Day</span>
-  <span class="legend-item"><span class="legend-dot" style="background:#dbeafe"></span> LV = Leave</span>
-  <span class="legend-item"><span class="legend-dot" style="background:#f3f4f6"></span> HL = Holiday</span>
-  <span class="legend-item"><span class="legend-dot" style="background:#f1f5f9"></span> DO = Day Off</span>
-</div>
-<table>
-  <thead><tr>
-    <th class="emp-th">Employee</th>
-    ${dayHeader}
-    <th class="sum-th" style="background:#15803d">P</th>
-    <th class="sum-th" style="background:#dc2626">A</th>
-    <th class="sum-th" style="background:#b45309">L</th>
-    <th class="sum-th" style="background:#a16207">H</th>
-    <th class="sum-th" style="background:#1d4ed8">Work Hrs</th>
-    <th class="sum-th" style="background:#ea580c">OT Hrs</th>
-  </tr></thead>
-  <tbody>${bodyRows}</tbody>
-</table>
-<div class="footer">
-  <div class="footer-note">System-generated report. For internal use only. © ${new Date().getFullYear()} Drivethru Pvt Ltd</div>
-  <div class="footer-right">
-    <span class="footer-powered">Powered by</span>
-    <img src="${liveuLogo}" class="footer-liveu" alt="Live U Pvt Ltd"/>
-    <span class="footer-liveu-name">Live U Pvt Ltd</span>
-  </div>
-</div>
-<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},350);});<\/script>
-</body></html>`);
+    <table><thead><tr>
+      <th style="text-align:left;min-width:160px;padding:6px 8px">Employee</th>
+      ${dayHeader}
+      <th style="background:#16a34a">P</th><th style="background:#dc2626">A</th><th style="background:#d97706">L</th>
+      <th style="background:#1d4ed8">Total Hrs</th><th style="background:#ea580c">OT Hrs</th>
+    </tr></thead><tbody>${bodyRows}</tbody></table>
+    <script>window.addEventListener("load",function(){setTimeout(function(){window.print();},300);});<\/script>
+    </body></html>`);
     w.document.close();
   };
 
