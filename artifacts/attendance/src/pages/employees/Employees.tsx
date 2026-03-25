@@ -290,6 +290,50 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
   } : { ...EMPTY_EMP });
   const empShiftName = allShifts.find((s: any) => s.id === Number(form.shiftId))?.name ?? null;
   const { rule: matchedRule, matchType } = findHrRule(hrRules, form.department, empShiftName);
+  const [policyEditMode, setPolicyEditMode] = useState<"view"|"edit"|"create">("view");
+  const [policyForm, setPolicyForm] = useState<any>(null);
+  const pqc = useQueryClient();
+  const saveHrRules = useMutation({
+    mutationFn: (updatedRules: any[]) =>
+      fetch(apiUrl("/hr-settings"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ departmentRules: updatedRules }),
+      }).then(r => r.json()),
+    onSuccess: () => {
+      pqc.invalidateQueries({ queryKey: ["hr-settings-policy"] });
+      setPolicyEditMode("view");
+    },
+  });
+  function openPolicyEdit() {
+    setPolicyForm({ ...matchedRule });
+    setPolicyEditMode("edit");
+  }
+  function openPolicyCreate() {
+    setPolicyForm({
+      id: crypto.randomUUID(),
+      department: form.department || "",
+      shift: empShiftName || (allShifts[0]?.name ?? ""),
+      minHours: 9, maxHours: 9,
+      otEligible: true, otAfterHours: 9.5, otMultiplier: 1.5,
+      offdayOtMultiplier: 1.5, holidayOtMultiplier: 1.5,
+      lateGraceMinutes: 15, flexible: false, multipleLogin: false,
+      lunchMinHours: 1, lunchMaxHours: 1,
+      weeklyLeaveDays: 1.5, halfDayHours: 5, notes: "",
+    });
+    setPolicyEditMode("create");
+  }
+  function handleSavePolicyRule() {
+    if (!policyForm) return;
+    const existingRules: any[] = Array.isArray(hrSettingsData?.departmentRules) ? hrSettingsData.departmentRules : [];
+    if (policyEditMode === "edit") {
+      const updated = existingRules.map((r: any) => r.id === policyForm.id ? policyForm : r);
+      saveHrRules.mutate(updated);
+    } else {
+      saveHrRules.mutate([...existingRules, policyForm]);
+    }
+  }
+  function setP(k: string, v: any) { setPolicyForm((f: any) => ({ ...f, [k]: v })); }
   const [photoPreview, setPhotoPreview] = useState<string>(emp?.photoUrl || "");
   const [photoUploading, setPhotoUploading] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
@@ -755,13 +799,13 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
           {tab === "policy" && (
             <div className="space-y-4">
-              {/* Match Summary Banner */}
+              {/* ── Match Summary Banner ── */}
               <div className={cn(
                 "rounded-xl border p-4 flex items-start gap-3",
                 matchType === "exact"      && "border-primary/40 bg-primary/5",
                 matchType === "department" && "border-blue-300 bg-blue-50",
                 matchType === "partial"    && "border-amber-300 bg-amber-50",
-                matchType === "default"    && "border-muted bg-muted/30",
+                matchType === "default"    && "border-dashed border-muted-foreground/30 bg-muted/20",
               )}>
                 <Settings className={cn("w-4 h-4 mt-0.5 shrink-0",
                   matchType === "exact"      && "text-primary",
@@ -769,7 +813,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                   matchType === "partial"    && "text-amber-600",
                   matchType === "default"    && "text-muted-foreground",
                 )} />
-                <div>
+                <div className="flex-1 min-w-0">
                   <p className={cn("text-xs font-bold",
                     matchType === "exact"      && "text-primary",
                     matchType === "department" && "text-blue-700",
@@ -779,7 +823,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                     {matchType === "exact"      && "Exact Rule Match"}
                     {matchType === "department" && "Department Rule Match"}
                     {matchType === "partial"    && "Partial Department Match"}
-                    {matchType === "default"    && "Default Fallback Rule"}
+                    {matchType === "default"    && "No Specific Policy — Default Fallback"}
                   </p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
                     {!form.department && !form.shiftId
@@ -790,81 +834,231 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                           ? `Matched by department "${matchedRule.department}" (no shift-specific rule).`
                           : matchType === "partial"
                             ? `Partially matched department "${matchedRule.department}" from "${form.department}".`
-                            : "No specific rule found — using organisation default policy."}
+                            : `No rule found for "${form.department || "this department"}" — using organisation defaults.`}
                   </p>
                 </div>
+                {policyEditMode === "view" && (
+                  <div className="flex gap-1.5 shrink-0">
+                    {matchType !== "default" && (
+                      <button
+                        onClick={openPolicyEdit}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                      >
+                        <Edit2 className="w-3 h-3" />Edit Rule
+                      </button>
+                    )}
+                    {matchType === "default" && form.department && (
+                      <button
+                        onClick={openPolicyCreate}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                      >
+                        <Plus className="w-3 h-3" />Create Rule
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* Attendance Rules */}
-              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
-                  <Clock className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Attendance Rules</span>
-                </div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-3 p-4">
-                  {[
-                    { label: "Min. Work Hours / Day", value: `${matchedRule.minHours}h` },
-                    { label: "Max. Work Hours / Day", value: `${matchedRule.maxHours}h` },
-                    { label: "Late Grace Period", value: `${matchedRule.lateGraceMinutes} min` },
-                    { label: "Half-Day Threshold", value: `${matchedRule.halfDayHours}h` },
-                    { label: "Flexible Hours", value: matchedRule.flexible ? "Yes" : "No" },
-                    { label: "Multiple Login", value: matchedRule.multipleLogin ? "Allowed" : "Not Allowed" },
-                  ].map(item => (
-                    <div key={item.label} className="flex flex-col gap-0.5">
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{item.label}</span>
-                      <span className="text-xs font-medium text-foreground">{item.value}</span>
+              {/* ── Inline Edit / Create Form ── */}
+              {(policyEditMode === "edit" || policyEditMode === "create") && policyForm && (
+                <div className="rounded-xl border border-primary/30 bg-primary/3 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-primary/10 border-b border-primary/20">
+                    <div className="flex items-center gap-2">
+                      <Edit2 className="w-3.5 h-3.5 text-primary" />
+                      <span className="text-[11px] font-bold text-primary uppercase tracking-widest">
+                        {policyEditMode === "edit" ? "Edit Rule" : "Create Rule"}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Overtime Rules */}
-              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
-                  <BadgeIndianRupee className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Overtime Rules</span>
-                </div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-3 p-4">
-                  {[
-                    { label: "OT Eligible", value: matchedRule.otEligible ? "Yes" : "No" },
-                    { label: "OT After", value: `${matchedRule.otAfterHours}h` },
-                    { label: "OT Multiplier", value: `×${matchedRule.otMultiplier}` },
-                    { label: "Off-Day OT Multiplier", value: `×${matchedRule.offdayOtMultiplier}` },
-                    { label: "Holiday OT Multiplier", value: `×${matchedRule.holidayOtMultiplier}` },
-                  ].map(item => (
-                    <div key={item.label} className="flex flex-col gap-0.5">
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{item.label}</span>
-                      <span className="text-xs font-medium text-foreground">{item.value}</span>
+                    <button onClick={() => setPolicyEditMode("view")} className="p-1 rounded hover:bg-primary/10">
+                      <X className="w-3.5 h-3.5 text-primary" />
+                    </button>
+                  </div>
+                  <div className="p-4 space-y-4">
+                    {/* Department / Shift row */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs font-semibold mb-1.5 block">Department</Label>
+                        <Input className="text-xs h-8" value={policyForm.department}
+                          readOnly={policyEditMode === "edit"}
+                          onChange={e => setP("department", e.target.value)} />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-semibold mb-1.5 block">Shift</Label>
+                        {allShifts.length > 0 ? (
+                          <Select className="text-xs h-8" value={policyForm.shift}
+                            onChange={e => setP("shift", e.target.value)}>
+                            {allShifts.map((s: any) => <option key={s.id} value={s.name}>{s.name}</option>)}
+                          </Select>
+                        ) : (
+                          <Input className="text-xs h-8" value={policyForm.shift}
+                            onChange={e => setP("shift", e.target.value)} />
+                        )}
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              {/* Leave & Break Rules */}
-              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
-                  <Shield className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Leave & Break Rules</span>
-                </div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-3 p-4">
-                  {[
-                    { label: "Weekly Leave Days", value: `${matchedRule.weeklyLeaveDays} days` },
-                    { label: "Lunch Min. Hours", value: `${matchedRule.lunchMinHours}h` },
-                    { label: "Lunch Max. Hours", value: `${matchedRule.lunchMaxHours}h` },
-                  ].map(item => (
-                    <div key={item.label} className="flex flex-col gap-0.5">
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{item.label}</span>
-                      <span className="text-xs font-medium text-foreground">{item.value}</span>
+                    {/* Attendance row */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <Label className="text-xs font-semibold mb-1.5 block">Min Hours/Day</Label>
+                        <Input type="number" className="text-xs h-8" value={policyForm.minHours}
+                          onChange={e => setP("minHours", parseFloat(e.target.value))} />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-semibold mb-1.5 block">Late Grace (min)</Label>
+                        <Input type="number" className="text-xs h-8" value={policyForm.lateGraceMinutes}
+                          onChange={e => setP("lateGraceMinutes", parseInt(e.target.value))} />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-semibold mb-1.5 block">Half-Day Hrs</Label>
+                        <Input type="number" className="text-xs h-8" value={policyForm.halfDayHours}
+                          onChange={e => setP("halfDayHours", parseFloat(e.target.value))} />
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              {matchedRule.notes && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-                  <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-1">Policy Notes</p>
-                  <p className="text-xs text-amber-800">{matchedRule.notes}</p>
+                    {/* OT row */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <Label className="text-xs font-semibold mb-1.5 block">OT After (h)</Label>
+                        <Input type="number" step="0.5" className="text-xs h-8" value={policyForm.otAfterHours}
+                          onChange={e => setP("otAfterHours", parseFloat(e.target.value))} />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-semibold mb-1.5 block">OT Multiplier</Label>
+                        <Input type="number" step="0.25" className="text-xs h-8" value={policyForm.otMultiplier}
+                          onChange={e => setP("otMultiplier", parseFloat(e.target.value))} />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-semibold mb-1.5 block">Weekly Leave Days</Label>
+                        <Input type="number" step="0.5" className="text-xs h-8" value={policyForm.weeklyLeaveDays}
+                          onChange={e => setP("weeklyLeaveDays", parseFloat(e.target.value))} />
+                      </div>
+                    </div>
+
+                    {/* Holiday/Offday OT */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs font-semibold mb-1.5 block">Holiday OT Multiplier</Label>
+                        <Input type="number" step="0.25" className="text-xs h-8" value={policyForm.holidayOtMultiplier}
+                          onChange={e => setP("holidayOtMultiplier", parseFloat(e.target.value))} />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-semibold mb-1.5 block">Off-Day OT Multiplier</Label>
+                        <Input type="number" step="0.25" className="text-xs h-8" value={policyForm.offdayOtMultiplier}
+                          onChange={e => setP("offdayOtMultiplier", parseFloat(e.target.value))} />
+                      </div>
+                    </div>
+
+                    {/* Toggles */}
+                    <div className="flex flex-wrap gap-3">
+                      {[
+                        { label: "OT Eligible", key: "otEligible" },
+                        { label: "Flexible Hours", key: "flexible" },
+                        { label: "Multiple Login", key: "multipleLogin" },
+                      ].map(({ label, key }) => (
+                        <label key={key} className="flex items-center gap-1.5 cursor-pointer select-none">
+                          <input type="checkbox" className="w-3.5 h-3.5 accent-primary"
+                            checked={!!policyForm[key]}
+                            onChange={e => setP(key, e.target.checked)} />
+                          <span className="text-xs font-medium">{label}</span>
+                        </label>
+                      ))}
+                    </div>
+
+                    {/* Notes */}
+                    <div>
+                      <Label className="text-xs font-semibold mb-1.5 block">Notes</Label>
+                      <Input className="text-xs h-8" placeholder="Optional rule notes…" value={policyForm.notes || ""}
+                        onChange={e => setP("notes", e.target.value)} />
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex justify-end gap-2 pt-1">
+                      <Button variant="outline" className="text-xs h-8" onClick={() => setPolicyEditMode("view")}>
+                        Cancel
+                      </Button>
+                      <Button className="text-xs h-8" onClick={handleSavePolicyRule} disabled={saveHrRules.isPending}>
+                        {saveHrRules.isPending ? "Saving…" : policyEditMode === "edit" ? "Save Changes" : "Create Rule"}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
+              )}
+
+              {/* ── View Mode Details ── */}
+              {policyEditMode === "view" && (
+                <>
+                  {/* Attendance Rules */}
+                  <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
+                      <Clock className="w-3.5 h-3.5 text-primary" />
+                      <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Attendance Rules</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3 p-4">
+                      {[
+                        { label: "Min. Work Hours / Day", value: `${matchedRule.minHours}h` },
+                        { label: "Max. Work Hours / Day", value: `${matchedRule.maxHours}h` },
+                        { label: "Late Grace Period", value: `${matchedRule.lateGraceMinutes} min` },
+                        { label: "Half-Day Threshold", value: `${matchedRule.halfDayHours}h` },
+                        { label: "Flexible Hours", value: matchedRule.flexible ? "Yes" : "No" },
+                        { label: "Multiple Login", value: matchedRule.multipleLogin ? "Allowed" : "Not Allowed" },
+                      ].map(item => (
+                        <div key={item.label} className="flex flex-col gap-0.5">
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{item.label}</span>
+                          <span className="text-xs font-medium text-foreground">{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Overtime Rules */}
+                  <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
+                      <BadgeIndianRupee className="w-3.5 h-3.5 text-primary" />
+                      <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Overtime Rules</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3 p-4">
+                      {[
+                        { label: "OT Eligible", value: matchedRule.otEligible ? "Yes" : "No" },
+                        { label: "OT After", value: `${matchedRule.otAfterHours}h` },
+                        { label: "OT Multiplier", value: `×${matchedRule.otMultiplier}` },
+                        { label: "Off-Day OT Multiplier", value: `×${matchedRule.offdayOtMultiplier}` },
+                        { label: "Holiday OT Multiplier", value: `×${matchedRule.holidayOtMultiplier}` },
+                      ].map(item => (
+                        <div key={item.label} className="flex flex-col gap-0.5">
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{item.label}</span>
+                          <span className="text-xs font-medium text-foreground">{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Leave & Break Rules */}
+                  <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
+                      <Shield className="w-3.5 h-3.5 text-primary" />
+                      <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Leave & Break Rules</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3 p-4">
+                      {[
+                        { label: "Weekly Leave Days", value: `${matchedRule.weeklyLeaveDays} days` },
+                        { label: "Lunch Min. Hours", value: `${matchedRule.lunchMinHours}h` },
+                        { label: "Lunch Max. Hours", value: `${matchedRule.lunchMaxHours}h` },
+                      ].map(item => (
+                        <div key={item.label} className="flex flex-col gap-0.5">
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{item.label}</span>
+                          <span className="text-xs font-medium text-foreground">{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {matchedRule.notes && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                      <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-1">Policy Notes</p>
+                      <p className="text-xs text-amber-800">{matchedRule.notes}</p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
