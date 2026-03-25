@@ -258,13 +258,14 @@ router.post("/generate", async (req, res) => {
       const lateCutoff = lateCutoffMins(rule, shiftStart1);
 
       const presentRecs    = empAtt.filter(a => a.status === "present" || a.status === "late");
-      const lateRecs       = empAtt.filter(a => a.status === "late");
       const absentRecs     = empAtt.filter(a => a.status === "absent");
       const leaveRecs      = empAtt.filter(a => a.status === "leave");
       const halfDayRecs    = empAtt.filter(a => a.status === "half_day");
       const holidayRecs    = empAtt.filter(a => a.status === "holiday");
       const offDayRecs     = empAtt.filter(a => a.status === "off_day");
       const presentDays    = presentRecs.length;
+      /* Recompute late arrivals from inTime1 vs cutoff — don't rely on stored status */
+      const lateRecs       = presentRecs.filter(a => a.inTime1 && timeToMins(a.inTime1) > lateCutoff);
       const lateDays       = lateRecs.length;
       const leaveDays      = leaveRecs.length;
       const halfDaysCount  = halfDayRecs.length;
@@ -329,17 +330,10 @@ router.post("/generate", async (req, res) => {
       const minuteRate  = hourlyRate / 60;
 
       /* ── Late deduction: lateMinutes × minuteRate ──────── */
-      let totalLateMinutes = 0;
-      for (const rec of lateRecs) {
-        if (rec.inTime1) {
-          const arrivalMinutes = timeToMins(rec.inTime1);
-          if (arrivalMinutes > lateCutoff) {
-            totalLateMinutes += arrivalMinutes - lateCutoff;
-          }
-        } else {
-          totalLateMinutes += rule.lateGraceMinutes ?? 15;
-        }
-      }
+      /* lateRecs already filtered to records where inTime1 > lateCutoff */
+      const totalLateMinutes = lateRecs.reduce((sum, rec) => {
+        return sum + (timeToMins(rec.inTime1!) - lateCutoff);
+      }, 0);
       const lateDeduction = Math.round(totalLateMinutes * minuteRate);
 
       /* ── Absence deduction ─────────────────────────────── */
