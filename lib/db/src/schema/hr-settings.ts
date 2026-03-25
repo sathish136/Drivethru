@@ -14,6 +14,8 @@ export const hrSettings = pgTable("hr_settings", {
   standardLunchStartHour: integer("standard_lunch_start_hour").notNull().default(13),
   standardLunchMinutes: integer("standard_lunch_minutes").notNull().default(60),
 
+  earlyInMinutes: integer("early_in_minutes").notNull().default(30),
+
   otExemptDesignations: text("ot_exempt_designations").notNull().default(JSON.stringify(["Manager"])),
   incompleteExemptDepartments: text("incomplete_exempt_departments").notNull().default(JSON.stringify(["Surf Instructors - D"])),
 

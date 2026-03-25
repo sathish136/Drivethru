@@ -35,7 +35,10 @@ router.get("/attendance", async (req, res) => {
         if (timeToMins(rec.inTime1) > shiftStartMins + grace) st = "late";
       }
       if ((st === "present" || st === "late") && rec.totalHours != null) {
-        if (rec.totalHours < (rule.halfDayHours ?? 5)) st = "half_day";
+        const halfDayHrs = rule.halfDayHours ?? 5;
+        const minPresentHrs = rule.minPresentHours ?? 8;
+        if (rec.totalHours < halfDayHrs) st = "absent";
+        else if (rec.totalHours < minPresentHrs) st = "half_day";
       }
       return st;
     }
@@ -115,7 +118,10 @@ router.get("/monthly", async (req, res) => {
         if (timeToMins(rec.inTime1) > shiftStartMins + grace) st = "late";
       }
       if ((st === "present" || st === "late") && rec.totalHours != null) {
-        if (rec.totalHours < (rule.halfDayHours ?? 5)) st = "half_day";
+        const halfDayHrs = rule.halfDayHours ?? 5;
+        const minPresentHrs = rule.minPresentHours ?? 8;
+        if (rec.totalHours < halfDayHrs) st = "absent";
+        else if (rec.totalHours < minPresentHrs) st = "half_day";
       }
       return st;
     }

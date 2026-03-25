@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { PageHeader, Card, Button, Input, Label, Select } from "@/components/ui";
 import {
-  Plus, Trash2, Save, RefreshCw, Check, AlertTriangle, X, Edit2, Users, Settings,
+  Plus, Trash2, Save, RefreshCw, Check, AlertTriangle, X, Edit2, Users, Settings, Settings2,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -25,6 +25,7 @@ interface DeptShiftRule {
   holidayOtMultiplier: number | null;
   weeklyLeaveDays: number | null;
   halfDayHours: number | null;
+  minPresentHours: number | null;
   notes: string;
 }
 
@@ -38,12 +39,13 @@ const BLANK_RULE: DeptShiftRule = {
   flexible: false, multipleLogin: false,
   otMultiplier: 1.5, offdayOtMultiplier: 1.5,
   holidayOtMultiplier: 1.5, weeklyLeaveDays: 1.5, halfDayHours: 5,
+  minPresentHours: 8,
   notes: "",
 };
 
 const COLS = [
   "Department", "Shift", "Start Time", "End Time", "Min h", "Break h", "OT?", "OT After",
-  "Grace", "Flex", "Multi", "Wk Leave", "Half-day h", "Holiday OT", "Offday OT", "OT ×", "Staff", "Notes", "",
+  "Grace", "Flex", "Multi", "Wk Leave", "Half-day h", "Present h", "Holiday OT", "Offday OT", "OT ×", "Staff", "Notes", "",
 ];
 
 function clientFindRule(rules: DeptShiftRule[], department: string, shiftName?: string | null) {
@@ -75,6 +77,10 @@ export default function HRSettings() {
   const [saved, setSaved]           = useState(false);
   const [error, setError]           = useState<string | null>(null);
 
+  const [globalSettings, setGlobalSettings] = useState({ earlyInMinutes: 30 });
+  const [globalSaving, setGlobalSaving] = useState(false);
+  const [globalSaved,  setGlobalSaved]  = useState(false);
+
   const [showModal, setShowModal]   = useState(false);
   const [modalMode, setModalMode]   = useState<"add" | "edit">("add");
   const [editing, setEditing]       = useState<DeptShiftRule>(BLANK_RULE);
@@ -91,6 +97,7 @@ export default function HRSettings() {
         const r = hrData.departmentRules as DeptShiftRule[];
         if (r[0] && "department" in r[0] && "shift" in r[0]) setRules(r);
       }
+      setGlobalSettings({ earlyInMinutes: hrData.earlyInMinutes ?? 30 });
       if (Array.isArray(depts)) setDepartments(depts.filter((d: Department) => d.isActive !== false));
       if (Array.isArray(shiftsData)) setShiftOptions(shiftsData.filter((s: ShiftOption) => s.isActive !== false));
       const emps = Array.isArray(empsData?.employees) ? empsData.employees
@@ -98,6 +105,20 @@ export default function HRSettings() {
       setEmployees(emps.filter((e: any) => e.status !== "terminated"));
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
+
+  async function saveGlobalSettings() {
+    setGlobalSaving(true);
+    try {
+      const r = await fetch(apiUrl("/hr-settings"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ earlyInMinutes: globalSettings.earlyInMinutes }),
+      });
+      const d = await r.json();
+      if (d.id || d.earlyInMinutes != null) { setGlobalSaved(true); setTimeout(() => setGlobalSaved(false), 2500); }
+    } catch {}
+    setGlobalSaving(false);
+  }
 
   async function persistRules(updated: DeptShiftRule[]) {
     setSaving(true); setError(null);
@@ -209,6 +230,36 @@ export default function HRSettings() {
         </div>
       )}
 
+      {/* Global Attendance Defaults */}
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
+          <div className="flex items-center gap-2">
+            <Settings2 className="w-4 h-4 text-blue-600" />
+            <span className="text-sm font-bold">Global Attendance Defaults</span>
+            <span className="text-xs text-muted-foreground ml-1">— applies to all employees unless overridden</span>
+          </div>
+          <div className="flex items-center gap-3">
+            {globalSaving && <span className="text-xs text-muted-foreground flex items-center gap-1"><RefreshCw className="w-3 h-3 animate-spin" />Saving…</span>}
+            {globalSaved  && <span className="text-xs text-emerald-600 flex items-center gap-1"><Check className="w-3 h-3" />Saved</span>}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-6 max-w-lg">
+          <div>
+            <label className="text-xs font-medium block mb-1">Early-In Window (minutes) <span className="text-muted-foreground font-normal">(before shift start)</span></label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number" min="0" step="1"
+                className="border border-border rounded-md px-3 py-1.5 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-ring"
+                value={globalSettings.earlyInMinutes}
+                onChange={e => setGlobalSettings(g => ({ ...g, earlyInMinutes: parseInt(e.target.value) || 0 }))}
+              />
+              <Button className="h-8 text-xs" onClick={saveGlobalSettings} disabled={globalSaving}>Save</Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Attendance is not recorded earlier than this many minutes before the shift starts.</p>
+          </div>
+        </div>
+      </Card>
+
       <Card className="p-5">
         <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
           <div className="flex items-center gap-2">
@@ -273,6 +324,9 @@ export default function HRSettings() {
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       {rule.halfDayHours != null ? `${rule.halfDayHours}h` : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      {rule.minPresentHours != null ? `${rule.minPresentHours}h` : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       {rule.holidayOtMultiplier != null ? `${rule.holidayOtMultiplier}×` : <span className="text-muted-foreground">—</span>}
@@ -495,11 +549,18 @@ export default function HRSettings() {
                     placeholder="1.5" />
                 </div>
                 <div>
-                  <Label className="text-xs font-medium mb-1 block">Half-Day Threshold (hrs) <span className="text-muted-foreground font-normal">(hours that count as half-day)</span></Label>
+                  <Label className="text-xs font-medium mb-1 block">Half-Day Threshold (hrs) <span className="text-muted-foreground font-normal">(below this → absent)</span></Label>
                   <Input type="number" step="0.5" min="0"
                     value={editing.halfDayHours ?? ""}
                     onChange={e => setE("halfDayHours", e.target.value === "" ? null : parseFloat(e.target.value))}
                     placeholder="5" />
+                </div>
+                <div>
+                  <Label className="text-xs font-medium mb-1 block">Min Present Hours <span className="text-muted-foreground font-normal">(below this → half-day)</span></Label>
+                  <Input type="number" step="0.5" min="0"
+                    value={editing.minPresentHours ?? ""}
+                    onChange={e => setE("minPresentHours", e.target.value === "" ? null : parseFloat(e.target.value))}
+                    placeholder="8" />
                 </div>
               </div>
 

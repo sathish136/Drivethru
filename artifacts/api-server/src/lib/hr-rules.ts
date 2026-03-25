@@ -20,6 +20,7 @@ export interface DeptShiftRule {
   holidayOtMultiplier: number | null;
   weeklyLeaveDays: number | null;
   halfDayHours: number | null;
+  minPresentHours: number | null;
   notes: string;
 }
 
@@ -41,6 +42,7 @@ export const DEFAULT_RULE: DeptShiftRule = {
   holidayOtMultiplier: 1.5,
   weeklyLeaveDays: 1.5,
   halfDayHours: 5,
+  minPresentHours: 8,
   notes: "Default fallback rule",
 };
 
