@@ -21,15 +21,11 @@ const TYPE_STYLE: Record<string, string> = {
 };
 
 
-type SettingsTab = "organisation" | "attendance" | "hr" | "payroll" | "holidays" | "biometric" | "mockdata" | "database";
+type SettingsTab = "organisation" | "payroll" | "database";
 
 const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ElementType; description: string; color: string }[] = [
   { key: "organisation", label: "Organisation",       icon: Building,     description: "Name, country, timezone",       color: "text-emerald-600" },
-  { key: "attendance",   label: "Attendance Rules",   icon: Clock,        description: "Late, overtime, work week",      color: "text-blue-600"    },
-  { key: "hr",           label: "HR Settings",        icon: Users,        description: "Leave, payroll, employment",     color: "text-violet-600"  },
-  { key: "holidays",     label: "Holiday Settings",   icon: Calendar,     description: "Public & gazetted holidays",     color: "text-amber-600"   },
-  { key: "biometric",   label: "Biometric / ADMS",   icon: Fingerprint,  description: "ZKTeco ZK Push configuration",   color: "text-sky-600"     },
-  { key: "mockdata",     label: "Mock Data",          icon: Database,     description: "Import & clear sample data",     color: "text-rose-600"    },
+  { key: "payroll",      label: "Payroll Settings",   icon: Banknote,     description: "Salary, deductions, EPF/ETF",   color: "text-orange-600"  },
   { key: "database",     label: "Backup & Restore",   icon: Download,     description: "Backup and restore all data",    color: "text-teal-600"    },
 ];
 
@@ -532,58 +528,6 @@ export default function Settings() {
             <div className="flex justify-end mt-5">
               <Button className="text-xs flex items-center gap-2" onClick={() => saveFn(setOrgSaved)}>
                 {orgSaved ? <><Check className="w-3.5 h-3.5 text-green-400" />Saved!</> : "Save Organisation"}
-              </Button>
-            </div>
-          </Card>
-        )}
-
-        {/* ── Attendance Rules ──────────────────────────────── */}
-        {activeTab === "attendance" && (
-          <Card className="p-5">
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div>
-                <Label className="text-xs">Work Week</Label>
-                <Select defaultValue="mon-sat">
-                  <option value="mon-fri">Monday – Friday</option>
-                  <option value="mon-sat">Monday – Saturday</option>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs">Working Hours / Day</Label>
-                <Input type="number" defaultValue="8" />
-              </div>
-              <div>
-                <Label className="text-xs">Half-Day Hours</Label>
-                <Input type="number" defaultValue="4" />
-              </div>
-              <div>
-                <Label className="text-xs">Late Arrival Threshold (min)</Label>
-                <Input type="number" defaultValue="15" />
-              </div>
-              <div>
-                <Label className="text-xs">Early Departure Threshold (min)</Label>
-                <Input type="number" defaultValue="15" />
-              </div>
-              <div>
-                <Label className="text-xs">Overtime Threshold (hrs)</Label>
-                <Input type="number" defaultValue="8.5" />
-              </div>
-              <div>
-                <Label className="text-xs">Grace Period (min)</Label>
-                <Input type="number" defaultValue="5" />
-              </div>
-              <div>
-                <Label className="text-xs">Auto Mark Absent After (hrs)</Label>
-                <Input type="number" defaultValue="4" />
-              </div>
-              <div>
-                <Label className="text-xs">Min Hours for Full Day</Label>
-                <Input type="number" defaultValue="7" />
-              </div>
-            </div>
-            <div className="flex justify-end mt-5">
-              <Button className="text-xs flex items-center gap-2" onClick={() => saveFn(setAttSaved)}>
-                {attSaved ? <><Check className="w-3.5 h-3.5 text-green-400" />Saved!</> : "Save Attendance Rules"}
               </Button>
             </div>
           </Card>
