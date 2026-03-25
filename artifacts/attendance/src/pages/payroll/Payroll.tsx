@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
+import { useLocation } from "wouter";
 import { PageHeader, Card, Button, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import drivethruLogo from "@/assets/drivethru-wave-logo.png";
@@ -8,6 +9,7 @@ import {
   ChevronDown, ChevronUp, AlertCircle, UserCheck,
   Search, Filter, Building2, Briefcase, ListChecks,
   BadgeCheck, Clock, CircleDashed, ChevronRight,
+  ExternalLink, RotateCcw, FileText,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -684,6 +686,7 @@ function GeneratePayrollModal({
 }
 
 export default function Payroll() {
+  const [, navigate] = useLocation();
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
@@ -698,6 +701,15 @@ export default function Payroll() {
   const [sortAsc, setSortAsc] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+
+  const toggleExpand = (id: number) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
 
   const fetchPayroll = useCallback(async () => {
     setLoading(true); setMsg(null);
@@ -904,11 +916,12 @@ export default function Payroll() {
                       onChange={e => setSelected(e.target.checked ? new Set(filtered.map(r => r.id)) : new Set())}
                       className="rounded" />
                   </th>
+                  <th className="p-3 w-8" />
                   {[
                     { label: "Employee",    field: "employee.fullName" },
                     { label: "Type",        field: null },
                     { label: "Attendance",  field: null },
-                    { label: "Basic",       field: null },
+                    { label: "Earnings",    field: null },
                     { label: "Gross Salary", field: "grossSalary" },
                     { label: "Deductions",  field: null },
                     { label: "Net Salary",  field: "netSalary" },
@@ -930,79 +943,185 @@ export default function Payroll() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((row, i) => (
-                  <tr key={row.id}
-                    className={cn("border-b border-border/60 hover:bg-muted/30 transition-colors",
-                      i % 2 === 0 ? "bg-background" : "bg-muted/10",
-                      selected.has(row.id) && "bg-primary/5")}>
-                    <td className="p-3">
-                      <input type="checkbox" checked={selected.has(row.id)}
-                        onChange={e => {
-                          const s = new Set(selected);
-                          e.target.checked ? s.add(row.id) : s.delete(row.id);
-                          setSelected(s);
-                        }} className="rounded" />
-                    </td>
-                    <td className="p-3">
-                      <p className="font-medium text-foreground">{row.employee.fullName}</p>
-                      <p className="text-xs text-muted-foreground">{row.employee.employeeId} · {row.employee.designation}</p>
-                    </td>
-                    <td className="p-3">
-                      <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium",
-                        row.employee.employeeType === "permanent" ? "bg-blue-100 text-blue-700" :
-                        row.employee.employeeType === "contract" ? "bg-purple-100 text-purple-700" :
-                        "bg-orange-100 text-orange-700"
-                      )}>
-                        {EMP_TYPE_LABELS[row.employee.employeeType ?? "permanent"] ?? "Permanent"}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <div className="flex gap-1 text-[11px]">
-                        <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">P:{row.presentDays}</span>
-                        <span className="bg-red-100 text-red-600 px-1.5 py-0.5 rounded">A:{row.absentDays}</span>
-                        <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">L:{row.lateDays}</span>
-                      </div>
-                    </td>
-                    <td className="p-3 text-muted-foreground">{fmt(row.basicSalary)}</td>
-                    <td className="p-3 font-medium">{fmt(row.grossSalary)}</td>
-                    <td className="p-3 text-red-600 text-sm">{fmt(row.totalDeductions)}</td>
-                    <td className="p-3 font-bold text-primary">{fmt(row.netSalary)}</td>
-                    <td className="p-3">
-                      <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium", STATUS_STYLES[row.status])}>
-                        {row.status.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => setPayslip(row)}
-                          className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                          title="View Payslip"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
-                        {row.status === "draft" && (
+                {filtered.map((row, i) => {
+                  const isExpanded = expandedRows.has(row.id);
+                  const allowances = (row.transportAllowance || 0) + (row.housingAllowance || 0) + (row.otherAllowances || 0);
+                  const subTotal = row.basicSalary + allowances;
+                  const totalForEPF = subTotal - (row.absenceDeduction || 0) - (row.lateDeduction || 0);
+                  const totalEarnings = totalForEPF + (row.overtimePay || 0);
+                  return (
+                    <React.Fragment key={row.id}>
+                      <tr
+                        className={cn("border-b border-border/60 hover:bg-muted/30 transition-colors",
+                          i % 2 === 0 ? "bg-background" : "bg-muted/10",
+                          selected.has(row.id) && "bg-primary/5",
+                          isExpanded && "border-b-0")}>
+                        <td className="p-3">
+                          <input type="checkbox" checked={selected.has(row.id)}
+                            onChange={e => {
+                              const s = new Set(selected);
+                              e.target.checked ? s.add(row.id) : s.delete(row.id);
+                              setSelected(s);
+                            }} className="rounded" />
+                        </td>
+                        <td className="p-3">
                           <button
-                            onClick={() => updateStatus(row.id, "approved")}
-                            className="p-1.5 rounded-lg hover:bg-blue-50 transition-colors text-blue-600"
-                            title="Approve"
+                            onClick={() => toggleExpand(row.id)}
+                            className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
+                            title={isExpanded ? "Collapse details" : "Expand details"}
                           >
-                            <CheckCircle className="w-3.5 h-3.5" />
+                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                           </button>
-                        )}
-                        {row.status === "approved" && (
-                          <button
-                            onClick={() => updateStatus(row.id, "paid")}
-                            className="p-1.5 rounded-lg hover:bg-emerald-50 transition-colors text-emerald-600"
-                            title="Mark as Paid"
-                          >
-                            <CreditCard className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                        </td>
+                        <td className="p-3">
+                          <p className="font-medium text-foreground">{row.employee.fullName}</p>
+                          <p className="text-xs text-muted-foreground">{row.employee.employeeId} · {row.employee.designation}</p>
+                        </td>
+                        <td className="p-3">
+                          <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium",
+                            row.employee.employeeType === "permanent" ? "bg-blue-100 text-blue-700" :
+                            row.employee.employeeType === "contract" ? "bg-purple-100 text-purple-700" :
+                            "bg-orange-100 text-orange-700"
+                          )}>
+                            {EMP_TYPE_LABELS[row.employee.employeeType ?? "permanent"] ?? "Permanent"}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex gap-1 text-[11px]">
+                            <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">P:{row.presentDays}</span>
+                            <span className="bg-red-100 text-red-600 px-1.5 py-0.5 rounded">A:{row.absentDays}</span>
+                            <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">L:{row.lateDays}</span>
+                            {row.overtimeHours > 0 && <span className="bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded">OT:{row.overtimeHours.toFixed(1)}h</span>}
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <p className="text-sm text-muted-foreground">{fmt(row.basicSalary)}</p>
+                          {allowances > 0 && <p className="text-[11px] text-muted-foreground/70">+{fmt(allowances)} allowances</p>}
+                        </td>
+                        <td className="p-3 font-medium">{fmt(row.grossSalary)}</td>
+                        <td className="p-3">
+                          <p className="text-red-600 text-sm font-medium">{fmt(row.totalDeductions)}</p>
+                          <p className="text-[11px] text-muted-foreground">EPF {fmt(row.epfEmployee)}{row.apit > 0 ? ` · APIT ${fmt(row.apit)}` : ""}</p>
+                        </td>
+                        <td className="p-3 font-bold text-primary">{fmt(row.netSalary)}</td>
+                        <td className="p-3">
+                          <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium", STATUS_STYLES[row.status])}>
+                            {row.status.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setPayslip(row)}
+                              className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                              title="Quick view payslip"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => navigate(`/payroll/payslip/${row.id}`)}
+                              className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                              title="Open payslip page"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </button>
+                            {row.status === "draft" && (
+                              <button
+                                onClick={() => updateStatus(row.id, "approved")}
+                                className="p-1.5 rounded-lg hover:bg-blue-50 transition-colors text-blue-600"
+                                title="Approve"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {row.status === "approved" && (
+                              <button
+                                onClick={() => updateStatus(row.id, "paid")}
+                                className="p-1.5 rounded-lg hover:bg-emerald-50 transition-colors text-emerald-600"
+                                title="Mark as Paid"
+                              >
+                                <CreditCard className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {(row.status === "approved" || row.status === "paid") && (
+                              <button
+                                onClick={() => {
+                                  if (confirm("Reset this record back to Draft?")) updateStatus(row.id, "draft");
+                                }}
+                                className="p-1.5 rounded-lg hover:bg-amber-50 transition-colors text-amber-600"
+                                title="Reset to Draft"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`${row.id}-detail`} className={cn("border-b border-border/60", i % 2 === 0 ? "bg-background" : "bg-muted/10")}>
+                          <td colSpan={11} className="px-6 pb-4 pt-0">
+                            <div className="rounded-xl border border-border bg-slate-50 p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                              {/* Earnings */}
+                              <div>
+                                <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest mb-2 flex items-center gap-1">
+                                  <TrendingUp className="w-3 h-3" /> Earnings
+                                </p>
+                                <div className="space-y-1 text-xs">
+                                  <div className="flex justify-between"><span className="text-muted-foreground">Basic Salary</span><span className="font-medium">{fmt(row.basicSalary)}</span></div>
+                                  {(row.transportAllowance || 0) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Transport</span><span>{fmt(row.transportAllowance)}</span></div>}
+                                  {(row.housingAllowance || 0) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Housing</span><span>{fmt(row.housingAllowance)}</span></div>}
+                                  {(row.otherAllowances || 0) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Other Allowances</span><span>{fmt(row.otherAllowances)}</span></div>}
+                                  <div className="flex justify-between border-t border-border/60 pt-1"><span className="text-muted-foreground italic text-[11px]">Sub Total</span><span className="italic">{fmt(subTotal)}</span></div>
+                                  {(row.absenceDeduction || 0) > 0 && <div className="flex justify-between text-red-600"><span>No-Pay Leave</span><span>−{fmt(row.absenceDeduction)}</span></div>}
+                                  {(row.lateDeduction || 0) > 0 && <div className="flex justify-between text-amber-600"><span>Late Deduction ({row.lateDays}d)</span><span>−{fmt(row.lateDeduction)}</span></div>}
+                                  <div className="flex justify-between border-t border-border/60 pt-1 font-semibold"><span>For EPF / ETF</span><span>{fmt(totalForEPF)}</span></div>
+                                  {(row.overtimePay || 0) > 0 && <div className="flex justify-between text-violet-700"><span>Overtime ({row.overtimeHours.toFixed(1)}h)</span><span>+{fmt(row.overtimePay)}</span></div>}
+                                  <div className="flex justify-between border-t-2 border-emerald-300 pt-1 font-bold text-emerald-700"><span>Total Earnings</span><span>{fmt(totalEarnings)}</span></div>
+                                </div>
+                              </div>
+                              {/* Deductions / Recoveries */}
+                              <div>
+                                <p className="text-[10px] font-bold text-red-700 uppercase tracking-widest mb-2 flex items-center gap-1">
+                                  <Minus className="w-3 h-3" /> Deductions
+                                </p>
+                                <div className="space-y-1 text-xs">
+                                  <div className="flex justify-between"><span className="text-muted-foreground">EPF 8% (Employee)</span><span className="font-medium text-red-600">{fmt(row.epfEmployee)}</span></div>
+                                  {(row.loanDeduction || 0) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Loan Recovery</span><span className="text-red-600">{fmt(row.loanDeduction)}</span></div>}
+                                  {(row.otherDeductions || 0) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Other Deductions</span><span className="text-red-600">{fmt(row.otherDeductions)}</span></div>}
+                                  {(row.apit || 0) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">APIT (Income Tax)</span><span className="text-red-600">{fmt(row.apit)}</span></div>}
+                                  <div className="flex justify-between border-t-2 border-red-300 pt-1 font-bold text-red-700"><span>Total Recoveries</span><span>{fmt(row.totalDeductions)}</span></div>
+                                  <div className="flex justify-between border-t border-border/60 pt-2 font-bold text-primary text-sm"><span>Balance (Net Pay)</span><span>{fmt(row.netSalary)}</span></div>
+                                </div>
+                              </div>
+                              {/* Statutory / Employer */}
+                              <div>
+                                <p className="text-[10px] font-bold text-violet-700 uppercase tracking-widest mb-2 flex items-center gap-1">
+                                  <CreditCard className="w-3 h-3" /> Statutory (Employer Cost)
+                                </p>
+                                <div className="space-y-1 text-xs">
+                                  <div className="flex justify-between"><span className="text-muted-foreground">EPF 12% (Employer)</span><span className="font-medium">{fmt(row.epfEmployer)}</span></div>
+                                  <div className="flex justify-between"><span className="text-muted-foreground">ETF 3% (Employer)</span><span className="font-medium">{fmt(row.etfEmployer)}</span></div>
+                                  <div className="flex justify-between border-t border-border/60 pt-1 font-semibold text-violet-700"><span>Total Employer Cost</span><span>{fmt(row.netSalary + (row.epfEmployer || 0) + (row.etfEmployer || 0))}</span></div>
+                                </div>
+                                <div className="mt-3 pt-3 border-t border-border/60">
+                                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">EPF Numbers</p>
+                                  {row.employee.epfNumber && <p className="text-xs text-muted-foreground">EPF: {row.employee.epfNumber}</p>}
+                                  {row.employee.etfNumber && <p className="text-xs text-muted-foreground">ETF: {row.employee.etfNumber}</p>}
+                                </div>
+                                <button
+                                  onClick={() => navigate(`/payroll/payslip/${row.id}`)}
+                                  className="mt-3 w-full flex items-center justify-center gap-1.5 text-xs font-medium text-primary border border-primary/30 rounded-lg py-1.5 hover:bg-primary/5 transition-colors"
+                                >
+                                  <FileText className="w-3.5 h-3.5" /> Open Full Payslip
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
