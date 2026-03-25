@@ -75,6 +75,8 @@ router.get("/", async (req, res) => {
         department: employees.department,
         branchId: employees.branchId,
         employeeType: employees.employeeType,
+        epfNumber: employees.epfNumber,
+        etfNumber: employees.etfNumber,
       },
     }).from(payrollRecords)
       .innerJoin(employees, eq(payrollRecords.employeeId, employees.id));

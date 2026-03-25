@@ -65,6 +65,8 @@ interface PayrollRow {
     department: string;
     branchId: number;
     employeeType?: string;
+    epfNumber?: string | null;
+    etfNumber?: string | null;
   };
 }
 
@@ -114,200 +116,197 @@ const EMP_TYPE_LABELS: Record<string, string> = {
   casual: "Casual",
 };
 
+function fmtAmt(n: number | null | undefined): string {
+  if (!n || n === 0) return "";
+  return n.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }) {
-  const customLogo = localStorage.getItem("org_logo");
-  const logo = customLogo || drivethruLogo;
-  const orgName = "Drivethru";
+  const orgName = "Drivethru (Pvt) Ltd";
+  const pvNumber = `PV ${String(row.id).padStart(5, "0")}`;
+  const monthLabel = `${MONTHS[row.month - 1]} ${row.year}`;
+  const epfNo = row.employee.epfNumber || row.employee.employeeId;
 
-  const earnings = [
-    { label: "Basic Salary",        val: row.basicSalary },
-    { label: "Transport Allowance", val: row.transportAllowance },
-    { label: "Housing Allowance",   val: row.housingAllowance },
-    { label: "Other Allowances",    val: row.otherAllowances },
-    { label: "Overtime Pay",        val: row.overtimePay },
-  ].filter(e => e.val > 0 || e.label === "Basic Salary");
+  /* ── Calculations matching Excel format ── */
+  const allowances = (row.transportAllowance || 0) + (row.housingAllowance || 0) + (row.otherAllowances || 0);
+  const subTotal      = row.basicSalary + allowances;
+  const noPayLeave    = row.absenceDeduction || 0;
+  const totalForEPF   = subTotal - noPayLeave;
+  const overtime      = row.overtimePay || 0;
+  const totalEarnings = totalForEPF + overtime;
 
-  const deductions = [
-    { label: "EPF – Employee (8%)", val: row.epfEmployee },
-    { label: "APIT (Income Tax)",   val: row.apit },
-    { label: "Absence Deduction",   val: row.absenceDeduction },
-    { label: "Late Deduction",      val: row.lateDeduction },
-    { label: "Other Deductions",    val: row.otherDeductions },
-    { label: "Loan / Advance Deduction", val: row.loanDeduction ?? 0 },
-  ].filter(d => d.val > 0 || d.label === "EPF – Employee (8%)");
+  const epf8          = row.epfEmployee || 0;
+  const loans         = row.loanDeduction || 0;
+  const fines         = (row.lateDeduction || 0) + (row.otherDeductions || 0);
+  const apit          = row.apit || 0;
+  const totalRecoveries = epf8 + loans + fines + apit;
+  const balanceReceived = totalEarnings - totalRecoveries;
+
+  const epf12 = row.epfEmployer || 0;
+  const etf3  = row.etfEmployer || 0;
+
+  /* Date for signature line */
+  const lastDay = new Date(row.year, row.month, 0);
+  const dateStr = `${String(lastDay.getDate()).padStart(2,"0")}-${String(row.month).padStart(2,"0")}-${row.year}`;
+
+  type SlipRow = { label: string; value?: string; indent?: boolean; bold?: boolean; italic?: boolean; borderTop?: boolean; borderBottom?: boolean; rightAlign?: boolean };
+  const rows: SlipRow[] = [
+    { label: "Basic Salary",            value: fmtAmt(row.basicSalary) },
+    ...(allowances > 0 ? [{ label: "Allowances", value: fmtAmt(allowances) }] : [{ label: "Holiday Pay", value: "" }]),
+    { label: "Sub Total",               value: fmtAmt(subTotal), italic: true, borderTop: true },
+    { label: "Less  :  No Pay Leave",   value: noPayLeave > 0 ? fmtAmt(noPayLeave) : "-", italic: true },
+    { label: "Total for EPF / ETF",     value: fmtAmt(totalForEPF), bold: true },
+    { label: "Add  :  Overtime",        value: overtime > 0 ? fmtAmt(overtime) : "", italic: true },
+    { label: "Total Earnings",          value: fmtAmt(totalEarnings), borderTop: true },
+    { label: "Recoveries  :  EPF 8%",   value: fmtAmt(epf8) },
+    { label: "Loans",                   value: loans > 0 ? fmtAmt(loans) : "", indent: true },
+    { label: "Fines",                   value: fines > 0 ? fmtAmt(fines) : "", indent: true },
+    ...(apit > 0 ? [{ label: "APIT (Income Tax)", value: fmtAmt(apit), indent: true }] : []),
+    { label: "Less  :  Total Recoveries", value: fmtAmt(totalRecoveries), italic: true, borderTop: true },
+    { label: "Balance Received",        value: fmtAmt(balanceReceived), bold: true, borderTop: true, borderBottom: true },
+    { label: "" },
+    { label: "EPF 12%",                 value: fmtAmt(epf12) },
+    { label: "EPF 8%",                  value: fmtAmt(epf8) },
+    { label: "ETF 3%",                  value: fmtAmt(etf3) },
+  ];
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto"
+        className="bg-white shadow-2xl w-full max-w-[520px] max-h-[95vh] overflow-y-auto rounded-xl"
         onClick={e => e.stopPropagation()}
+        style={{ fontFamily: "Arial, sans-serif" }}
       >
-        {/* ── Header ── */}
-        <div className="relative bg-gradient-to-br from-slate-800 to-slate-900 rounded-t-2xl px-7 py-6 print:rounded-none">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-slate-700 flex items-center justify-center p-2">
-                <img src={logo} alt={orgName} className="w-full h-full object-contain" />
-              </div>
-              <div>
-                <h2 className="text-white font-black text-2xl leading-tight tracking-tight">{orgName}</h2>
-                <p className="text-white/70 text-xs mt-0.5 uppercase tracking-widest font-semibold">
-                  Employee Pay Slip
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="text-right mr-2">
-                <p className="text-white/60 text-xs uppercase tracking-wide">Pay Period</p>
-                <p className="text-white font-bold text-base">{MONTHS[row.month - 1]} {row.year}</p>
-              </div>
-              <button
-                onClick={() => window.print()}
-                className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-3 py-2 rounded-lg transition-colors"
-              >
-                <Printer className="w-3.5 h-3.5" />Print
-              </button>
-              <button onClick={onClose} className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors">
-                <X className="w-4 h-4 text-white" />
-              </button>
-            </div>
+        {/* ── Screen-only toolbar ── */}
+        <div className="print:hidden flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200 rounded-t-xl">
+          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Pay Sheet — {monthLabel}</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-1.5 bg-primary text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors"
+            >
+              <Printer className="w-3.5 h-3.5" />Print
+            </button>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors">
+              <X className="w-4 h-4 text-slate-600" />
+            </button>
           </div>
-
         </div>
 
-        <div className="px-7 py-5 space-y-5">
+        {/* ── Payslip body (printable) ── */}
+        <div className="px-8 py-6" style={{ fontSize: "12px", color: "#000" }}>
 
-          {/* ── Employee Info ── */}
-          <div className="grid grid-cols-3 gap-4 border border-slate-100 rounded-xl p-4 bg-slate-50/50">
-            <div>
-              <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Employee Name</p>
-              <p className="font-bold text-slate-800 text-sm">{row.employee.fullName}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Employee ID</p>
-              <p className="font-semibold text-slate-700 text-sm">{row.employee.employeeId}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Status</p>
-              <span className={cn("inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide", STATUS_STYLES[row.status])}>
-                {row.status}
-              </span>
-            </div>
-            <div>
-              <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Designation</p>
-              <p className="font-semibold text-slate-700 text-sm">{row.employee.designation}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Department</p>
-              <p className="font-semibold text-slate-700 text-sm">{row.employee.department}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Pay Period</p>
-              <p className="font-semibold text-slate-700 text-sm">{MONTHS[row.month - 1]} {row.year}</p>
-            </div>
+          {/* Company header */}
+          <div className="mb-1">
+            <p style={{ fontWeight: "bold", textDecoration: "underline", fontSize: "14px" }}>{orgName}</p>
+            <p style={{ color: "#555" }}>({pvNumber})</p>
           </div>
 
-          {/* ── Attendance Summary ── */}
-          <div className="grid grid-cols-5 gap-2">
-            {[
-              { label: "Working Days", val: row.workingDays, color: "bg-blue-50 text-blue-700 border-blue-100" },
-              { label: "Present",      val: row.presentDays,  color: "bg-emerald-50 text-emerald-700 border-emerald-100" },
-              { label: "Absent",       val: row.absentDays,   color: "bg-red-50 text-red-600 border-red-100" },
-              { label: "Late",         val: row.lateDays,     color: "bg-amber-50 text-amber-700 border-amber-100" },
-              { label: "OT Hours",     val: row.overtimeHours.toFixed(1), color: "bg-purple-50 text-purple-700 border-purple-100" },
-            ].map(s => (
-              <div key={s.label} className={cn("rounded-xl border p-3 text-center", s.color)}>
-                <p className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{s.label}</p>
-                <p className="font-black text-lg mt-0.5">{s.val}</p>
-              </div>
-            ))}
+          {/* PAY SHEET / OFFICE COPY */}
+          <div className="flex justify-between items-center border-b border-black pb-1 mb-3">
+            <span style={{ fontWeight: "600", letterSpacing: "0.05em" }}>PAY SHEET</span>
+            <span style={{ fontWeight: "600", letterSpacing: "0.05em" }}>OFFICE COPY</span>
           </div>
 
-          {/* ── Earnings & Deductions ── */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* Earnings */}
-            <div className="border border-emerald-100 rounded-xl overflow-hidden">
-              <div className="bg-emerald-600 px-4 py-2.5 flex items-center gap-2">
-                <TrendingUp className="w-3.5 h-3.5 text-white" />
-                <span className="text-white text-xs font-bold uppercase tracking-wide">Earnings</span>
-              </div>
-              <div className="px-4 py-3 space-y-2">
-                {earnings.map(e => (
-                  <div key={e.label} className="flex justify-between items-center text-sm">
-                    <span className="text-slate-500">{e.label}</span>
-                    <span className="font-semibold text-slate-800">{fmt(e.val)}</span>
-                  </div>
-                ))}
-                <div className="flex justify-between items-center pt-2 mt-1 border-t border-emerald-100">
-                  <span className="text-sm font-bold text-emerald-700">Gross Salary</span>
-                  <span className="font-bold text-emerald-700">{fmt(row.grossSalary)}</span>
+          {/* Month + Employee info */}
+          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "12px" }}>
+            <tbody>
+              <tr>
+                <td style={{ fontWeight: "bold", paddingBottom: "2px", width: "60%" }}>MONTH</td>
+                <td style={{ fontWeight: "bold", textAlign: "right" }}>{monthLabel}</td>
+              </tr>
+              <tr>
+                <td colSpan={2} style={{ paddingBottom: "2px" }}>{row.employee.fullName}</td>
+              </tr>
+              <tr>
+                <td style={{ paddingBottom: "4px" }}>EPF No.  :</td>
+                <td style={{ textAlign: "right", fontWeight: "600" }}>{epfNo}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Payment details table */}
+          <table style={{ width: "100%", borderCollapse: "collapse", borderTop: "1px solid #000" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #000" }}>
+                <th style={{ textAlign: "left", padding: "4px 4px", fontWeight: "bold" }}>PAYMENT DETAILS</th>
+                <th style={{ textAlign: "right", padding: "4px 4px", fontWeight: "bold", width: "50px" }}>Rs.</th>
+                <th style={{ textAlign: "right", padding: "4px 8px", fontWeight: "bold", width: "110px" }}>Cts.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr
+                  key={i}
+                  style={{
+                    borderTop: r.borderTop ? "1px solid #000" : undefined,
+                    borderBottom: r.borderBottom ? "1px solid #000" : undefined,
+                  }}
+                >
+                  <td
+                    style={{
+                      padding: "3px 4px",
+                      paddingLeft: r.indent ? "24px" : "4px",
+                      fontStyle: r.italic ? "italic" : "normal",
+                      fontWeight: r.bold ? "bold" : "normal",
+                    }}
+                  >
+                    {r.label}
+                  </td>
+                  <td />
+                  <td
+                    style={{
+                      textAlign: "right",
+                      padding: "3px 8px",
+                      fontStyle: r.italic ? "italic" : "normal",
+                      fontWeight: r.bold ? "bold" : "normal",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {r.value}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Attendance summary (screen only) */}
+          <div className="print:hidden mt-4 pt-3 border-t border-dashed border-slate-300">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Attendance Summary</p>
+            <div className="grid grid-cols-5 gap-2 text-center text-[10px]">
+              {[
+                { label: "Working", val: row.workingDays },
+                { label: "Present",  val: row.presentDays },
+                { label: "Absent",   val: row.absentDays },
+                { label: "Late",     val: row.lateDays },
+                { label: "OT hrs",   val: row.overtimeHours.toFixed(1) },
+              ].map(s => (
+                <div key={s.label} className="bg-slate-50 rounded-lg py-1.5 border border-slate-100">
+                  <p className="text-slate-400 font-medium">{s.label}</p>
+                  <p className="font-bold text-slate-700 text-xs">{s.val}</p>
                 </div>
-              </div>
-            </div>
-
-            {/* Deductions */}
-            <div className="border border-red-100 rounded-xl overflow-hidden">
-              <div className="bg-red-500 px-4 py-2.5 flex items-center gap-2">
-                <Minus className="w-3.5 h-3.5 text-white" />
-                <span className="text-white text-xs font-bold uppercase tracking-wide">Deductions</span>
-              </div>
-              <div className="px-4 py-3 space-y-2">
-                {deductions.map(d => (
-                  <div key={d.label} className="flex justify-between items-center text-sm">
-                    <span className="text-slate-500">{d.label}</span>
-                    <span className="font-semibold text-red-600">{fmt(d.val)}</span>
-                  </div>
-                ))}
-                <div className="flex justify-between items-center pt-2 mt-1 border-t border-red-100">
-                  <span className="text-sm font-bold text-red-600">Total Deductions</span>
-                  <span className="font-bold text-red-600">{fmt(row.totalDeductions)}</span>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
 
-          {/* ── Employer Contributions ── */}
-          <div className="border border-indigo-100 rounded-xl overflow-hidden">
-            <div className="bg-indigo-50 border-b border-indigo-100 px-4 py-2 flex items-center gap-2">
-              <Building2 className="w-3.5 h-3.5 text-indigo-600" />
-              <span className="text-indigo-700 text-xs font-bold uppercase tracking-wide">Employer Contributions</span>
-              <span className="text-[10px] text-indigo-400 ml-1">(not deducted from employee)</span>
+          {/* Signature area */}
+          <div style={{ marginTop: "28px" }}>
+            <div className="flex justify-between items-end">
+              <div>
+                <p style={{ borderBottom: "1px dotted #000", minWidth: "160px", marginBottom: "2px" }}>&nbsp;</p>
+                <p style={{ fontWeight: "600" }}>SIGNATURE</p>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <p style={{ borderBottom: "1px dotted #000", minWidth: "140px", marginBottom: "2px", textAlign: "right" }}>{dateStr}</p>
+                <p style={{ fontWeight: "600" }}>DATE</p>
+              </div>
             </div>
-            <div className="px-4 py-3 grid grid-cols-3 gap-4 text-sm">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">EPF – Employer (12%)</span>
-                <span className="font-semibold text-indigo-700">{fmt(row.epfEmployer)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">ETF (3%)</span>
-                <span className="font-semibold text-indigo-700">{fmt(row.etfEmployer)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-semibold">Total Employer Cost</span>
-                <span className="font-bold text-indigo-800">{fmt(row.grossSalary + row.epfEmployer + row.etfEmployer)}</span>
-              </div>
+            <div style={{ marginTop: "16px" }}>
+              <p style={{ borderBottom: "1px dotted #000", minWidth: "160px", marginBottom: "2px", display: "inline-block" }}>&nbsp;</p>
+              <p style={{ fontWeight: "600" }}>PAYING AUTHORITY</p>
             </div>
           </div>
 
-          {/* ── Net Salary ── */}
-          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-xl px-6 py-5 flex items-center justify-between">
-            <div>
-              <p className="text-white/70 text-xs uppercase tracking-widest font-semibold mb-1">Net Salary (Take Home)</p>
-              <p className="text-3xl font-black text-white">{fmt(row.netSalary)}</p>
-            </div>
-            <div className="text-right">
-              <div className="text-white/60 text-xs space-y-0.5">
-                <p>Gross: <span className="text-white font-semibold">{fmt(row.grossSalary)}</span></p>
-                <p>Deductions: <span className="text-red-300 font-semibold">− {fmt(row.totalDeductions)}</span></p>
-              </div>
-            </div>
-          </div>
-
-          {/* ── Footer ── */}
-          <div className="flex items-center justify-between pt-1 pb-2 text-[10px] text-slate-400 border-t border-slate-100">
-            <p>Generated: {new Date(row.generatedAt).toLocaleDateString("en-LK", { day: "2-digit", month: "long", year: "numeric" })}</p>
-            <p>This is a computer-generated payslip and does not require a signature.</p>
-          </div>
         </div>
       </div>
     </div>
