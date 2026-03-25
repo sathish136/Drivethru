@@ -284,18 +284,42 @@ router.get("/", async (req, res) => {
       rec: attendanceRecords,
       empName: employees.fullName,
       empCode: employees.employeeId,
+      empDept: employees.department,
+      empShiftId: employees.shiftId,
       branchName: branches.name,
     }).from(attendanceRecords)
       .leftJoin(employees, eq(attendanceRecords.employeeId, employees.id))
       .leftJoin(branches, eq(attendanceRecords.branchId, branches.id));
 
-    let filtered = all;
+    const allShifts = await db.select().from(shifts);
+    const shiftMap = new Map(allShifts.map(s => [s.id, s]));
+    const hrRules = await loadDeptRules();
+
+    function getEffectiveStatus(rec: typeof attendanceRecords.$inferSelect, empShift: typeof allShifts[0] | undefined, department: string | null) {
+      const rule = findRule(hrRules, department || "", empShift?.name);
+      let st = rec.status;
+      if (st === "present" && rec.inTime1) {
+        const shiftStartMins = empShift?.startTime1 ? timeToMins(empShift.startTime1) : 8 * 60;
+        const grace = rule.lateGraceMinutes ?? (empShift?.graceMinutes ?? 15);
+        if (timeToMins(rec.inTime1) > shiftStartMins + grace) st = "late";
+      }
+      if ((st === "present" || st === "late") && rec.totalHours != null) {
+        if (rec.totalHours < (rule.halfDayHours ?? 5)) st = "half_day";
+      }
+      return st;
+    }
+
+    let filtered = all.map(r => ({
+      ...r,
+      effectiveStatus: getEffectiveStatus(r.rec, r.empShiftId ? shiftMap.get(r.empShiftId) ?? undefined : undefined, r.empDept),
+    }));
+
     if (branchId) filtered = filtered.filter(r => r.rec.branchId === Number(branchId));
     if (employeeId) filtered = filtered.filter(r => r.rec.employeeId === Number(employeeId));
     if (date) filtered = filtered.filter(r => r.rec.date === date);
     if (startDate) filtered = filtered.filter(r => r.rec.date >= (startDate as string));
     if (endDate) filtered = filtered.filter(r => r.rec.date <= (endDate as string));
-    if (status) filtered = filtered.filter(r => r.rec.status === status);
+    if (status) filtered = filtered.filter(r => r.effectiveStatus === status);
 
     const total = filtered.length;
     const p = Number(page), l = Number(limit);
@@ -304,6 +328,7 @@ router.get("/", async (req, res) => {
     res.json({
       records: paginated.map(r => ({
         ...r.rec,
+        status: r.effectiveStatus,
         employeeName: r.empName || "Unknown",
         employeeCode: r.empCode || "",
         branchName: r.branchName || "",
