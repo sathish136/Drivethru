@@ -34,6 +34,7 @@ import {
   CalendarClock,
   Banknote,
   CalendarDays,
+  Gift,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -66,6 +67,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/holidays",         label: "Holidays",         icon: CalendarDays  },
       { href: "/leave-balances",   label: "Leave Balances",   icon: CalendarClock },
       { href: "/loans",            label: "Loans & Advances", icon: Banknote      },
+      { href: "/incentives",       label: "Incentives",       icon: Gift          },
     ],
   },
   {

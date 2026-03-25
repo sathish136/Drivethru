@@ -21,6 +21,7 @@ import activityLogsRouter from "./activity-logs.js";
 import checkinImportRouter from "./checkin-import.js";
 import leaveBalancesRouter from "./leave-balances.js";
 import loansRouter from "./loans.js";
+import incentivesRouter from "./incentives.js";
 import backupRouter from "./backup.js";
 
 const router: IRouter = Router();
@@ -47,6 +48,7 @@ router.use("/hr-settings", hrSettingsRouter);
 router.use("/activity-logs", activityLogsRouter);
 router.use("/leave-balances", leaveBalancesRouter);
 router.use("/loans", loansRouter);
+router.use("/incentives", incentivesRouter);
 router.use("/backup", backupRouter);
 
 export default router;

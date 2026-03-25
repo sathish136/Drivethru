@@ -106,3 +106,22 @@ export const staffLoans = pgTable("staff_loans", {
 
 export const insertStaffLoanSchema = createInsertSchema(staffLoans).omit({ id: true, createdAt: true, updatedAt: true });
 export type StaffLoan = typeof staffLoans.$inferSelect;
+
+/* ── Staff Incentives ───────────────────────────────────── */
+
+export const staffIncentives = pgTable("staff_incentives", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employee_id").notNull().references(() => employees.id),
+  month: integer("month").notNull(),
+  year: integer("year").notNull(),
+  type: text("type").notNull().$type<"performance" | "attendance" | "festival" | "lunch" | "other">().default("other"),
+  amount: real("amount").notNull(),
+  reason: text("reason"),
+  status: text("status").notNull().$type<"pending" | "approved" | "paid">().default("pending"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertStaffIncentiveSchema = createInsertSchema(staffIncentives).omit({ id: true, createdAt: true, updatedAt: true });
+export type StaffIncentive = typeof staffIncentives.$inferSelect;

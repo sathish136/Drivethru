@@ -45,6 +45,7 @@ Dark sidebar, clean white content area
 12. **Biometric Devices** - ZKTeco ZK Push ADMS setup, device management, push logs
 13. **User Management** - Role-based access (super_admin, regional_admin, branch_admin, viewer)
 14. **Settings** - Organization config, ZK Push setup, holiday management
+15. **Incentives** - Per-employee incentive management (performance, attendance, festival, lunch, other bonuses). CRUD with status workflow (pending → approved → paid), summary cards, type breakdown, filters by month/year/type/status (`/incentives`)
 
 ### Attendance Status Colors
 - Present (P): green
