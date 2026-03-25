@@ -197,33 +197,41 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
         <div className="px-8 py-6" style={{ fontSize: "12px", color: "#000" }}>
 
           {/* Company header */}
-          <div className="mb-1">
-            <p style={{ fontWeight: "bold", textDecoration: "underline", fontSize: "14px" }}>{orgName}</p>
-            <p style={{ color: "#555" }}>({pvNumber})</p>
+          <div className="mb-4 pb-3 border-b-2" style={{ borderColor: "#3a9ec2" }}>
+            <div className="flex items-center gap-3 mb-1">
+              <img src={drivethruLogo} alt="Drivethru Logo" style={{ height: "36px", width: "auto" }} />
+              <div>
+                <p style={{ fontWeight: "bold", fontSize: "16px", color: "#1a2a3a", letterSpacing: "0.01em" }}>{orgName}</p>
+                <p style={{ fontSize: "10px", color: "#3a9ec2", fontWeight: "600", letterSpacing: "0.08em", textTransform: "uppercase" }}>Employee Pay Sheet</p>
+              </div>
+            </div>
+            <div className="flex justify-between items-center mt-2">
+              <span style={{ fontSize: "11px", color: "#555" }}>Ref: {pvNumber}</span>
+              <span style={{ fontSize: "11px", fontWeight: "600", color: "#3a9ec2", background: "#eaf6fb", padding: "2px 10px", borderRadius: "12px" }}>OFFICE COPY</span>
+            </div>
           </div>
 
-          {/* PAY SHEET / OFFICE COPY */}
-          <div className="flex justify-between items-center border-b border-black pb-1 mb-3">
-            <span style={{ fontWeight: "600", letterSpacing: "0.05em" }}>PAY SHEET</span>
-            <span style={{ fontWeight: "600", letterSpacing: "0.05em" }}>OFFICE COPY</span>
+          {/* PAY SHEET title bar */}
+          <div className="flex justify-between items-center mb-3" style={{ background: "#3a9ec2", borderRadius: "6px", padding: "5px 12px" }}>
+            <span style={{ fontWeight: "700", letterSpacing: "0.08em", color: "#fff", fontSize: "12px" }}>PAY SHEET</span>
+            <span style={{ fontWeight: "600", color: "#fff", fontSize: "11px" }}>{monthLabel}</span>
           </div>
 
-          {/* Month + Employee info */}
-          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "12px" }}>
-            <tbody>
-              <tr>
-                <td style={{ fontWeight: "bold", paddingBottom: "2px", width: "60%" }}>MONTH</td>
-                <td style={{ fontWeight: "bold", textAlign: "right" }}>{monthLabel}</td>
-              </tr>
-              <tr>
-                <td colSpan={2} style={{ paddingBottom: "2px" }}>{row.employee.fullName}</td>
-              </tr>
-              <tr>
-                <td style={{ paddingBottom: "4px" }}>EPF No.  :</td>
-                <td style={{ textAlign: "right", fontWeight: "600" }}>{epfNo}</td>
-              </tr>
-            </tbody>
-          </table>
+          {/* Employee info */}
+          <div className="mb-3 p-3 rounded-lg" style={{ background: "#f4fbfe", border: "1px solid #c8e9f5" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <tbody>
+                <tr>
+                  <td style={{ color: "#555", paddingBottom: "3px", width: "40%" }}>Employee Name</td>
+                  <td style={{ fontWeight: "bold", color: "#1a2a3a" }}>: {row.employee.fullName}</td>
+                </tr>
+                <tr>
+                  <td style={{ color: "#555" }}>EPF No.</td>
+                  <td style={{ fontWeight: "600", color: "#1a2a3a" }}>: {epfNo}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
           {/* Payment details table */}
           <table style={{ width: "100%", borderCollapse: "collapse", borderTop: "1px solid #000" }}>
