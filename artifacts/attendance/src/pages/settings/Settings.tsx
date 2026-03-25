@@ -4,7 +4,7 @@ import { PageHeader, Card, Button, Input, Label, Select } from "@/components/ui"
 import { cn } from "@/lib/utils";
 import {
   Calendar, Plus, Trash2, Copy, Check, Building, Clock,
-  Fingerprint, Users, ShieldCheck, FileText, Briefcase, ChevronRight,
+  Fingerprint, Users, ChevronRight,
   Database, Download, AlertTriangle, CheckCircle2, Upload, X,
   Banknote, Percent, DollarSign, Save, RefreshCw, Edit2
 } from "lucide-react";
@@ -47,7 +47,6 @@ export default function Settings() {
 
   const [orgSaved,  setOrgSaved]  = useState(false);
   const [attSaved,  setAttSaved]  = useState(false);
-  const [hrSaved,   setHrSaved]   = useState(false);
   const [zkSaved,   setZkSaved]   = useState(false);
 
   const [logoUrl, setLogoUrl] = useState<string>(() => localStorage.getItem("org_logo") || "");
@@ -174,16 +173,104 @@ export default function Settings() {
     setRestoring(false);
   }
 
-  const [hrSettings, setHrSettings] = useState({
-    annualLeave: "21", sickLeave: "12", casualLeave: "7",
-    maternityLeave: "180", paternityLeave: "15",
-    probationPeriod: "6", noticePeriod: "30", retirementAge: "60",
-    epfEmployee: "12", epfEmployer: "3.67",
-    esiEmployee: "0.75", esiEmployer: "3.25",
-    workingHoursPerDay: "8", workingDaysPerMonth: "26",
-    salaryDay: "1", payrollCutoff: "25",
-  });
-  function setHr(k: string, v: string) { setHrSettings(s => ({ ...s, [k]: v })); }
+  interface DeptShiftRule {
+    id: string;
+    department: string;
+    shift: string;
+    minHours: number;
+    maxHours: number | null;
+    otEligible: boolean;
+    otAfterHours: number | null;
+    lateGraceMinutes: number | null;
+    lunchMinHours: number | null;
+    lunchMaxHours: number | null;
+    flexible: boolean;
+    multipleLogin: boolean;
+    otMultiplier: number | null;
+    offdayOtMultiplier: number | null;
+    notes: string;
+  }
+
+  const DEFAULT_DEPT_RULES: DeptShiftRule[] = [
+    { id: "1", department: "Kitchen",       shift: "Kitchen Shift", minHours: 9, maxHours: 12,   otEligible: true,  otAfterHours: 9.5, lateGraceMinutes: 15, lunchMinHours: 1, lunchMaxHours: 2, flexible: false, multipleLogin: false, otMultiplier: 1.5, offdayOtMultiplier: 1.5, notes: "Split shift"    },
+    { id: "2", department: "House Keeping", shift: "Regular",       minHours: 9, maxHours: 9,    otEligible: true,  otAfterHours: 9.5, lateGraceMinutes: 15, lunchMinHours: 1, lunchMaxHours: 1, flexible: false, multipleLogin: false, otMultiplier: 1.5, offdayOtMultiplier: 1.5, notes: "Lunch tracking" },
+    { id: "3", department: "Maintenance",   shift: "Regular",       minHours: 9, maxHours: 9,    otEligible: true,  otAfterHours: 9.5, lateGraceMinutes: 15, lunchMinHours: 1, lunchMaxHours: 1, flexible: false, multipleLogin: false, otMultiplier: 1.5, offdayOtMultiplier: 1.5, notes: "Standard"      },
+    { id: "4", department: "Surf",          shift: "Flexible",      minHours: 0, maxHours: null, otEligible: true,  otAfterHours: 9,   lateGraceMinutes: null, lunchMinHours: null, lunchMaxHours: null, flexible: true, multipleLogin: true, otMultiplier: 1.5, offdayOtMultiplier: 1.5, notes: "Flexible work" },
+    { id: "5", department: "Admin",         shift: "Regular",       minHours: 9, maxHours: 9,    otEligible: true,  otAfterHours: 9.5, lateGraceMinutes: 15, lunchMinHours: 1, lunchMaxHours: 1, flexible: false, multipleLogin: false, otMultiplier: 1.5, offdayOtMultiplier: 1.5, notes: "Office"        },
+    { id: "6", department: "Security",      shift: "Night",         minHours: 9, maxHours: 12,   otEligible: true,  otAfterHours: 9,   lateGraceMinutes: 15, lunchMinHours: 1, lunchMaxHours: 1, flexible: false, multipleLogin: false, otMultiplier: 1.5, offdayOtMultiplier: 1.5, notes: "Night shift"   },
+    { id: "7", department: "Manager",       shift: "Flexible",      minHours: 0, maxHours: null, otEligible: false, otAfterHours: null, lateGraceMinutes: null, lunchMinHours: null, lunchMaxHours: null, flexible: true, multipleLogin: true, otMultiplier: null, offdayOtMultiplier: 1.5, notes: "No OT"  },
+  ];
+
+  const BLANK_RULE: DeptShiftRule = { id: "", department: "", shift: "", minHours: 9, maxHours: 9, otEligible: true, otAfterHours: 9.5, lateGraceMinutes: 15, lunchMinHours: 1, lunchMaxHours: 1, flexible: false, multipleLogin: false, otMultiplier: 1.5, offdayOtMultiplier: 1.5, notes: "" };
+
+  const [deptRules, setDeptRules] = useState<DeptShiftRule[]>(DEFAULT_DEPT_RULES);
+  const [deptRulesLoading, setDeptRulesLoading] = useState(false);
+  const [deptRulesSaving, setDeptRulesSaving] = useState(false);
+  const [deptRulesSaved, setDeptRulesSaved] = useState(false);
+  const [deptRulesError, setDeptRulesError] = useState<string | null>(null);
+  const [showRuleModal, setShowRuleModal] = useState(false);
+  const [editingRule, setEditingRule] = useState<DeptShiftRule>(BLANK_RULE);
+  const [ruleModalMode, setRuleModalMode] = useState<"add" | "edit">("add");
+
+  async function loadDeptRules() {
+    setDeptRulesLoading(true);
+    try {
+      const r = await fetch(apiUrl("/hr-settings"));
+      const d = await r.json();
+      if (Array.isArray(d.departmentRules) && d.departmentRules.length > 0) {
+        const rules = d.departmentRules as DeptShiftRule[];
+        if (rules[0] && "department" in rules[0] && "shift" in rules[0]) {
+          setDeptRules(rules);
+        }
+      }
+    } catch { /* keep defaults */ }
+    setDeptRulesLoading(false);
+  }
+
+  async function saveDeptRules(rules: DeptShiftRule[]) {
+    setDeptRulesSaving(true); setDeptRulesError(null);
+    try {
+      const r = await fetch(apiUrl("/hr-settings"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ departmentRules: rules }),
+      });
+      const d = await r.json();
+      if (d.id || d.departmentRules) { setDeptRulesSaved(true); setTimeout(() => setDeptRulesSaved(false), 2500); }
+      else setDeptRulesError(d.message || "Save failed");
+    } catch { setDeptRulesError("Failed to save rules"); }
+    setDeptRulesSaving(false);
+  }
+
+  function openAddRule() {
+    setEditingRule({ ...BLANK_RULE, id: crypto.randomUUID() });
+    setRuleModalMode("add");
+    setShowRuleModal(true);
+  }
+
+  function openEditRule(rule: DeptShiftRule) {
+    setEditingRule({ ...rule });
+    setRuleModalMode("edit");
+    setShowRuleModal(true);
+  }
+
+  function saveRule() {
+    const updated = ruleModalMode === "add"
+      ? [...deptRules, editingRule]
+      : deptRules.map(r => r.id === editingRule.id ? editingRule : r);
+    setDeptRules(updated);
+    saveDeptRules(updated);
+    setShowRuleModal(false);
+  }
+
+  function deleteRule(id: string) {
+    if (!confirm("Delete this rule?")) return;
+    const updated = deptRules.filter(r => r.id !== id);
+    setDeptRules(updated);
+    saveDeptRules(updated);
+  }
+
+  function setER<K extends keyof DeptShiftRule>(k: K, v: DeptShiftRule[K]) { setEditingRule(s => ({ ...s, [k]: v })); }
 
   const DEFAULT_SALARY_SCALE: Record<string, number> = {
     "General Manager":      150000,
@@ -227,6 +314,7 @@ export default function Settings() {
 
   useEffect(() => {
     if (activeTab === "database") { loadDbStats(); }
+    if (activeTab === "hr") { loadDeptRules(); }
   }, [activeTab]);
 
   useEffect(() => {
@@ -504,77 +592,236 @@ export default function Settings() {
         {/* ── HR Settings ───────────────────────────────────── */}
         {activeTab === "hr" && (
           <div className="space-y-4">
-            {/* Leave Policy */}
             <Card className="p-5">
-              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border">
-                <FileText className="w-4 h-4 text-primary" />
-                <span className="text-sm font-bold">Leave Policy</span>
-                <span className="text-xs text-muted-foreground ml-1">— days per year</span>
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-violet-600" />
+                  <span className="text-sm font-bold">Department Shift Rules</span>
+                  <span className="text-xs text-muted-foreground ml-1">— per-department attendance & OT configuration</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {deptRulesError && <span className="text-xs text-red-600">{deptRulesError}</span>}
+                  {deptRulesSaved && <span className="text-xs text-emerald-600 flex items-center gap-1"><Check className="w-3 h-3" />Saved</span>}
+                  {deptRulesSaving && <span className="text-xs text-muted-foreground">Saving…</span>}
+                  <Button className="flex items-center gap-1.5 text-xs h-8 bg-primary text-primary-foreground" onClick={openAddRule}>
+                    <Plus className="w-3.5 h-3.5" />Add Rule
+                  </Button>
+                </div>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div><Label className="text-xs">Annual / Earned Leave</Label>
-                  <Input type="number" value={hrSettings.annualLeave} onChange={e => setHr("annualLeave", e.target.value)} /></div>
-                <div><Label className="text-xs">Sick / Medical Leave</Label>
-                  <Input type="number" value={hrSettings.sickLeave} onChange={e => setHr("sickLeave", e.target.value)} /></div>
-                <div><Label className="text-xs">Casual Leave</Label>
-                  <Input type="number" value={hrSettings.casualLeave} onChange={e => setHr("casualLeave", e.target.value)} /></div>
-                <div><Label className="text-xs">Maternity Leave (Days)</Label>
-                  <Input type="number" value={hrSettings.maternityLeave} onChange={e => setHr("maternityLeave", e.target.value)} /></div>
-                <div><Label className="text-xs">Paternity Leave (Days)</Label>
-                  <Input type="number" value={hrSettings.paternityLeave} onChange={e => setHr("paternityLeave", e.target.value)} /></div>
-              </div>
+
+              {deptRulesLoading ? (
+                <div className="flex items-center justify-center h-20">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs min-w-[900px]">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/40">
+                        {["Department","Shift","Min h","Max h","OT?","OT After","Grace","Lunch (hrs)","Flex","Multi Login","OT ×","Offday ×","Notes",""].map(h => (
+                          <th key={h} className="text-left px-3 py-2 font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {deptRules.map((rule, i) => (
+                        <tr key={rule.id} className={`border-b border-border/50 hover:bg-muted/30 transition-colors ${i % 2 === 0 ? "" : "bg-muted/10"}`}>
+                          <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">{rule.department}</td>
+                          <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{rule.shift}</td>
+                          <td className="px-3 py-2 text-center">{rule.minHours}</td>
+                          <td className="px-3 py-2 text-center">{rule.maxHours ?? <span className="text-muted-foreground">—</span>}</td>
+                          <td className="px-3 py-2 text-center">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${rule.otEligible ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                              {rule.otEligible ? "Yes" : "No"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-center">{rule.otAfterHours != null ? `${rule.otAfterHours}h` : <span className="text-muted-foreground">—</span>}</td>
+                          <td className="px-3 py-2 text-center">{rule.lateGraceMinutes != null ? `${rule.lateGraceMinutes} min` : <span className="text-muted-foreground">No</span>}</td>
+                          <td className="px-3 py-2 text-center">
+                            {rule.lunchMinHours != null
+                              ? (rule.lunchMaxHours != null && rule.lunchMaxHours !== rule.lunchMinHours ? `${rule.lunchMinHours}–${rule.lunchMaxHours}` : `${rule.lunchMinHours}`)
+                              : <span className="text-muted-foreground">—</span>}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${rule.flexible ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500"}`}>
+                              {rule.flexible ? "Yes" : "No"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${rule.multipleLogin ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500"}`}>
+                              {rule.multipleLogin ? "Yes" : "No"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-center">{rule.otMultiplier != null ? `${rule.otMultiplier}×` : <span className="text-muted-foreground">—</span>}</td>
+                          <td className="px-3 py-2 text-center">{rule.offdayOtMultiplier != null ? `${rule.offdayOtMultiplier}×` : <span className="text-muted-foreground">—</span>}</td>
+                          <td className="px-3 py-2 text-muted-foreground max-w-[120px] truncate">{rule.notes || "—"}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => openEditRule(rule)} className="p-1 rounded hover:bg-primary/10 text-primary transition-colors">
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => deleteRule(rule.id)} className="p-1 rounded hover:bg-red-50 text-red-500 transition-colors">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {deptRules.length === 0 && (
+                        <tr>
+                          <td colSpan={14} className="px-3 py-8 text-center text-muted-foreground text-xs">
+                            No department rules yet. Click "Add Rule" to create one.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </Card>
 
-            {/* Employment Terms */}
-            <Card className="p-5">
-              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border">
-                <Briefcase className="w-4 h-4 text-primary" />
-                <span className="text-sm font-bold">Employment Terms</span>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div><Label className="text-xs">Probation Period (Months)</Label>
-                  <Input type="number" value={hrSettings.probationPeriod} onChange={e => setHr("probationPeriod", e.target.value)} /></div>
-                <div><Label className="text-xs">Notice Period (Days)</Label>
-                  <Input type="number" value={hrSettings.noticePeriod} onChange={e => setHr("noticePeriod", e.target.value)} /></div>
-                <div><Label className="text-xs">Retirement Age</Label>
-                  <Input type="number" value={hrSettings.retirementAge} onChange={e => setHr("retirementAge", e.target.value)} /></div>
-                <div><Label className="text-xs">Working Hours / Day</Label>
-                  <Input type="number" value={hrSettings.workingHoursPerDay} onChange={e => setHr("workingHoursPerDay", e.target.value)} /></div>
-              </div>
-            </Card>
+            {/* Add / Edit Rule Modal */}
+            {showRuleModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+                <div className="bg-card rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-border">
+                  <div className="flex items-center justify-between p-5 border-b border-border">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-violet-600" />
+                      <span className="font-bold text-sm">{ruleModalMode === "add" ? "Add" : "Edit"} Department Rule</span>
+                    </div>
+                    <button onClick={() => setShowRuleModal(false)} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
 
-            {/* Payroll & Statutory */}
-            <Card className="p-5">
-              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border">
-                <ShieldCheck className="w-4 h-4 text-primary" />
-                <span className="text-sm font-bold">Payroll & Statutory Deductions</span>
-                <span className="text-xs text-muted-foreground ml-1">— percentages (%)</span>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div><Label className="text-xs">EPF — Employee %</Label>
-                  <Input type="number" step="0.01" value={hrSettings.epfEmployee} onChange={e => setHr("epfEmployee", e.target.value)} /></div>
-                <div><Label className="text-xs">EPF — Employer %</Label>
-                  <Input type="number" step="0.01" value={hrSettings.epfEmployer} onChange={e => setHr("epfEmployer", e.target.value)} /></div>
-                <div><Label className="text-xs">ESI — Employee %</Label>
-                  <Input type="number" step="0.01" value={hrSettings.esiEmployee} onChange={e => setHr("esiEmployee", e.target.value)} /></div>
-                <div><Label className="text-xs">ESI — Employer %</Label>
-                  <Input type="number" step="0.01" value={hrSettings.esiEmployer} onChange={e => setHr("esiEmployer", e.target.value)} /></div>
-                <div><Label className="text-xs">Working Days / Month</Label>
-                  <Input type="number" value={hrSettings.workingDaysPerMonth} onChange={e => setHr("workingDaysPerMonth", e.target.value)} /></div>
-                <div><Label className="text-xs">Salary Credit Day</Label>
-                  <Select value={hrSettings.salaryDay} onChange={e => setHr("salaryDay", e.target.value)}>
-                    {[1,5,10,15,25,28,30].map(d => <option key={d} value={d}>Day {d} of Month</option>)}
-                  </Select></div>
-                <div><Label className="text-xs">Payroll Cutoff Day</Label>
-                  <Input type="number" value={hrSettings.payrollCutoff} onChange={e => setHr("payrollCutoff", e.target.value)} /></div>
-              </div>
-            </Card>
+                  <div className="p-5 space-y-4">
+                    {/* Identity */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">Department *</Label>
+                        <Input value={editingRule.department} onChange={e => setER("department", e.target.value)} placeholder="e.g. Kitchen" />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">Shift *</Label>
+                        <Input value={editingRule.shift} onChange={e => setER("shift", e.target.value)} placeholder="e.g. Kitchen Shift" />
+                      </div>
+                    </div>
 
-            <div className="flex justify-end">
-              <Button className="text-xs flex items-center gap-2" onClick={() => saveFn(setHrSaved)}>
-                {hrSaved ? <><Check className="w-3.5 h-3.5 text-green-400" />Saved!</> : "Save HR Settings"}
-              </Button>
-            </div>
+                    {/* Hours */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">Min Hours / Day</Label>
+                        <Input type="number" step="0.5" min="0" value={editingRule.minHours} onChange={e => setER("minHours", parseFloat(e.target.value) || 0)} />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">Max Hours / Day <span className="text-muted-foreground font-normal">(blank = unlimited)</span></Label>
+                        <Input type="number" step="0.5" min="0"
+                          value={editingRule.maxHours ?? ""}
+                          onChange={e => setER("maxHours", e.target.value === "" ? null : parseFloat(e.target.value))}
+                          placeholder="—" />
+                      </div>
+                    </div>
+
+                    {/* OT */}
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">OT Eligible</Label>
+                        <Select value={editingRule.otEligible ? "yes" : "no"} onChange={e => setER("otEligible", e.target.value === "yes")}>
+                          <option value="yes">Yes</option>
+                          <option value="no">No</option>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">OT After (hours) <span className="text-muted-foreground font-normal">(blank = N/A)</span></Label>
+                        <Input type="number" step="0.5" min="0"
+                          value={editingRule.otAfterHours ?? ""}
+                          onChange={e => setER("otAfterHours", e.target.value === "" ? null : parseFloat(e.target.value))}
+                          placeholder="—" />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">OT Multiplier <span className="text-muted-foreground font-normal">(blank = N/A)</span></Label>
+                        <Input type="number" step="0.1" min="0"
+                          value={editingRule.otMultiplier ?? ""}
+                          onChange={e => setER("otMultiplier", e.target.value === "" ? null : parseFloat(e.target.value))}
+                          placeholder="—" />
+                      </div>
+                    </div>
+
+                    {/* Offday OT / Grace */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">Offday OT Multiplier <span className="text-muted-foreground font-normal">(blank = N/A)</span></Label>
+                        <Input type="number" step="0.1" min="0"
+                          value={editingRule.offdayOtMultiplier ?? ""}
+                          onChange={e => setER("offdayOtMultiplier", e.target.value === "" ? null : parseFloat(e.target.value))}
+                          placeholder="—" />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">Late Grace (minutes) <span className="text-muted-foreground font-normal">(blank = no grace)</span></Label>
+                        <Input type="number" step="1" min="0"
+                          value={editingRule.lateGraceMinutes ?? ""}
+                          onChange={e => setER("lateGraceMinutes", e.target.value === "" ? null : parseInt(e.target.value))}
+                          placeholder="—" />
+                      </div>
+                    </div>
+
+                    {/* Lunch */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">Lunch Min (hrs) <span className="text-muted-foreground font-normal">(blank = N/A)</span></Label>
+                        <Input type="number" step="0.5" min="0"
+                          value={editingRule.lunchMinHours ?? ""}
+                          onChange={e => setER("lunchMinHours", e.target.value === "" ? null : parseFloat(e.target.value))}
+                          placeholder="—" />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">Lunch Max (hrs) <span className="text-muted-foreground font-normal">(blank = same as min)</span></Label>
+                        <Input type="number" step="0.5" min="0"
+                          value={editingRule.lunchMaxHours ?? ""}
+                          onChange={e => setER("lunchMaxHours", e.target.value === "" ? null : parseFloat(e.target.value))}
+                          placeholder="—" />
+                      </div>
+                    </div>
+
+                    {/* Flags */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">Flexible Hours</Label>
+                        <Select value={editingRule.flexible ? "yes" : "no"} onChange={e => setER("flexible", e.target.value === "yes")}>
+                          <option value="no">No</option>
+                          <option value="yes">Yes</option>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium mb-1 block">Multiple Login Allowed</Label>
+                        <Select value={editingRule.multipleLogin ? "yes" : "no"} onChange={e => setER("multipleLogin", e.target.value === "yes")}>
+                          <option value="no">No</option>
+                          <option value="yes">Yes</option>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Notes */}
+                    <div>
+                      <Label className="text-xs font-medium mb-1 block">Notes</Label>
+                      <Input value={editingRule.notes} onChange={e => setER("notes", e.target.value)} placeholder="Any additional notes…" />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 p-5 border-t border-border">
+                    <Button variant="outline" className="text-xs h-9" onClick={() => setShowRuleModal(false)}>Cancel</Button>
+                    <Button
+                      className="text-xs h-9 bg-primary text-primary-foreground flex items-center gap-1.5"
+                      onClick={saveRule}
+                      disabled={!editingRule.department || !editingRule.shift || deptRulesSaving}
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      {deptRulesSaving ? "Saving…" : ruleModalMode === "add" ? "Add Rule" : "Save Changes"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
