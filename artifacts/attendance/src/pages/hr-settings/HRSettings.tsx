@@ -16,6 +16,7 @@ interface DeptShiftRule {
   otEligible: boolean;
   otAfterHours: number | null;
   lateGraceMinutes: number | null;
+  earlyExitGraceMinutes: number | null;
   lunchMinHours: number | null;
   lunchMaxHours: number | null;
   flexible: boolean;
@@ -34,7 +35,7 @@ interface ShiftOption  { id: number; name: string; startTime1: string; endTime1:
 
 const BLANK_RULE: DeptShiftRule = {
   id: "", department: "", shift: "", minHours: 9, maxHours: 9,
-  otEligible: true, otAfterHours: 9.5, lateGraceMinutes: 15,
+  otEligible: true, otAfterHours: 9.5, lateGraceMinutes: 15, earlyExitGraceMinutes: 15,
   lunchMinHours: 1, lunchMaxHours: 1,
   flexible: false, multipleLogin: false,
   otMultiplier: 1.5, offdayOtMultiplier: 1.5,
@@ -45,7 +46,7 @@ const BLANK_RULE: DeptShiftRule = {
 
 const COLS = [
   "Department", "Shift", "Start Time", "End Time", "Min h", "Break h", "OT?", "OT After",
-  "Grace", "Flex", "Multi", "Wk Leave", "Half-day h", "Present h", "Holiday OT", "Offday OT", "OT ×", "Staff", "Notes", "",
+  "Late Grace", "Exit Grace", "Flex", "Multi", "Wk Leave", "Half-day h", "Present h", "Holiday OT", "Offday OT", "OT ×", "Staff", "Notes", "",
 ];
 
 function clientFindRule(rules: DeptShiftRule[], department: string, shiftName?: string | null) {
@@ -271,6 +272,9 @@ export default function HRSettings() {
                     <td className="px-3 py-2.5 text-center">
                       {rule.lateGraceMinutes != null ? `${rule.lateGraceMinutes} min` : <span className="text-muted-foreground">—</span>}
                     </td>
+                    <td className="px-3 py-2.5 text-center">
+                      {rule.earlyExitGraceMinutes != null ? `${rule.earlyExitGraceMinutes} min` : <span className="text-muted-foreground">—</span>}
+                    </td>
                     <td className="px-3 py-2.5 text-center"><YesNo v={rule.flexible} yes="bg-blue-100 text-blue-700" /></td>
                     <td className="px-3 py-2.5 text-center"><YesNo v={rule.multipleLogin} yes="bg-blue-100 text-blue-700" /></td>
                     <td className="px-3 py-2.5 text-center">
@@ -321,7 +325,7 @@ export default function HRSettings() {
                 })}
                 {rules.length === 0 && (
                   <tr>
-                    <td colSpan={19} className="px-3 py-10 text-center text-muted-foreground text-xs">
+                    <td colSpan={20} className="px-3 py-10 text-center text-muted-foreground text-xs">
                       No rules yet.{" "}
                       {noDepts || noShifts
                         ? "Add departments and shifts first, then click Add Rule."
@@ -415,7 +419,7 @@ export default function HRSettings() {
                   <div className="w-1 h-4 rounded-full bg-blue-500" />
                   <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Working Hours</span>
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-xs font-medium mb-1.5 block">Min Hours / Day</Label>
                     <Input type="number" step="0.5" min="0"
@@ -430,11 +434,20 @@ export default function HRSettings() {
                       placeholder="Unlimited" />
                   </div>
                   <div>
-                    <Label className="text-xs font-medium mb-1.5 block">Late Grace (min)</Label>
+                    <Label className="text-xs font-medium mb-1.5 block">Late Arrival Grace (min)</Label>
                     <Input type="number" step="1" min="0"
                       value={editing.lateGraceMinutes ?? ""}
                       onChange={e => setE("lateGraceMinutes", e.target.value === "" ? null : parseInt(e.target.value))}
                       placeholder="No grace" />
+                    <p className="text-[10px] text-muted-foreground mt-1">Allows late clock-in without penalty</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">Early Exit Grace (min)</Label>
+                    <Input type="number" step="1" min="0"
+                      value={editing.earlyExitGraceMinutes ?? ""}
+                      onChange={e => setE("earlyExitGraceMinutes", e.target.value === "" ? null : parseInt(e.target.value))}
+                      placeholder="Same as late grace" />
+                    <p className="text-[10px] text-muted-foreground mt-1">Applied to min-present threshold</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4 mt-4">

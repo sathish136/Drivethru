@@ -11,6 +11,7 @@ export interface DeptShiftRule {
   otEligible: boolean;
   otAfterHours: number | null;
   lateGraceMinutes: number | null;
+  earlyExitGraceMinutes: number | null;
   lunchMinHours: number | null;
   lunchMaxHours: number | null;
   flexible: boolean;
@@ -33,6 +34,7 @@ export const DEFAULT_RULE: DeptShiftRule = {
   otEligible: true,
   otAfterHours: 9.5,
   lateGraceMinutes: 15,
+  earlyExitGraceMinutes: 15,
   lunchMinHours: 1,
   lunchMaxHours: 1,
   flexible: false,
