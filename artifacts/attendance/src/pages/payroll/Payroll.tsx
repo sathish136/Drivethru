@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { PageHeader, Card, Button, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import drivethruLogo from "@/assets/drivethru-brand.svg";
+import drivethruLogo from "@/assets/drivethru-wave-logo.png";
 import {
   Banknote, RefreshCw, CheckCircle, CreditCard,
   Users, TrendingUp, Minus, Eye, X, Printer,
@@ -170,118 +170,128 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
     { label: "ETF 3%",                  value: fmtAmt(etf3) },
   ];
 
+  const generatedAt = new Date().toLocaleString("en-LK", {
+    year: "numeric", month: "long", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true,
+  });
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
       <div
-        className="bg-white shadow-2xl w-full max-w-[520px] max-h-[95vh] overflow-y-auto rounded-xl"
+        className="bg-white shadow-2xl w-full max-w-[560px] max-h-[95vh] overflow-y-auto rounded-2xl"
         onClick={e => e.stopPropagation()}
-        style={{ fontFamily: "Arial, sans-serif" }}
+        style={{ fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif" }}
       >
         {/* ── Screen-only toolbar ── */}
-        <div className="print:hidden flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200 rounded-t-xl">
-          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Pay Sheet — {monthLabel}</span>
+        <div className="print:hidden flex items-center justify-between px-5 py-3 border-b border-slate-100 rounded-t-2xl bg-white">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Payslip · {monthLabel}</span>
           <div className="flex items-center gap-2">
             <button
               onClick={() => window.print()}
-              className="flex items-center gap-1.5 bg-primary text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors"
+              className="flex items-center gap-1.5 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all hover:opacity-90"
+              style={{ background: "linear-gradient(135deg,#3a9ec2,#2277a0)" }}
             >
-              <Printer className="w-3.5 h-3.5" />Print
+              <Printer className="w-3.5 h-3.5" /> Print
             </button>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors">
-              <X className="w-4 h-4 text-slate-600" />
+            <button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-100 transition-colors">
+              <X className="w-4 h-4 text-slate-500" />
             </button>
           </div>
         </div>
 
         {/* ── Payslip body (printable) ── */}
-        <div className="px-8 py-6" style={{ fontSize: "12px", color: "#000" }}>
+        <div>
 
-          {/* Company header */}
-          <div className="mb-4 pb-3 border-b-2" style={{ borderColor: "#3a9ec2" }}>
-            <div className="flex items-center gap-3 mb-1">
-              <img src={drivethruLogo} alt="Drivethru Logo" style={{ height: "36px", width: "auto" }} />
-              <div>
-                <p style={{ fontWeight: "bold", fontSize: "16px", color: "#1a2a3a", letterSpacing: "0.01em" }}>{orgName}</p>
-                <p style={{ fontSize: "10px", color: "#3a9ec2", fontWeight: "600", letterSpacing: "0.08em", textTransform: "uppercase" }}>Employee Pay Sheet</p>
+          {/* ── Hero header with logo ── */}
+          <div style={{ background: "linear-gradient(135deg,#0e2a3d 0%,#1a4a6e 60%,#3a9ec2 100%)", padding: "28px 32px 22px" }}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: "14px", padding: "8px", backdropFilter: "blur(4px)" }}>
+                  <img src={drivethruLogo} alt="Drivethru" style={{ height: "44px", width: "auto", display: "block" }} />
+                </div>
+                <div>
+                  <p style={{ color: "#fff", fontWeight: "700", fontSize: "17px", letterSpacing: "0.01em", lineHeight: 1.2 }}>{orgName}</p>
+                  <p style={{ color: "rgba(255,255,255,0.65)", fontSize: "11px", fontWeight: "500", letterSpacing: "0.06em", textTransform: "uppercase", marginTop: "3px" }}>Employee Pay Sheet</p>
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ background: "rgba(255,255,255,0.15)", borderRadius: "20px", padding: "4px 14px", display: "inline-block", marginBottom: "4px" }}>
+                  <span style={{ color: "#fff", fontWeight: "700", fontSize: "11px", letterSpacing: "0.08em" }}>OFFICE COPY</span>
+                </div>
+                <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "10px" }}>Ref: {pvNumber}</p>
               </div>
             </div>
-            <div className="flex justify-between items-center mt-2">
-              <span style={{ fontSize: "11px", color: "#555" }}>Ref: {pvNumber}</span>
-              <span style={{ fontSize: "11px", fontWeight: "600", color: "#3a9ec2", background: "#eaf6fb", padding: "2px 10px", borderRadius: "12px" }}>OFFICE COPY</span>
+
+            {/* Month banner */}
+            <div style={{ marginTop: "18px", background: "rgba(255,255,255,0.1)", borderRadius: "10px", padding: "8px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ color: "#fff", fontWeight: "700", fontSize: "13px", letterSpacing: "0.06em" }}>PAY SHEET</span>
+              <span style={{ color: "#fff", fontWeight: "600", fontSize: "13px" }}>{monthLabel}</span>
             </div>
           </div>
 
-          {/* PAY SHEET title bar */}
-          <div className="flex justify-between items-center mb-3" style={{ background: "#3a9ec2", borderRadius: "6px", padding: "5px 12px" }}>
-            <span style={{ fontWeight: "700", letterSpacing: "0.08em", color: "#fff", fontSize: "12px" }}>PAY SHEET</span>
-            <span style={{ fontWeight: "600", color: "#fff", fontSize: "11px" }}>{monthLabel}</span>
+          {/* ── Employee info strip ── */}
+          <div style={{ background: "#f0f9ff", borderBottom: "1px solid #bae6fd", padding: "14px 32px" }}>
+            <div className="flex justify-between items-center">
+              <div>
+                <p style={{ fontSize: "10px", color: "#64748b", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "2px" }}>Employee Name</p>
+                <p style={{ fontSize: "14px", fontWeight: "700", color: "#0e2a3d" }}>{row.employee.fullName}</p>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <p style={{ fontSize: "10px", color: "#64748b", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "2px" }}>EPF No.</p>
+                <p style={{ fontSize: "14px", fontWeight: "700", color: "#0e2a3d" }}>{epfNo}</p>
+              </div>
+            </div>
           </div>
 
-          {/* Employee info */}
-          <div className="mb-3 p-3 rounded-lg" style={{ background: "#f4fbfe", border: "1px solid #c8e9f5" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          {/* ── Payment details ── */}
+          <div style={{ padding: "20px 32px 0" }}>
+            <p style={{ fontSize: "10px", fontWeight: "700", color: "#3a9ec2", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "10px" }}>Payment Details</p>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+              <thead>
+                <tr style={{ background: "#f8fafc" }}>
+                  <th style={{ textAlign: "left", padding: "8px 10px", color: "#475569", fontWeight: "600", fontSize: "11px", borderBottom: "2px solid #e2e8f0", borderRadius: "6px 0 0 0" }}>Description</th>
+                  <th style={{ textAlign: "right", padding: "8px 10px", color: "#475569", fontWeight: "600", fontSize: "11px", borderBottom: "2px solid #e2e8f0", width: "140px" }}>Amount (Rs.)</th>
+                </tr>
+              </thead>
               <tbody>
-                <tr>
-                  <td style={{ color: "#555", paddingBottom: "3px", width: "40%" }}>Employee Name</td>
-                  <td style={{ fontWeight: "bold", color: "#1a2a3a" }}>: {row.employee.fullName}</td>
-                </tr>
-                <tr>
-                  <td style={{ color: "#555" }}>EPF No.</td>
-                  <td style={{ fontWeight: "600", color: "#1a2a3a" }}>: {epfNo}</td>
-                </tr>
+                {rows.map((r, i) => (
+                  <tr
+                    key={i}
+                    style={{
+                      borderTop: r.borderTop ? "2px solid #e2e8f0" : undefined,
+                      borderBottom: r.borderBottom ? "2px solid #e2e8f0" : undefined,
+                      background: r.bold && r.borderTop ? "#f0f9ff" : "transparent",
+                    }}
+                  >
+                    <td style={{
+                      padding: r.label ? "6px 10px" : "4px 10px",
+                      paddingLeft: r.indent ? "28px" : "10px",
+                      fontStyle: r.italic ? "italic" : "normal",
+                      fontWeight: r.bold ? "700" : "400",
+                      color: r.bold ? "#0e2a3d" : "#374151",
+                    }}>
+                      {r.label}
+                    </td>
+                    <td style={{
+                      textAlign: "right",
+                      padding: "6px 10px",
+                      fontStyle: r.italic ? "italic" : "normal",
+                      fontWeight: r.bold ? "700" : "400",
+                      color: r.bold ? "#0e2a3d" : "#374151",
+                      whiteSpace: "nowrap",
+                    }}>
+                      {r.value}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
 
-          {/* Payment details table */}
-          <table style={{ width: "100%", borderCollapse: "collapse", borderTop: "1px solid #000" }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid #000" }}>
-                <th style={{ textAlign: "left", padding: "4px 4px", fontWeight: "bold" }}>PAYMENT DETAILS</th>
-                <th style={{ textAlign: "right", padding: "4px 4px", fontWeight: "bold", width: "50px" }}>Rs.</th>
-                <th style={{ textAlign: "right", padding: "4px 8px", fontWeight: "bold", width: "110px" }}>Cts.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr
-                  key={i}
-                  style={{
-                    borderTop: r.borderTop ? "1px solid #000" : undefined,
-                    borderBottom: r.borderBottom ? "1px solid #000" : undefined,
-                  }}
-                >
-                  <td
-                    style={{
-                      padding: "3px 4px",
-                      paddingLeft: r.indent ? "24px" : "4px",
-                      fontStyle: r.italic ? "italic" : "normal",
-                      fontWeight: r.bold ? "bold" : "normal",
-                    }}
-                  >
-                    {r.label}
-                  </td>
-                  <td />
-                  <td
-                    style={{
-                      textAlign: "right",
-                      padding: "3px 8px",
-                      fontStyle: r.italic ? "italic" : "normal",
-                      fontWeight: r.bold ? "bold" : "normal",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {r.value}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {/* Attendance summary (screen only) */}
-          <div className="print:hidden mt-4 pt-3 border-t border-dashed border-slate-300">
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Attendance Summary</p>
-            <div className="grid grid-cols-5 gap-2 text-center text-[10px]">
+          {/* ── Attendance summary ── */}
+          <div className="print:hidden mx-8 mt-5 mb-1">
+            <p style={{ fontSize: "10px", fontWeight: "700", color: "#3a9ec2", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "8px" }}>Attendance Summary</p>
+            <div className="grid grid-cols-5 gap-2 text-center">
               {[
                 { label: "Working", val: row.workingDays },
                 { label: "Present",  val: row.presentDays },
@@ -289,30 +299,42 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
                 { label: "Late",     val: row.lateDays },
                 { label: "OT hrs",   val: row.overtimeHours.toFixed(1) },
               ].map(s => (
-                <div key={s.label} className="bg-slate-50 rounded-lg py-1.5 border border-slate-100">
-                  <p className="text-slate-400 font-medium">{s.label}</p>
-                  <p className="font-bold text-slate-700 text-xs">{s.val}</p>
+                <div key={s.label} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "8px 4px" }}>
+                  <p style={{ fontSize: "9px", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.04em" }}>{s.label}</p>
+                  <p style={{ fontSize: "15px", fontWeight: "700", color: "#0e2a3d", marginTop: "2px" }}>{s.val}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Signature area */}
-          <div style={{ marginTop: "28px" }}>
+          {/* ── Signature area ── */}
+          <div style={{ padding: "24px 32px 12px" }}>
             <div className="flex justify-between items-end">
               <div>
-                <p style={{ borderBottom: "1px dotted #000", minWidth: "160px", marginBottom: "2px" }}>&nbsp;</p>
-                <p style={{ fontWeight: "600" }}>SIGNATURE</p>
+                <div style={{ borderBottom: "1.5px dotted #94a3b8", minWidth: "160px", height: "28px" }} />
+                <p style={{ fontSize: "10px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: "4px" }}>Signature</p>
               </div>
               <div style={{ textAlign: "right" }}>
-                <p style={{ borderBottom: "1px dotted #000", minWidth: "140px", marginBottom: "2px", textAlign: "right" }}>{dateStr}</p>
-                <p style={{ fontWeight: "600" }}>DATE</p>
+                <div style={{ borderBottom: "1.5px dotted #94a3b8", minWidth: "140px", height: "28px", display: "flex", alignItems: "flex-end", justifyContent: "flex-end" }}>
+                  <span style={{ fontSize: "11px", color: "#475569", paddingBottom: "2px" }}>{dateStr}</span>
+                </div>
+                <p style={{ fontSize: "10px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: "4px" }}>Date</p>
               </div>
             </div>
-            <div style={{ marginTop: "16px" }}>
-              <p style={{ borderBottom: "1px dotted #000", minWidth: "160px", marginBottom: "2px", display: "inline-block" }}>&nbsp;</p>
-              <p style={{ fontWeight: "600" }}>PAYING AUTHORITY</p>
+            <div style={{ marginTop: "18px" }}>
+              <div style={{ borderBottom: "1.5px dotted #94a3b8", minWidth: "160px", height: "28px", display: "inline-block" }} />
+              <p style={{ fontSize: "10px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: "4px" }}>Paying Authority</p>
             </div>
+          </div>
+
+          {/* ── System generated footer ── */}
+          <div style={{ background: "#f8fafc", borderTop: "1px solid #e2e8f0", padding: "10px 32px", borderRadius: "0 0 16px 16px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+            <div style={{ width: "6px", height: "6px", background: "#3a9ec2", borderRadius: "50%", flexShrink: 0 }} />
+            <p style={{ fontSize: "9.5px", color: "#94a3b8", textAlign: "center" }}>
+              <span style={{ fontWeight: "600", color: "#64748b" }}>System Generated</span>
+              &nbsp;·&nbsp;{generatedAt}
+              &nbsp;·&nbsp;Drivethru Attendance Management System
+            </p>
           </div>
 
         </div>
