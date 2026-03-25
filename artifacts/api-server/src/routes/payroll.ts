@@ -339,7 +339,8 @@ router.post("/generate", async (req, res) => {
         return sum + calcLunchLateMinutes(rec.outTime1, rec.inTime2, rule);
       }, 0);
       const totalLateMinutes = morningLateMinutes + lunchLateMinutes;
-      const lateDeduction = Math.round(totalLateMinutes * minuteRate);
+      const lateDeduction = Math.round(morningLateMinutes * minuteRate);
+      const lunchLateDeduction = Math.round(lunchLateMinutes * minuteRate);
 
       /* ── Absence deduction ─────────────────────────────── */
       const absenceDeduction = Math.round(dailyRate * absentDays);
@@ -426,7 +427,7 @@ router.post("/generate", async (req, res) => {
       const grossSalary = Math.round(
         basicSalary + transportAllowance + lunchIncentive + housingAllowance + otherAllowances
         + overtimePay + holidayOtPay + offDayOtPay
-        - absenceDeduction - lateDeduction - halfDayDeduction - incompleteDeduction
+        - absenceDeduction - lateDeduction - lunchLateDeduction - halfDayDeduction - incompleteDeduction
       );
 
       /* EPF / ETF always based on actual earned gross (not full basic) */
@@ -466,7 +467,7 @@ router.post("/generate", async (req, res) => {
       }
       loanDeduction = Math.round(loanDeduction);
 
-      const totalDeductions = epfEmployee + apit + lateDeduction + absenceDeduction + halfDayDeduction + incompleteDeduction + otherDeductions + loanDeduction;
+      const totalDeductions = epfEmployee + apit + lateDeduction + lunchLateDeduction + absenceDeduction + halfDayDeduction + incompleteDeduction + otherDeductions + loanDeduction;
       const netSalary     = grossSalary - epfEmployee - apit - otherDeductions - loanDeduction;
 
       const record = {
@@ -495,6 +496,7 @@ router.post("/generate", async (req, res) => {
         etfEmployer,
         apit,
         lateDeduction,
+        lunchLateDeduction,
         absenceDeduction,
         halfDayDeduction,
         incompleteDeduction,

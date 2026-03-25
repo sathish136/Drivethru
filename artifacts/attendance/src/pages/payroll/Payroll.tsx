@@ -51,6 +51,7 @@ interface PayrollRow {
   etfEmployer: number;
   apit: number;
   lateDeduction: number;
+  lunchLateDeduction: number;
   absenceDeduction: number;
   otherDeductions: number;
   loanDeduction: number;
@@ -132,13 +133,14 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
 
   /* ── Calculations matching Excel format ── */
   const allowances = (row.transportAllowance || 0) + (row.housingAllowance || 0) + (row.otherAllowances || 0);
-  const subTotal      = row.basicSalary + allowances;
-  const noPayLeave    = row.absenceDeduction || 0;
-  const lateDeduction = row.lateDeduction || 0;
-  /* totalForEPF matches backend: lateDeduction already reduces grossSalary before EPF is computed */
-  const totalForEPF   = subTotal - noPayLeave - lateDeduction;
-  const overtime      = row.overtimePay || 0;
-  const totalEarnings = totalForEPF + overtime;
+  const subTotal        = row.basicSalary + allowances;
+  const noPayLeave      = row.absenceDeduction || 0;
+  const lateDeduction   = row.lateDeduction || 0;
+  const lunchLateDed    = row.lunchLateDeduction || 0;
+  /* totalForEPF matches backend: both late deductions already reduce grossSalary before EPF is computed */
+  const totalForEPF     = subTotal - noPayLeave - lateDeduction - lunchLateDed;
+  const overtime        = row.overtimePay || 0;
+  const totalEarnings   = totalForEPF + overtime;
 
   const epf8          = row.epfEmployee || 0;
   const loans         = row.loanDeduction || 0;
@@ -162,6 +164,7 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
     { label: "Sub Total",               value: fmtAmt(subTotal), italic: true, borderTop: true },
     { label: "Less  :  No Pay Leave",   value: noPayLeave > 0 ? fmtAmt(noPayLeave) : "-", italic: true },
     ...(lateDeduction > 0 ? [{ label: `Less  :  Late Arrival${lateDayLabel}`, value: fmtAmt(lateDeduction), italic: true }] : []),
+    ...(lunchLateDed > 0 ? [{ label: "Less  :  Lunch Return Late", value: fmtAmt(lunchLateDed), italic: true }] : []),
     { label: "Total for EPF / ETF",     value: fmtAmt(totalForEPF), bold: true },
     { label: "Add  :  Overtime",        value: overtime > 0 ? fmtAmt(overtime) : "", italic: true },
     { label: "Total Earnings",          value: fmtAmt(totalEarnings), borderTop: true },
@@ -334,13 +337,13 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
             </div>
           </div>
 
-          {/* ── Late arrivals policy note ── */}
-          {lateDeduction > 0 && (
+          {/* ── Late arrivals / lunch return late policy note ── */}
+          {(lateDeduction > 0 || lunchLateDed > 0) && (
             <div style={{ margin: "0 32px 12px", padding: "8px 12px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px" }}>
               <p style={{ fontSize: "9.5px", color: "#92400e", lineHeight: "1.5", margin: 0 }}>
-                <span style={{ fontWeight: "700" }}>Late Arrivals  ·  </span>
-                Late arrivals exceeding the grace period will result in a reduction from the employee's hourly working rate.
-                {row.lateDays > 0 && <span> This payslip reflects a deduction for <strong>{row.lateDays} late day{row.lateDays !== 1 ? "s" : ""}</strong>.</span>}
+                <span style={{ fontWeight: "700" }}>Attendance Deductions  ·  </span>
+                {lateDeduction > 0 && <>Late arrivals exceeding the grace period are deducted at the employee's per-minute working rate{row.lateDays > 0 && <span> (<strong>{row.lateDays} day{row.lateDays !== 1 ? "s" : ""}</strong>)</span>}. </>}
+                {lunchLateDed > 0 && <>Returning late from lunch beyond the allocated break time is also deducted at the per-minute rate. </>}
               </p>
             </div>
           )}
@@ -371,7 +374,8 @@ function PayrollDetailModal({ row, onClose }: { row: PayrollRow; onClose: () => 
   const subTotal = row.basicSalary + allowances;
   const noPayLeave = row.absenceDeduction || 0;
   const lateDeduction = row.lateDeduction || 0;
-  const totalForEPF = subTotal - noPayLeave - lateDeduction;
+  const lunchLateDed = row.lunchLateDeduction || 0;
+  const totalForEPF = subTotal - noPayLeave - lateDeduction - lunchLateDed;
   const overtime = row.overtimePay || 0;
   const totalEarnings = totalForEPF + overtime;
   const epf8 = row.epfEmployee || 0;
@@ -558,10 +562,11 @@ function PayrollDetailModal({ row, onClose }: { row: PayrollRow; onClose: () => 
               <div>
                 <SectionTitle color="emerald">Payment Summary</SectionTitle>
                 <div className="grid grid-cols-2 gap-4">
-                  <Field label="Payment Days"        value={paymentDays}   required accent="emerald" />
-                  <Field label="Late Deduction"      value={lateDeduction > 0 ? fmt(lateDeduction) : "0"} accent={lateDeduction > 0 ? "red" : undefined} />
-                  <Field label="No-Pay Deduction"    value={noPayLeave > 0 ? fmt(noPayLeave) : "0"}    accent={noPayLeave > 0 ? "red" : undefined} />
-                  <Field label="Total Deduction Days" value={row.absentDays + row.lateDays} />
+                  <Field label="Payment Days"             value={paymentDays}   required accent="emerald" />
+                  <Field label="Late Arrival Deduction"   value={lateDeduction > 0 ? fmt(lateDeduction) : "0"} accent={lateDeduction > 0 ? "red" : undefined} />
+                  <Field label="Lunch Return Late Deduction" value={lunchLateDed > 0 ? fmt(lunchLateDed) : "0"} accent={lunchLateDed > 0 ? "red" : undefined} />
+                  <Field label="No-Pay Deduction"         value={noPayLeave > 0 ? fmt(noPayLeave) : "0"}    accent={noPayLeave > 0 ? "red" : undefined} />
+                  <Field label="Total Deduction Days"     value={row.absentDays + row.lateDays} />
                 </div>
               </div>
             </div>
@@ -586,14 +591,15 @@ function PayrollDetailModal({ row, onClose }: { row: PayrollRow; onClose: () => 
               <div>
                 <SectionTitle color="red">Deductions / Recoveries</SectionTitle>
                 <div className="grid grid-cols-2 gap-4">
-                  <Field label="No-Pay Leave"         value={noPayLeave > 0 ? fmt(noPayLeave) : "0"}   accent={noPayLeave > 0 ? "red" : undefined} />
-                  <Field label="Late Arrival Deduction" value={lateDeduction > 0 ? fmt(lateDeduction) : "0"} accent={lateDeduction > 0 ? "red" : undefined} />
-                  <Field label="EPF 8% (Employee)"    value={fmt(epf8)}  accent="red" />
-                  <Field label="Loan Recovery"         value={loans > 0 ? fmt(loans) : "0"}       accent={loans > 0 ? "red" : undefined} />
-                  <Field label="Other Deductions"      value={otherDeds > 0 ? fmt(otherDeds) : "0"} accent={otherDeds > 0 ? "red" : undefined} />
-                  <Field label="APIT (Income Tax)"     value={apit > 0 ? fmt(apit) : "0"}         accent={apit > 0 ? "red" : undefined} />
-                  <Field label="Total Recoveries"      value={fmt(totalRecoveries)} accent="red" />
-                  <Field label="Balance Received"      value={fmt(row.netSalary)}   accent="emerald" />
+                  <Field label="No-Pay Leave"                value={noPayLeave > 0 ? fmt(noPayLeave) : "0"}    accent={noPayLeave > 0 ? "red" : undefined} />
+                  <Field label="Late Arrival Deduction"      value={lateDeduction > 0 ? fmt(lateDeduction) : "0"} accent={lateDeduction > 0 ? "red" : undefined} />
+                  <Field label="Lunch Return Late Deduction" value={lunchLateDed > 0 ? fmt(lunchLateDed) : "0"} accent={lunchLateDed > 0 ? "red" : undefined} />
+                  <Field label="EPF 8% (Employee)"           value={fmt(epf8)}  accent="red" />
+                  <Field label="Loan Recovery"               value={loans > 0 ? fmt(loans) : "0"}       accent={loans > 0 ? "red" : undefined} />
+                  <Field label="Other Deductions"            value={otherDeds > 0 ? fmt(otherDeds) : "0"} accent={otherDeds > 0 ? "red" : undefined} />
+                  <Field label="APIT (Income Tax)"           value={apit > 0 ? fmt(apit) : "0"}         accent={apit > 0 ? "red" : undefined} />
+                  <Field label="Total Recoveries"            value={fmt(totalRecoveries)} accent="red" />
+                  <Field label="Balance Received"            value={fmt(row.netSalary)}   accent="emerald" />
                 </div>
               </div>
             </div>

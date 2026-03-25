@@ -38,6 +38,7 @@ interface PayrollRow {
   etfEmployer: number;
   apit: number;
   lateDeduction: number;
+  lunchLateDeduction: number;
   absenceDeduction: number;
   otherDeductions: number;
   loanDeduction: number;
@@ -106,11 +107,12 @@ export default function PayslipPage() {
   const monthLabel = `${MONTHS[row.month - 1]} ${row.year}`;
   const epfNo = row.employee.epfNumber || row.employee.employeeId;
 
-  const allowances = (row.transportAllowance || 0) + (row.housingAllowance || 0) + (row.otherAllowances || 0);
+  const allowances    = (row.transportAllowance || 0) + (row.housingAllowance || 0) + (row.otherAllowances || 0);
   const subTotal      = row.basicSalary + allowances;
   const noPayLeave    = row.absenceDeduction || 0;
   const lateDeduction = row.lateDeduction || 0;
-  const totalForEPF   = subTotal - noPayLeave - lateDeduction;
+  const lunchLateDed  = row.lunchLateDeduction || 0;
+  const totalForEPF   = subTotal - noPayLeave - lateDeduction - lunchLateDed;
   const overtime      = row.overtimePay || 0;
   const totalEarnings = totalForEPF + overtime;
 
@@ -140,6 +142,7 @@ export default function PayslipPage() {
     { label: "Sub Total",               value: fmtAmt(subTotal), italic: true, borderTop: true },
     { label: "Less  :  No Pay Leave",   value: noPayLeave > 0 ? fmtAmt(noPayLeave) : "-", italic: true },
     ...(lateDeduction > 0 ? [{ label: `Less  :  Late Arrival${lateDayLabel}`, value: fmtAmt(lateDeduction), italic: true }] : []),
+    ...(lunchLateDed > 0 ? [{ label: "Less  :  Lunch Return Late", value: fmtAmt(lunchLateDed), italic: true }] : []),
     { label: "Total for EPF / ETF",     value: fmtAmt(totalForEPF), bold: true },
     { label: "Add  :  Overtime",        value: overtime > 0 ? fmtAmt(overtime) : "", italic: true },
     { label: "Total Earnings",          value: fmtAmt(totalEarnings), borderTop: true },
@@ -287,13 +290,13 @@ export default function PayslipPage() {
           </div>
         </div>
 
-        {/* Late arrivals note */}
-        {lateDeduction > 0 && (
+        {/* Late arrivals / lunch return late note */}
+        {(lateDeduction > 0 || lunchLateDed > 0) && (
           <div style={{ margin: "0 32px 12px", padding: "8px 12px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px" }}>
             <p style={{ fontSize: "9.5px", color: "#92400e", lineHeight: "1.5", margin: 0 }}>
-              <span style={{ fontWeight: "700" }}>Late Arrivals  ·  </span>
-              Late arrivals exceeding the grace period will result in a reduction from the employee's hourly working rate.
-              {row.lateDays > 0 && <span> This payslip reflects a deduction for <strong>{row.lateDays} late day{row.lateDays !== 1 ? "s" : ""}</strong>.</span>}
+              <span style={{ fontWeight: "700" }}>Attendance Deductions  ·  </span>
+              {lateDeduction > 0 && <>Late arrivals exceeding the grace period are deducted at the per-minute working rate{row.lateDays > 0 && <span> (<strong>{row.lateDays} day{row.lateDays !== 1 ? "s" : ""}</strong>)</span>}. </>}
+              {lunchLateDed > 0 && <>Returning late from lunch beyond the allocated break time is also deducted at the per-minute rate. </>}
             </p>
           </div>
         )}

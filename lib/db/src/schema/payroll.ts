@@ -34,6 +34,7 @@ export const payrollRecords = pgTable("payroll_records", {
   etfEmployer: real("etf_employer").notNull().default(0),
   apit: real("apit").notNull().default(0),
   lateDeduction: real("late_deduction").notNull().default(0),
+  lunchLateDeduction: real("lunch_late_deduction").notNull().default(0),
   absenceDeduction: real("absence_deduction").notNull().default(0),
   halfDayDeduction: real("half_day_deduction").notNull().default(0),
   incompleteDeduction: real("incomplete_deduction").notNull().default(0),
