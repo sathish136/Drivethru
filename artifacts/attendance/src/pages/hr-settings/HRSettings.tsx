@@ -86,7 +86,6 @@ export default function HRSettings() {
   const [globalSaving, setGlobalSaving] = useState(false);
   const [globalSaved,  setGlobalSaved]  = useState(false);
 
-  const [activeTab, setActiveTab]   = useState<"rules" | "policy">("rules");
 
   const [showModal, setShowModal]   = useState(false);
   const [modalMode, setModalMode]   = useState<"add" | "edit">("add");
@@ -369,26 +368,6 @@ export default function HRSettings() {
         description="Per-department attendance, overtime, and shift rules — used across attendance, reports, and payroll"
       />
 
-      {/* Tab bar */}
-      <div className="flex gap-1 p-1 bg-muted/50 rounded-xl w-fit border border-border">
-        {([
-          { id: "rules",  label: "Department Rules", icon: Settings2 },
-          { id: "policy", label: "HR Policy",        icon: BookOpen  },
-        ] as const).map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              activeTab === tab.id
-                ? "bg-card shadow-sm text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
-          </button>
-        ))}
-      </div>
 
       {error && (
         <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm bg-red-50 text-red-700 border border-red-200">
@@ -468,9 +447,6 @@ export default function HRSettings() {
         )}
       </Card>
 
-      {activeTab === "policy" && <PolicyTab />}
-
-      {activeTab === "rules" && (<>
       <Card className="p-5">
         <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
           <div className="flex items-center gap-2">
@@ -615,7 +591,6 @@ export default function HRSettings() {
           <span><b>Staff</b> — active employees assigned to this rule (click to view)</span>
         </div>
       </Card>
-      </>)}
 
       {/* ── Add / Edit Modal ── */}
       {showModal && (
