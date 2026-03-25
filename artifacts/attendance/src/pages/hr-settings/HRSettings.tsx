@@ -43,13 +43,33 @@ const BLANK_RULE: DeptShiftRule = {
 
 const COLS = [
   "Department", "Shift", "Start Time", "End Time", "Min h", "Break h", "OT?", "OT After",
-  "Grace", "Flex", "Multi", "Wk Leave", "Half-day h", "Holiday OT", "Offday OT", "OT ×", "Notes", "",
+  "Grace", "Flex", "Multi", "Wk Leave", "Half-day h", "Holiday OT", "Offday OT", "OT ×", "Staff", "Notes", "",
 ];
+
+function clientFindRule(rules: DeptShiftRule[], department: string, shiftName?: string | null) {
+  const dept  = (department ?? "").toLowerCase().trim();
+  const shift = (shiftName  ?? "").toLowerCase().trim();
+  if (shift) {
+    const both = rules.find(r =>
+      r.department.toLowerCase().trim() === dept && r.shift.toLowerCase().trim() === shift
+    );
+    if (both) return both.id;
+  }
+  const exactDept = rules.find(r => r.department.toLowerCase().trim() === dept);
+  if (exactDept) return exactDept.id;
+  const partial = rules.find(r => {
+    const rd = r.department.toLowerCase().trim();
+    return dept.includes(rd) || rd.includes(dept);
+  });
+  if (partial) return partial.id;
+  return "_default";
+}
 
 export default function HRSettings() {
   const [rules, setRules]           = useState<DeptShiftRule[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [shiftOptions, setShiftOptions] = useState<ShiftOption[]>([]);
+  const [employees, setEmployees]   = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
   const [saved, setSaved]           = useState(false);
@@ -58,19 +78,24 @@ export default function HRSettings() {
   const [showModal, setShowModal]   = useState(false);
   const [modalMode, setModalMode]   = useState<"add" | "edit">("add");
   const [editing, setEditing]       = useState<DeptShiftRule>(BLANK_RULE);
+  const [staffModal, setStaffModal] = useState<{ rule: DeptShiftRule; emps: any[] } | null>(null);
 
   useEffect(() => {
     Promise.all([
       fetch(apiUrl("/hr-settings")).then(r => r.json()),
       fetch(apiUrl("/departments")).then(r => r.json()),
       fetch(apiUrl("/shifts")).then(r => r.json()),
-    ]).then(([hrData, depts, shiftsData]) => {
+      fetch(apiUrl("/employees?limit=500")).then(r => r.json()),
+    ]).then(([hrData, depts, shiftsData, empsData]) => {
       if (Array.isArray(hrData.departmentRules) && hrData.departmentRules.length > 0) {
         const r = hrData.departmentRules as DeptShiftRule[];
         if (r[0] && "department" in r[0] && "shift" in r[0]) setRules(r);
       }
       if (Array.isArray(depts)) setDepartments(depts.filter((d: Department) => d.isActive !== false));
       if (Array.isArray(shiftsData)) setShiftOptions(shiftsData.filter((s: ShiftOption) => s.isActive !== false));
+      const emps = Array.isArray(empsData?.employees) ? empsData.employees
+        : Array.isArray(empsData) ? empsData : [];
+      setEmployees(emps.filter((e: any) => e.status !== "terminated"));
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
@@ -129,6 +154,17 @@ export default function HRSettings() {
     if (r.lunchMaxHours != null && r.lunchMaxHours !== r.lunchMinHours)
       return `${r.lunchMinHours}–${r.lunchMaxHours}`;
     return `${r.lunchMinHours}`;
+  }
+
+  function getMatchedEmployees(rule: DeptShiftRule): any[] {
+    return employees.filter(emp => {
+      const shiftName = shiftOptions.find(s => s.id === Number(emp.shiftId))?.name ?? null;
+      return clientFindRule(rules, emp.department ?? "", shiftName) === rule.id;
+    });
+  }
+
+  function openStaffModal(rule: DeptShiftRule) {
+    setStaffModal({ rule, emps: getMatchedEmployees(rule) });
   }
 
   function getShiftTimes(shiftName: string): { start: string; end: string } {
@@ -247,6 +283,20 @@ export default function HRSettings() {
                     <td className="px-3 py-2.5 text-center">
                       {rule.otMultiplier != null ? `${rule.otMultiplier}×` : <span className="text-muted-foreground">—</span>}
                     </td>
+                    <td className="px-3 py-2.5 text-center">
+                      {(() => {
+                        const count = getMatchedEmployees(rule).length;
+                        return (
+                          <button
+                            onClick={() => openStaffModal(rule)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors hover:bg-primary/15
+                              bg-primary/10 text-primary"
+                          >
+                            <Users className="w-2.5 h-2.5" />{count}
+                          </button>
+                        );
+                      })()}
+                    </td>
                     <td className="px-3 py-2.5 text-muted-foreground max-w-[120px] truncate">{rule.notes || "—"}</td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1">
@@ -263,7 +313,7 @@ export default function HRSettings() {
                 })}
                 {rules.length === 0 && (
                   <tr>
-                    <td colSpan={18} className="px-3 py-10 text-center text-muted-foreground text-xs">
+                    <td colSpan={19} className="px-3 py-10 text-center text-muted-foreground text-xs">
                       No rules yet.{" "}
                       {noDepts || noShifts
                         ? "Add departments and shifts first, then click Add Rule."
@@ -297,6 +347,7 @@ export default function HRSettings() {
           <span><b>Holiday OT</b> — holiday worked rate multiplier</span>
           <span><b>Offday OT</b> — off-day worked rate multiplier</span>
           <span><b>OT ×</b> — regular overtime rate multiplier</span>
+          <span><b>Staff</b> — active employees assigned to this rule (click to view)</span>
         </div>
       </Card>
 
@@ -486,6 +537,67 @@ export default function HRSettings() {
                 <Save className="w-3.5 h-3.5" />
                 {saving ? "Saving…" : modalMode === "add" ? "Add Rule" : "Save Changes"}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Staff Modal ── */}
+      {staffModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg border border-border flex flex-col max-h-[80vh]">
+            <div className="flex items-center justify-between p-5 border-b border-border">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-primary" />
+                  <span className="font-bold text-sm">Matched Staff</span>
+                  <span className="ml-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-semibold">
+                    {staffModal.emps.length}
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Rule: <b>{staffModal.rule.department}</b> — <b>{staffModal.rule.shift}</b>
+                </p>
+              </div>
+              <button onClick={() => setStaffModal(null)} className="p-1.5 rounded-lg hover:bg-muted">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {staffModal.emps.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
+                  <Users className="w-8 h-8 mb-2 opacity-30" />
+                  <p className="text-sm">No employees matched to this rule</p>
+                  <p className="text-xs mt-1">Employees are matched by department and shift</p>
+                </div>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/40">
+                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Employee</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Department</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Shift</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {staffModal.emps.map((emp, i) => {
+                      const shiftName = shiftOptions.find(s => s.id === Number(emp.shiftId))?.name ?? "—";
+                      return (
+                        <tr key={emp.id} className={`border-b border-border/40 hover:bg-muted/30 ${i % 2 !== 0 ? "bg-muted/10" : ""}`}>
+                          <td className="px-4 py-2.5">
+                            <div className="font-medium text-foreground">
+                              {emp.firstName} {emp.lastName || emp.fullName || ""}
+                            </div>
+                            <div className="text-muted-foreground text-[10px]">{emp.employeeId || emp.id}</div>
+                          </td>
+                          <td className="px-4 py-2.5 text-muted-foreground">{emp.department || "—"}</td>
+                          <td className="px-4 py-2.5 text-muted-foreground">{shiftName}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>

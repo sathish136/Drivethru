@@ -13,7 +13,7 @@ import {
   Briefcase, Phone, Hash, CreditCard, Calendar,
   IdCard, Home, Shield, Camera, BadgeIndianRupee,
   Banknote, UserCheck, ListChecks, CheckCircle, Clock,
-  CircleDashed, BadgeCheck, RefreshCw, ChevronDown, ChevronUp
+  CircleDashed, BadgeCheck, RefreshCw, ChevronDown, ChevronUp, Settings,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -234,12 +234,45 @@ const EMPTY_EMP = {
   epfNumber:"", etfNumber:"", basicSalary:"",
 };
 
+/* ── HR Policy helpers (client-side mirror of hr-rules.ts) ─── */
+const DEFAULT_HR_RULE = {
+  id: "_default", department: "General", shift: "Regular",
+  minHours: 9, maxHours: 9, otEligible: true, otAfterHours: 9.5,
+  lateGraceMinutes: 15, lunchMinHours: 1, lunchMaxHours: 1,
+  flexible: false, multipleLogin: false, otMultiplier: 1.5,
+  offdayOtMultiplier: 1.5, holidayOtMultiplier: 1.5,
+  weeklyLeaveDays: 1.5, halfDayHours: 5, notes: "Default fallback rule",
+};
+
+function findHrRule(rules: any[], department: string, shiftName?: string | null) {
+  const dept  = (department ?? "").toLowerCase().trim();
+  const shift = (shiftName  ?? "").toLowerCase().trim();
+  if (shift) {
+    const both = rules.find(r =>
+      r.department.toLowerCase().trim() === dept && r.shift.toLowerCase().trim() === shift
+    );
+    if (both) return { rule: both, matchType: "exact" };
+  }
+  const exactDept = rules.find(r => r.department.toLowerCase().trim() === dept);
+  if (exactDept) return { rule: exactDept, matchType: "department" };
+  const partial = rules.find(r => {
+    const rd = r.department.toLowerCase().trim();
+    return dept.includes(rd) || rd.includes(dept);
+  });
+  if (partial) return { rule: partial, matchType: "partial" };
+  return { rule: DEFAULT_HR_RULE, matchType: "default" };
+}
+
 function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branches: any[]; onClose: () => void; onSaved: () => void }) {
-  const [tab, setTab] = useState<"personal"|"professional"|"documents"|"payroll">("personal");
+  const [tab, setTab] = useState<"personal"|"professional"|"documents"|"payroll"|"policy">("personal");
   const { data: deptData } = useGet(["departments"], "/departments");
   const { data: desigData } = useGet(["designations"], "/designations");
+  const { data: hrSettingsData } = useGet(["hr-settings-policy"], "/hr-settings");
+  const { data: shiftsData } = useGet(["shifts-for-policy"], "/shifts");
   const deptOptions: string[] = Array.isArray(deptData) ? deptData.filter((d: any) => d.isActive).map((d: any) => d.name) : [];
   const desigOptions: string[] = Array.isArray(desigData) ? desigData.filter((d: any) => d.isActive).map((d: any) => d.name) : [];
+  const hrRules: any[] = Array.isArray(hrSettingsData?.departmentRules) ? hrSettingsData.departmentRules : [];
+  const allShifts: any[] = Array.isArray(shiftsData) ? shiftsData : [];
   const [form, setForm] = useState(emp ? {
     ...EMPTY_EMP, ...emp,
     firstName: emp.firstName || "",
@@ -255,6 +288,8 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
     etfNumber: emp.etfNumber || "",
     basicSalary: emp.basicSalary || "",
   } : { ...EMPTY_EMP });
+  const empShiftName = allShifts.find((s: any) => s.id === Number(form.shiftId))?.name ?? null;
+  const { rule: matchedRule, matchType } = findHrRule(hrRules, form.department, empShiftName);
   const [photoPreview, setPhotoPreview] = useState<string>(emp?.photoUrl || "");
   const [photoUploading, setPhotoUploading] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
@@ -349,6 +384,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
     { key: "professional", label: "Professional", icon: Briefcase, step: 2 },
     { key: "payroll", label: "Payroll", icon: BadgeIndianRupee, step: 3 },
     { key: "documents", label: "Documents", icon: FileText, step: 4 },
+    { key: "policy", label: "Policy", icon: Settings, step: 5 },
   ] as const;
 
   return (
@@ -717,6 +753,122 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
             </div>
           )}
 
+          {tab === "policy" && (
+            <div className="space-y-4">
+              {/* Match Summary Banner */}
+              <div className={cn(
+                "rounded-xl border p-4 flex items-start gap-3",
+                matchType === "exact"      && "border-primary/40 bg-primary/5",
+                matchType === "department" && "border-blue-300 bg-blue-50",
+                matchType === "partial"    && "border-amber-300 bg-amber-50",
+                matchType === "default"    && "border-muted bg-muted/30",
+              )}>
+                <Settings className={cn("w-4 h-4 mt-0.5 shrink-0",
+                  matchType === "exact"      && "text-primary",
+                  matchType === "department" && "text-blue-600",
+                  matchType === "partial"    && "text-amber-600",
+                  matchType === "default"    && "text-muted-foreground",
+                )} />
+                <div>
+                  <p className={cn("text-xs font-bold",
+                    matchType === "exact"      && "text-primary",
+                    matchType === "department" && "text-blue-700",
+                    matchType === "partial"    && "text-amber-700",
+                    matchType === "default"    && "text-muted-foreground",
+                  )}>
+                    {matchType === "exact"      && "Exact Rule Match"}
+                    {matchType === "department" && "Department Rule Match"}
+                    {matchType === "partial"    && "Partial Department Match"}
+                    {matchType === "default"    && "Default Fallback Rule"}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {!form.department && !form.shiftId
+                      ? "Set a department and shift to see the applicable policy."
+                      : matchType === "exact"
+                        ? `Matched on department "${matchedRule.department}" + shift "${matchedRule.shift}".`
+                        : matchType === "department"
+                          ? `Matched by department "${matchedRule.department}" (no shift-specific rule).`
+                          : matchType === "partial"
+                            ? `Partially matched department "${matchedRule.department}" from "${form.department}".`
+                            : "No specific rule found — using organisation default policy."}
+                  </p>
+                </div>
+              </div>
+
+              {/* Attendance Rules */}
+              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
+                  <Clock className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Attendance Rules</span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3 p-4">
+                  {[
+                    { label: "Min. Work Hours / Day", value: `${matchedRule.minHours}h` },
+                    { label: "Max. Work Hours / Day", value: `${matchedRule.maxHours}h` },
+                    { label: "Late Grace Period", value: `${matchedRule.lateGraceMinutes} min` },
+                    { label: "Half-Day Threshold", value: `${matchedRule.halfDayHours}h` },
+                    { label: "Flexible Hours", value: matchedRule.flexible ? "Yes" : "No" },
+                    { label: "Multiple Login", value: matchedRule.multipleLogin ? "Allowed" : "Not Allowed" },
+                  ].map(item => (
+                    <div key={item.label} className="flex flex-col gap-0.5">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{item.label}</span>
+                      <span className="text-xs font-medium text-foreground">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Overtime Rules */}
+              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
+                  <BadgeIndianRupee className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Overtime Rules</span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3 p-4">
+                  {[
+                    { label: "OT Eligible", value: matchedRule.otEligible ? "Yes" : "No" },
+                    { label: "OT After", value: `${matchedRule.otAfterHours}h` },
+                    { label: "OT Multiplier", value: `×${matchedRule.otMultiplier}` },
+                    { label: "Off-Day OT Multiplier", value: `×${matchedRule.offdayOtMultiplier}` },
+                    { label: "Holiday OT Multiplier", value: `×${matchedRule.holidayOtMultiplier}` },
+                  ].map(item => (
+                    <div key={item.label} className="flex flex-col gap-0.5">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{item.label}</span>
+                      <span className="text-xs font-medium text-foreground">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Leave & Break Rules */}
+              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
+                  <Shield className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Leave & Break Rules</span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3 p-4">
+                  {[
+                    { label: "Weekly Leave Days", value: `${matchedRule.weeklyLeaveDays} days` },
+                    { label: "Lunch Min. Hours", value: `${matchedRule.lunchMinHours}h` },
+                    { label: "Lunch Max. Hours", value: `${matchedRule.lunchMaxHours}h` },
+                  ].map(item => (
+                    <div key={item.label} className="flex flex-col gap-0.5">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{item.label}</span>
+                      <span className="text-xs font-medium text-foreground">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {matchedRule.notes && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-1">Policy Notes</p>
+                  <p className="text-xs text-amber-800">{matchedRule.notes}</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {tab === "documents" && (
             <div className="space-y-3">
               {!isSaved ? (
@@ -759,7 +911,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
           )}
         </div>
 
-        {tab !== "documents" && (
+        {tab !== "documents" && tab !== "policy" && (
           <div className="border-t border-border px-5 py-4 flex justify-end gap-3 bg-muted/20">
             <Button variant="outline" onClick={onClose}>Cancel</Button>
             <Button onClick={handleSave} disabled={isPending}>
