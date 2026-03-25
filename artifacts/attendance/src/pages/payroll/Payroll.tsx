@@ -9,7 +9,7 @@ import {
   ChevronDown, ChevronUp, AlertCircle, UserCheck,
   Search, Filter, Building2, Briefcase, ListChecks,
   BadgeCheck, Clock, CircleDashed, ChevronRight,
-  ExternalLink, RotateCcw, FileText,
+  RotateCcw, FileText, CalendarDays, Receipt, Info,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -360,6 +360,200 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
   );
 }
 
+type DetailTab = "details" | "payment-days" | "earnings" | "net-pay";
+
+function PayrollDetailModal({ row, onClose }: { row: PayrollRow; onClose: () => void }) {
+  const [tab, setTab] = useState<DetailTab>("details");
+  const monthLabel = `${MONTHS[row.month - 1]} ${row.year}`;
+
+  const allowances = (row.transportAllowance || 0) + (row.housingAllowance || 0) + (row.otherAllowances || 0);
+  const subTotal = row.basicSalary + allowances;
+  const noPayLeave = row.absenceDeduction || 0;
+  const lateDeduction = row.lateDeduction || 0;
+  const totalForEPF = subTotal - noPayLeave - lateDeduction;
+  const overtime = row.overtimePay || 0;
+  const totalEarnings = totalForEPF + overtime;
+  const epf8 = row.epfEmployee || 0;
+  const loans = row.loanDeduction || 0;
+  const otherDeds = row.otherDeductions || 0;
+  const apit = row.apit || 0;
+  const totalRecoveries = epf8 + loans + otherDeds + apit;
+  const epf12 = row.epfEmployer || 0;
+  const etf3 = row.etfEmployer || 0;
+  const totalEmployerCost = row.netSalary + epf12 + etf3;
+
+  const tabs: { id: DetailTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+    { id: "details",      label: "Details",            icon: Info },
+    { id: "payment-days", label: "Payment Days",        icon: CalendarDays },
+    { id: "earnings",     label: "Earnings & Deductions", icon: Receipt },
+    { id: "net-pay",      label: "Net Pay Info",        icon: Banknote },
+  ];
+
+  function Field({ label, value, highlight }: { label: string; value: string | number; highlight?: "green" | "red" | "blue" }) {
+    return (
+      <div className="flex flex-col gap-1">
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{label}</p>
+        <div className={cn(
+          "px-3 py-2 rounded-lg border text-sm font-medium bg-background",
+          highlight === "green" && "text-emerald-700 border-emerald-200 bg-emerald-50",
+          highlight === "red"   && "text-red-600 border-red-200 bg-red-50",
+          highlight === "blue"  && "text-blue-700 border-blue-200 bg-blue-50",
+          !highlight && "text-foreground border-border"
+        )}>
+          {value}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-background rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="p-5 border-b border-border flex items-start justify-between shrink-0">
+          <div>
+            <h2 className="font-bold text-lg text-foreground">{row.employee.fullName}</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {row.employee.employeeId} · {row.employee.designation} · {monthLabel}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={cn("px-3 py-1 rounded-full text-xs font-bold", STATUS_STYLES[row.status])}>
+              {row.status.toUpperCase()}
+            </span>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+              <X className="w-5 h-5 text-muted-foreground" />
+            </button>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-border shrink-0 px-5 gap-1">
+          {tabs.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={cn(
+                "flex items-center gap-1.5 text-xs font-semibold px-3 py-3 border-b-2 transition-colors whitespace-nowrap",
+                tab === t.id
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <t.icon className="w-3.5 h-3.5" />
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab content */}
+        <div className="overflow-y-auto flex-1 p-6">
+
+          {/* ── Details ── */}
+          {tab === "details" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <Field label="Employee ID"      value={row.employee.employeeId} />
+                <Field label="Full Name"        value={row.employee.fullName} />
+                <Field label="Designation"      value={row.employee.designation} />
+                <Field label="Department"       value={row.employee.department} />
+                <Field label="Employee Type"    value={EMP_TYPE_LABELS[row.employee.employeeType ?? "permanent"] ?? "Permanent"} />
+                <Field label="Pay Period"       value={monthLabel} />
+                <Field label="EPF Number"       value={row.employee.epfNumber || row.employee.employeeId} />
+                <Field label="ETF Number"       value={row.employee.etfNumber || "—"} />
+                <Field label="Status"           value={row.status.toUpperCase()} highlight={row.status === "paid" ? "green" : row.status === "approved" ? "blue" : undefined} />
+                <Field label="Record ID"        value={`PV ${String(row.id).padStart(5, "0")}`} />
+                <Field label="Generated"        value={row.generatedAt ? new Date(row.generatedAt).toLocaleDateString("en-LK") : "—"} />
+                {row.approvedAt && <Field label="Approved" value={new Date(row.approvedAt).toLocaleDateString("en-LK")} />}
+                {row.paidAt     && <Field label="Paid"     value={new Date(row.paidAt).toLocaleDateString("en-LK")} />}
+              </div>
+            </div>
+          )}
+
+          {/* ── Payment Days ── */}
+          {tab === "payment-days" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Working Days"    value={row.workingDays} />
+                <Field label="Punched Days (Present)" value={row.presentDays} />
+                <Field label="Absent Days"     value={row.absentDays} highlight={row.absentDays > 0 ? "red" : undefined} />
+                <Field label="Late Days"       value={row.lateDays} highlight={row.lateDays > 0 ? "red" : undefined} />
+                <Field label="Leave Days"      value={row.leaveDays} />
+                <Field label="Holiday Days"    value={row.holidayDays} />
+                <Field label="Overtime Hours"  value={`${row.overtimeHours.toFixed(2)} hrs`} highlight={row.overtimeHours > 0 ? "green" : undefined} />
+                <Field label="Loss of Pay Days" value={row.absentDays} highlight={row.absentDays > 0 ? "red" : undefined} />
+                <Field label="Payment Days"    value={row.presentDays + row.leaveDays + row.holidayDays} highlight="green" />
+                <Field label="Late Deduction"  value={lateDeduction > 0 ? fmt(lateDeduction) : "0"} highlight={lateDeduction > 0 ? "red" : undefined} />
+              </div>
+            </div>
+          )}
+
+          {/* ── Earnings & Deductions ── */}
+          {tab === "earnings" && (
+            <div className="space-y-6">
+              <div>
+                <p className="text-xs font-bold text-emerald-700 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                  <TrendingUp className="w-3.5 h-3.5" /> Earnings
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Basic Salary"         value={fmt(row.basicSalary)} highlight="green" />
+                  <Field label="Transport Allowance"  value={row.transportAllowance > 0 ? fmt(row.transportAllowance) : "—"} />
+                  <Field label="Housing Allowance"    value={row.housingAllowance > 0 ? fmt(row.housingAllowance) : "—"} />
+                  <Field label="Other Allowances"     value={row.otherAllowances > 0 ? fmt(row.otherAllowances) : "—"} />
+                  <Field label="Sub Total"            value={fmt(subTotal)} />
+                  <Field label="Overtime Pay"         value={overtime > 0 ? fmt(overtime) : "—"} highlight={overtime > 0 ? "green" : undefined} />
+                  <Field label="Total Earnings"       value={fmt(totalEarnings)} highlight="green" />
+                  <Field label="Gross Salary"         value={fmt(row.grossSalary)} highlight="green" />
+                </div>
+              </div>
+              <div className="border-t border-border pt-5">
+                <p className="text-xs font-bold text-red-700 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                  <Minus className="w-3.5 h-3.5" /> Deductions / Recoveries
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="No-Pay (Absence)"    value={noPayLeave > 0 ? fmt(noPayLeave) : "—"} highlight={noPayLeave > 0 ? "red" : undefined} />
+                  <Field label="Late Arrival Deduction" value={lateDeduction > 0 ? fmt(lateDeduction) : "—"} highlight={lateDeduction > 0 ? "red" : undefined} />
+                  <Field label="Total for EPF / ETF" value={fmt(totalForEPF)} />
+                  <Field label="EPF 8% (Employee)"   value={fmt(epf8)} highlight="red" />
+                  <Field label="Loan Recovery"        value={loans > 0 ? fmt(loans) : "—"} highlight={loans > 0 ? "red" : undefined} />
+                  <Field label="Other Deductions"     value={otherDeds > 0 ? fmt(otherDeds) : "—"} highlight={otherDeds > 0 ? "red" : undefined} />
+                  <Field label="APIT (Income Tax)"    value={apit > 0 ? fmt(apit) : "—"} highlight={apit > 0 ? "red" : undefined} />
+                  <Field label="Total Recoveries"     value={fmt(totalRecoveries)} highlight="red" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Net Pay Info ── */}
+          {tab === "net-pay" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Total Earnings"       value={fmt(totalEarnings)} highlight="green" />
+                <Field label="Total Recoveries"     value={fmt(totalRecoveries)} highlight="red" />
+                <Field label="Net Salary (Take Home)" value={fmt(row.netSalary)} highlight="green" />
+                <Field label="Gross Salary"         value={fmt(row.grossSalary)} />
+              </div>
+              <div className="border-t border-border pt-5">
+                <p className="text-xs font-bold text-violet-700 uppercase tracking-widest mb-3">Statutory Contributions (Employer)</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="EPF 12% (Employer)"  value={fmt(epf12)} />
+                  <Field label="ETF 3% (Employer)"   value={fmt(etf3)} />
+                  <Field label="EPF 8% (Employee)"   value={fmt(epf8)} />
+                  <Field label="Total EPF (20%)"     value={fmt(epf8 + epf12)} highlight="blue" />
+                  <Field label="Total Employer Cost" value={fmt(totalEmployerCost)} highlight="blue" />
+                  {apit > 0 && <Field label="APIT (Income Tax)" value={fmt(apit)} highlight="red" />}
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GeneratePayrollModal({
   month, year, onClose, onGenerated,
 }: {
@@ -695,6 +889,7 @@ export default function Payroll() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [payslip, setPayslip] = useState<PayrollRow | null>(null);
+  const [detailRow, setDetailRow] = useState<PayrollRow | null>(null);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<string>("employee.fullName");
@@ -1019,11 +1214,11 @@ export default function Payroll() {
                               <Eye className="w-3.5 h-3.5" />
                             </button>
                             <button
-                              onClick={() => navigate(`/payroll/payslip/${row.id}`)}
-                              className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                              title="Open payslip page"
+                              onClick={() => setDetailRow(row)}
+                              className="p-1.5 rounded-lg hover:bg-violet-50 transition-colors text-violet-600"
+                              title="Detailed view"
                             >
-                              <ExternalLink className="w-3.5 h-3.5" />
+                              <ListChecks className="w-3.5 h-3.5" />
                             </button>
                             {row.status === "draft" && (
                               <button
@@ -1148,7 +1343,8 @@ export default function Payroll() {
         </Card>
       )}
 
-      {payslip && <PayslipModal row={payslip} onClose={() => setPayslip(null)} />}
+      {payslip   && <PayslipModal       row={payslip}    onClose={() => setPayslip(null)} />}
+      {detailRow && <PayrollDetailModal row={detailRow}  onClose={() => setDetailRow(null)} />}
 
       {showGenerateModal && (
         <GeneratePayrollModal
