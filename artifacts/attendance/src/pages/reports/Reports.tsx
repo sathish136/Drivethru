@@ -20,10 +20,12 @@ const STATUS_COLORS: Record<string, string> = {
   half_day: "bg-yellow-100 text-yellow-700",
   leave:    "bg-purple-100 text-purple-700",
   holiday:  "bg-gray-100 text-gray-700",
+  off_day:  "bg-violet-100 text-violet-700",
 };
 function fmtStatus(st: string) {
   if (st === "late") return "PRESENT (LATE)";
   if (st === "half_day") return "HALF DAY";
+  if (st === "off_day") return "DAY OFF";
   return st.replace("_", " ").toUpperCase();
 }
 function calcLateMinutes(inTime: string | null): number {
@@ -389,6 +391,7 @@ function AttendanceReport() {
               <option value="present">Present</option><option value="absent">Absent</option>
               <option value="late">Late</option><option value="half_day">Half Day</option>
               <option value="leave">Leave</option><option value="holiday">Holiday</option>
+              <option value="off_day">Day Off</option>
             </Select></div>
           <div><Label className="text-xs">Employee Type</Label>
             <Select value={empType} onChange={e=>setEmpType(e.target.value)}>
@@ -407,7 +410,7 @@ function AttendanceReport() {
       </FilterCard>
 
       {data && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3">
           {[
             {label:"Present",  val:filtered.filter((r:any)=>r.status==="present"||r.status==="late").length,  cls:"text-green-600"},
             {label:"Absent",   val:filtered.filter((r:any)=>r.status==="absent").length,   cls:"text-red-600"},
@@ -415,6 +418,7 @@ function AttendanceReport() {
             {label:"Half Day", val:filtered.filter((r:any)=>r.status==="half_day").length, cls:"text-yellow-600"},
             {label:"Leave",    val:filtered.filter((r:any)=>r.status==="leave").length,    cls:"text-purple-600"},
             {label:"Holiday",  val:filtered.filter((r:any)=>r.status==="holiday").length,  cls:"text-gray-600"},
+            {label:"Day Off",  val:filtered.filter((r:any)=>r.status==="off_day").length,  cls:"text-violet-600"},
           ].map(({label,val,cls})=>(
             <Card key={label} className="p-3 text-center">
               <div className={cn("text-2xl font-bold",cls)}>{val}</div>

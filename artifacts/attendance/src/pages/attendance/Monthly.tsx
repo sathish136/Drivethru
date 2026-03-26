@@ -303,6 +303,7 @@ export default function MonthlySheet() {
     half_day: { bg: "bg-yellow-100", text: "text-yellow-800", label: "H"  },
     leave:    { bg: "bg-blue-100",   text: "text-blue-800",   label: "LV" },
     holiday:  { bg: "bg-gray-200",   text: "text-gray-700",   label: "HL" },
+    off_day:  { bg: "bg-purple-100", text: "text-purple-700", label: "WO" },
     sunday:   { bg: "bg-slate-100",  text: "text-slate-400",  label: "DO" },
   };
 
@@ -353,8 +354,8 @@ export default function MonthlySheet() {
           const st = e?.status || "absent";
           const isSun = new Date(year, month - 1, day).getDay() === 0;
           const effectiveSt2 = (st === "absent" && isSun) ? "sunday" : st;
-          const colors: Record<string,string> = { present:"#dcfce7", late:"#dcfce7", absent:"#fee2e2", half_day:"#fef9c3", leave:"#dbeafe", holiday:"#f3f4f6", sunday:"#f1f5f9" };
-          const labels: Record<string,string> = { present:"P", late:"P(L)", absent:"A", half_day:"H", leave:"LV", holiday:"HL", sunday:"DO" };
+          const colors: Record<string,string> = { present:"#dcfce7", late:"#dcfce7", absent:"#fee2e2", half_day:"#fef9c3", leave:"#dbeafe", holiday:"#f3f4f6", off_day:"#f3e8ff", sunday:"#f1f5f9" };
+          const labels: Record<string,string> = { present:"P", late:"P(L)", absent:"A", half_day:"H", leave:"LV", holiday:"HL", off_day:"WO", sunday:"DO" };
           return `<td style="padding:2px;text-align:center;border-bottom:1px solid #f0f0f0"><div style="background:${colors[effectiveSt2]||"#f3f4f6"};border-radius:3px;padding:2px;font-size:8px;font-weight:700">${labels[effectiveSt2]||"A"}</div></td>`;
         }).join("")}
         <td style="text-align:center;font-weight:700;color:#16a34a;padding:4px;border-bottom:1px solid #f0f0f0">${row.presentDays??0}</td>
@@ -396,7 +397,7 @@ export default function MonthlySheet() {
         const isSun = new Date(year, month - 1, day).getDay() === 0;
         const st = e?.status || "absent";
         const effectiveSt3 = (st === "absent" && isSun) ? "sunday" : st;
-        const labels: Record<string,string> = { present:"P", late:"P(L)", absent:"A", half_day:"H", leave:"LV", holiday:"HL", sunday:"DO" };
+        const labels: Record<string,string> = { present:"P", late:"P(L)", absent:"A", half_day:"H", leave:"LV", holiday:"HL", off_day:"WO", sunday:"DO" };
         return labels[effectiveSt3] || "A";
       });
       return [row.employeeCode, row.employeeName, row.designation||"", ...dayStatuses,
