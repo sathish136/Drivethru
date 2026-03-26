@@ -3,6 +3,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { branches, companies } from "./branches";
 import { shifts } from "./shifts";
+import { weekoffSchedules } from "./weekoffs";
 
 export const departments = pgTable("departments", {
   id: serial("id").primaryKey(),
@@ -35,6 +36,7 @@ export const employees = pgTable("employees", {
   companyId: integer("company_id").references(() => companies.id),
   branchId: integer("branch_id").notNull().references(() => branches.id),
   shiftId: integer("shift_id").references(() => shifts.id),
+  weekoffScheduleId: integer("weekoff_schedule_id").references(() => weekoffSchedules.id),
   joiningDate: date("joining_date").notNull(),
   email: text("email").notNull(),
   phone: text("phone").notNull(),

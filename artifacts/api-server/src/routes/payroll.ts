@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import {
   payrollRecords, employees, attendanceRecords, payrollSettings,
   salaryStructures, employeeSalaryAssignments, holidays, shifts, staffLoans,
+  weekoffSchedules,
 } from "@workspace/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { loadDeptRules, findRule, effectiveHours, calcOtHours, lateCutoffMins, timeToMins, calcLunchLateMinutes } from "../lib/hr-rules.js";
@@ -45,6 +46,23 @@ function workingDaysInMonth(year: number, month: number): number {
     if (dow !== 0) count++;
   }
   return count;
+}
+
+function employeeWorkingDays(year: number, month: number, offDays: number[], halfDays: number[]): number {
+  const days = new Date(year, month, 0).getDate();
+  let count = 0;
+  for (let d = 1; d <= days; d++) {
+    const dow = new Date(year, month - 1, d).getDay();
+    if (dow === 0) continue;
+    if (offDays.includes(dow)) continue;
+    count += halfDays.includes(dow) ? 0.5 : 1;
+  }
+  return count;
+}
+
+function isWeekoffDay(dateStr: string, offDays: number[], halfDays: number[]): boolean {
+  const dow = new Date(dateStr + "T12:00:00").getDay();
+  return offDays.includes(dow) || halfDays.includes(dow);
 }
 
 function timeToMinutes(t: string): number {
@@ -205,6 +223,13 @@ router.post("/generate", async (req, res) => {
     const allShifts = await db.select().from(shifts);
     const shiftMap = new Map(allShifts.map(s => [s.id, s]));
 
+    const allWeekoffs = await db.select().from(weekoffSchedules);
+    const weekoffMap = new Map(allWeekoffs.map(w => ({
+      ...w,
+      offDays: JSON.parse(w.offDays) as number[],
+      halfDays: JSON.parse(w.halfDays) as number[],
+    })).map(w => [w.id, w]));
+
     /* ── Load HR department rules ── */
     const deptRules = await loadDeptRules();
 
@@ -232,6 +257,14 @@ router.post("/generate", async (req, res) => {
     for (const emp of targetEmps) {
       const empAtt = filteredAtt.filter(a => a.employeeId === emp.id);
       const designation = (emp.designation ?? "").toLowerCase();
+
+      /* ── Weekoff schedule for this employee ── */
+      const empWeekoff = emp.weekoffScheduleId ? weekoffMap.get(emp.weekoffScheduleId) : null;
+      const empOffDays  = empWeekoff ? empWeekoff.offDays  : [];
+      const empHalfDays = empWeekoff ? empWeekoff.halfDays : [];
+      const empWdCount  = empOffDays.length > 0 || empHalfDays.length > 0
+        ? employeeWorkingDays(year, month, empOffDays, empHalfDays)
+        : wdCount;
 
       /* ── Look up HR department rule for this employee ── */
       const empShiftName     = emp.shiftId ? shiftMap.get(emp.shiftId)?.name ?? null : null;
@@ -271,10 +304,15 @@ router.post("/generate", async (req, res) => {
       const halfDaysCount  = halfDayRecs.length;
       const holidayDays    = holidayRecs.length;
 
-      /* Any working day with no attendance record is treated as absent */
-      const markedDays  = empAtt.length;
-      const unmarkedAbsentDays = Math.max(0, wdCount - markedDays);
-      const absentDays  = absentRecs.length + unmarkedAbsentDays;
+      /* Any working day with no attendance record is treated as absent.
+         Weekoff days do NOT count as working days, so don't penalise. */
+      const nonWeekoffAtt = empAtt.filter(a =>
+        !isWeekoffDay(a.date, empOffDays, empHalfDays)
+      );
+      const markedDays  = nonWeekoffAtt.length;
+      const weekoffMarkedAsAbsent = absentRecs.filter(a => isWeekoffDay(a.date, empOffDays, empHalfDays)).length;
+      const unmarkedAbsentDays = Math.max(0, empWdCount - markedDays);
+      const absentDays  = absentRecs.length - weekoffMarkedAsAbsent + unmarkedAbsentDays;
 
       const structData = structureMap.get(emp.id);
 
@@ -325,8 +363,8 @@ router.post("/generate", async (req, res) => {
         etfEmployer = 0;
       }
 
-      const dailyRate   = basicSalary / wdCount;
-      const hourlyRate  = basicSalary / (wdCount * reqHoursPerDay);
+      const dailyRate   = basicSalary / empWdCount;
+      const hourlyRate  = basicSalary / (empWdCount * reqHoursPerDay);
       const minuteRate  = hourlyRate / 60;
 
       /* ── Late deduction: (morning late + lunch return late) × minuteRate ── */
@@ -477,7 +515,7 @@ router.post("/generate", async (req, res) => {
         branchId: emp.branchId!,
         month,
         year,
-        workingDays: wdCount,
+        workingDays: Math.round(empWdCount),
         presentDays,
         absentDays,
         lateDays,
