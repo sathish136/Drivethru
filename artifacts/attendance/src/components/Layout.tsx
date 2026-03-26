@@ -36,6 +36,7 @@ import {
   CalendarDays,
   Gift,
   CalendarOff,
+  Fingerprint,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -86,6 +87,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "System",
     items: [
+      { href: "/biometric",     label: "Biometric",       icon: Fingerprint },
       { href: "/users",         label: "User Management", icon: ShieldCheck },
       { href: "/activity-logs", label: "Activity Logs",   icon: ListChecks  },
       { href: "/settings",      label: "Settings",        icon: Cog         },
