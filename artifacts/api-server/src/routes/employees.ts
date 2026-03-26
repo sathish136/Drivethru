@@ -172,12 +172,20 @@ router.get("/", async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
 });
 
+function sanitizeDates(body: Record<string, any>) {
+  const DATE_FIELDS = ["dateOfBirth", "joiningDate"];
+  for (const f of DATE_FIELDS) {
+    if (body[f] === "" || body[f] === undefined) body[f] = null;
+  }
+}
+
 router.post("/", async (req, res) => {
   try {
     const body = { ...req.body };
     if (body.firstName && body.lastName) {
       body.fullName = `${body.firstName} ${body.lastName}`;
     }
+    sanitizeDates(body);
     const check = await validateEmployeeId(body.employeeId, Number(body.branchId));
     if (!check.valid) {
       res.status(422).json({ message: check.message, success: false, code: "INVALID_EMPLOYEE_ID" });
@@ -213,6 +221,7 @@ router.put("/:id", async (req, res) => {
     delete body.createdAt;
     delete body.branchName;
     delete body.shiftName;
+    sanitizeDates(body);
     if (body.firstName && body.lastName) {
       body.fullName = `${body.firstName} ${body.lastName}`;
     }
