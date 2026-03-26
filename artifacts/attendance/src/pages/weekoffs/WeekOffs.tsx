@@ -5,7 +5,7 @@ import {
   Plus, Trash2, Edit2, Check, X, Users, CalendarOff, Save,
   UserRound, CheckCircle2, AlertCircle, Search, UserCheck, UserMinus,
   Calendar, Coffee, ListFilter, LayoutList, Layers, ChevronDown,
-  RefreshCw, Building2,
+  RefreshCw, Building2, ChevronLeft, ChevronRight, Clock,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -253,6 +253,9 @@ export default function WeekOffs() {
   const [pendingChanges, setPendingChanges] = useState<Record<number, number | null>>({});
   const [bulkSaving, setBulkSaving]     = useState(false);
 
+  const [periodMode, setPeriodMode]     = useState<"month" | "week">("month");
+  const [periodDate, setPeriodDate]     = useState(() => new Date());
+
   async function load() {
     setLoading(true);
     try {
@@ -343,6 +346,44 @@ export default function WeekOffs() {
     setBulkSaving(false);
   }
 
+  function periodLabel() {
+    if (periodMode === "month") {
+      return periodDate.toLocaleString("default", { month: "long", year: "numeric" });
+    }
+    const start = new Date(periodDate);
+    const day = start.getDay();
+    start.setDate(start.getDate() - day);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    const fmt = (d: Date) => d.toLocaleString("default", { month: "short", day: "numeric" });
+    return `${fmt(start)} – ${fmt(end)}, ${end.getFullYear()}`;
+  }
+
+  function shiftPeriod(dir: 1 | -1) {
+    setPeriodDate(prev => {
+      const d = new Date(prev);
+      if (periodMode === "month") {
+        d.setMonth(d.getMonth() + dir);
+        d.setDate(1);
+      } else {
+        d.setDate(d.getDate() + dir * 7);
+      }
+      return d;
+    });
+  }
+
+  function isCurrentPeriod() {
+    const now = new Date();
+    if (periodMode === "month") {
+      return periodDate.getMonth() === now.getMonth() && periodDate.getFullYear() === now.getFullYear();
+    }
+    const start = new Date(periodDate);
+    start.setDate(start.getDate() - start.getDay());
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    return now >= start && now <= end;
+  }
+
   const departments = useMemo(() => [...new Set(employees.map(e => e.department).filter(Boolean))].sort(), [employees]);
 
   const filteredEmployees = useMemo(() => {
@@ -419,6 +460,49 @@ export default function WeekOffs() {
           {/* ═══════════════════════════════════════════════════════ */}
           {view === "roster" && (
             <div className="flex-1 flex flex-col gap-3 min-h-0">
+
+              {/* Period selector */}
+              <div className="flex items-center gap-3 shrink-0 flex-wrap">
+                <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/30 p-0.5">
+                  <button
+                    onClick={() => { setPeriodMode("month"); }}
+                    className={cn("px-3 py-1.5 rounded-md text-xs font-medium transition-all", periodMode === "month" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
+                  >Monthly</button>
+                  <button
+                    onClick={() => { setPeriodMode("week"); }}
+                    className={cn("px-3 py-1.5 rounded-md text-xs font-medium transition-all", periodMode === "week" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
+                  >Weekly</button>
+                </div>
+
+                <div className="flex items-center gap-1 rounded-lg border border-border bg-background px-1 py-1">
+                  <button onClick={() => shiftPeriod(-1)} className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="px-3 text-sm font-semibold min-w-[170px] text-center">{periodLabel()}</span>
+                  <button onClick={() => shiftPeriod(1)} className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {!isCurrentPeriod() && (
+                  <button
+                    onClick={() => setPeriodDate(new Date())}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors"
+                  >
+                    <Clock className="w-3.5 h-3.5" /> Today
+                  </button>
+                )}
+
+                <div className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border",
+                  isCurrentPeriod()
+                    ? "bg-green-50 text-green-700 border-green-200"
+                    : "bg-amber-50 text-amber-700 border-amber-200"
+                )}>
+                  <Calendar className="w-3.5 h-3.5" />
+                  {isCurrentPeriod() ? "Current period" : "Planning ahead"}
+                </div>
+              </div>
 
               {/* Filters + save bar */}
               <div className="flex items-center gap-3 flex-wrap shrink-0">
