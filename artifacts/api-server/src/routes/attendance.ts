@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { attendanceRecords, employees, branches, shifts, leaveBalances } from "@workspace/db/schema";
-import { eq, and, gte, lte } from "drizzle-orm";
+import { eq, and, gte, lte, isNotNull } from "drizzle-orm";
 import { calcWorkHours, getDaysInMonth, today } from "../lib/helpers.js";
 import { loadDeptRules, findRule, timeToMins } from "../lib/hr-rules.js";
 
@@ -489,6 +489,27 @@ router.post("/", async (req, res) => {
     const [br] = await db.select().from(branches).where(eq(branches.id, emp.branchId));
     res.status(201).json({ ...rec, employeeName: emp.fullName, employeeCode: emp.employeeId, branchName: br?.name || "", shiftName: null, createdAt: rec.createdAt.toISOString() });
   } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
+});
+
+router.get("/recent-leaves", async (req, res) => {
+  try {
+    const limit = Number(req.query.limit) || 15;
+    const rows = await db
+      .select({
+        id: attendanceRecords.id,
+        date: attendanceRecords.date,
+        leaveType: attendanceRecords.leaveType,
+        status: attendanceRecords.status,
+        employeeName: employees.fullName,
+        employeeCode: employees.employeeId,
+      })
+      .from(attendanceRecords)
+      .leftJoin(employees, eq(attendanceRecords.employeeId, employees.id))
+      .where(isNotNull(attendanceRecords.leaveType))
+      .orderBy(attendanceRecords.id)
+      .limit(limit);
+    res.json(rows.reverse());
+  } catch (e) { console.error(e); res.status(500).json({ message: "Error" }); }
 });
 
 router.put("/:id", async (req, res) => {

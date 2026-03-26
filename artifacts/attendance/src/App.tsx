@@ -22,6 +22,7 @@ import HRSettings from "@/pages/hr-settings/HRSettings";
 import Holidays from "@/pages/holidays/Holidays";
 import Approvals from "@/pages/attendance/Approvals";
 import LeaveBalances from "@/pages/leave/LeaveBalances";
+import LeaveEntry from "@/pages/leave/LeaveEntry";
 import Loans from "@/pages/loans/Loans";
 import Incentives from "@/pages/incentives/Incentives";
 import NotFound from "@/pages/not-found";
@@ -48,6 +49,7 @@ function Router() {
       <Route path="/attendance/today"><ProtectedRoute component={TodayAttendance} /></Route>
       <Route path="/attendance/monthly"><ProtectedRoute component={MonthlySheet} /></Route>
       <Route path="/attendance/approvals"><ProtectedRoute component={Approvals} /></Route>
+      <Route path="/attendance/leave-entry"><ProtectedRoute component={LeaveEntry} /></Route>
       <Route path="/leave-balances"><ProtectedRoute component={LeaveBalances} /></Route>
       <Route path="/employees"><ProtectedRoute component={EmployeeList} /></Route>
       <Route path="/branches"><ProtectedRoute component={Branches} /></Route>

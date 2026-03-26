@@ -54,6 +54,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/attendance/today",      label: "Today's Attendance", icon: ClipboardList   },
       { href: "/attendance/monthly",    label: "Monthly Sheet",      icon: CalendarCheck   },
       { href: "/attendance/approvals",  label: "Approvals",          icon: ClipboardCheck  },
+      { href: "/attendance/leave-entry", label: "Leave Entry",        icon: CalendarClock   },
     ],
   },
   {
