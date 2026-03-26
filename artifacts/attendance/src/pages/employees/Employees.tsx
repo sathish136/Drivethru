@@ -1660,9 +1660,9 @@ export default function Employees() {
   }, [allEmployees, search, filterBranchId]);
 
   function exportCSV() {
-    const headers = ["Employee ID","First Name","Last Name","Gender","Designation","Department","Branch","Type","Status","Phone","Email","NIC Number","Passport No.","Basic Salary (LKR)","EPF No.","ETF No.","Joining Date"];
+    const headers = ["Employee ID","Biometric ID","First Name","Last Name","Gender","Designation","Department","Branch","Type","Status","Phone","Email","NIC Number","Passport No.","Basic Salary (LKR)","EPF No.","ETF No.","Joining Date"];
     const rows = employees.map((e: any) => [
-      e.employeeId, e.firstName || "", e.lastName || e.fullName || "",
+      e.employeeId, e.biometricId || "", e.firstName || "", e.lastName || e.fullName || "",
       e.gender, e.designation, e.department,
       e.branchName, e.employeeType, e.status, e.phone, e.email,
       e.nicNumber || "", e.panNumber || "", e.basicSalary || "", e.epfNumber || "", e.etfNumber || "", e.joiningDate

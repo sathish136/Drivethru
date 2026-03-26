@@ -1,0 +1,1128 @@
+# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
+"""
+ZKTeco PUSH Server - Attendance Management System with ERPNext Integration
+Listens on port 8081 for device connections and syncs all data from machines
+Stores employees, attendance records, and device info in push.db
+Sends employee check-in data to ERPNext
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import sys
+import sqlite3
+import threading
+import requests
+import logging
+from logging.handlers import RotatingFileHandler
+from datetime import datetime, timezone, timedelta
+from typing import Dict, List, Optional
+import signal
+
+def log_info(message: str) -> None:
+    """Log info message to both file and console"""
+    logger.info(message)
+    print(message)
+
+def log_error(message: str) -> None:
+    """Log error message to both file and console"""
+    logger.error(message)
+    print(message)
+
+def log_warning(message: str) -> None:
+    """Log warning message to both file and console"""
+    logger.warning(message)
+    print(message)
+
+from flask import Flask, request, Response, jsonify
+
+# Import ERPNext configuration
+try:
+    import local_config
+    ERPNEXT_API_KEY = local_config.ERPNEXT_API_KEY
+    ERPNEXT_API_SECRET = local_config.ERPNEXT_API_SECRET
+    ERPNEXT_URL = local_config.ERPNEXT_URL.rstrip('/')
+    LOGS_DIRECTORY = getattr(local_config, 'LOGS_DIRECTORY', 'logs')
+except ImportError:
+    print("[ERROR] local_config.py not found. Please create it with ERPNext credentials.")
+    ERPNEXT_API_KEY = ""
+    ERPNEXT_API_SECRET = ""
+    ERPNEXT_URL = ""
+    LOGS_DIRECTORY = 'logs'
+
+APP_HOST = "0.0.0.0"
+APP_PORT = 8081  # Python push server on 8081
+DB_PATH = "push.db"
+
+# Create logs directory if it doesn't exist
+os.makedirs(LOGS_DIRECTORY, exist_ok=True)
+
+# Configure logging
+log_file = os.path.join(LOGS_DIRECTORY, f"erp_sync_{datetime.now().strftime('%Y%m%d')}.log")
+log_format = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# File handler with rotation (10MB per file, keep 5 backups)
+file_handler = RotatingFileHandler(
+    log_file,
+    maxBytes=10*1024*1024,  # 10MB
+    backupCount=5,
+    encoding='utf-8'
+)
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(log_format)
+
+# Console handler
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(log_format)
+
+# Root logger configuration
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+logger.addHandler(file_handler)
+logger.addHandler(console_handler)
+
+# Flask app logger
+app_logger = logging.getLogger('flask')
+app_logger.setLevel(logging.WARNING)  # Reduce Flask's verbose logging
+
+app = Flask(__name__)
+
+_http_server = None
+
+# ============================================================================
+# DATABASE HELPERS
+# ============================================================================
+
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+def db() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db() -> None:
+    """Initialize database tables if they don't exist"""
+    conn = db()
+    cur = conn.cursor()
+
+    # Devices table - tracks connected ZKTeco machines
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS devices (
+        sn TEXT PRIMARY KEY,
+        last_seen_utc TEXT,
+        last_ip TEXT,
+        pushver TEXT,
+        language TEXT,
+        info TEXT
+    )
+    """)
+
+    # Users table - employees/users on the machine
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sn TEXT NOT NULL,
+        pin TEXT NOT NULL,
+        name TEXT,
+        card TEXT,
+        grp TEXT,
+        tz TEXT,
+        pri TEXT,
+        verify TEXT,
+        raw_line TEXT,
+        updated_at_utc TEXT,
+        UNIQUE(sn, pin)
+    )
+    """)
+
+    # Attendance log - all attendance records
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS attlog (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sn TEXT NOT NULL,
+        pin TEXT NOT NULL,
+        time TEXT,
+        status TEXT,
+        verify TEXT,
+        workcode TEXT,
+        maskflag TEXT,
+        temperature TEXT,
+        convtemperature TEXT,
+        timeoffset TEXT,
+        raw_line TEXT,
+        received_at_utc TEXT,
+        synced_to_erpnext INTEGER DEFAULT 0
+    )
+    """)
+    
+    # Add synced_to_erpnext column if it doesn't exist (for existing databases)
+    try:
+        cur.execute("ALTER TABLE attlog ADD COLUMN synced_to_erpnext INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
+    conn.commit()
+    conn.close()
+    log_info(f"[DB] Initialized database: {DB_PATH}")
+
+# ============================================================================
+# PARSING HELPERS
+# ============================================================================
+
+def parse_kv_line(line: str) -> Dict[str, str]:
+    """Parse KEY=VALUE format (handles tabs and spaces)"""
+    parts = re.split(r"[\t\r\n]+", line.strip())
+    joined = " ".join(p.strip() for p in parts if p.strip())
+    
+    kv: Dict[str, str] = {}
+    for m in re.finditer(r"(\w+)=([^=]*?)(?=\s+\w+=|$)", joined):
+        k = m.group(1).strip()
+        v = m.group(2).strip()
+        kv[k] = v
+    return kv
+
+def parse_attlog_record(line: str) -> Optional[Dict[str, str]]:
+    """Parse attendance record (PIN, Time, Status, Verify, Workcode, etc.)"""
+    raw = line.strip()
+    if not raw:
+        return None
+    
+    cols = re.split(r"[\t ]+", raw)
+    if len(cols) < 4:
+        return None
+
+    pin = cols[0]
+    
+    # Time format: "YYYY-MM-DD HH:MM:SS"
+    if len(cols) >= 3 and re.match(r"\d{4}-\d{2}-\d{2}", cols[1]) and re.match(r"\d{2}:\d{2}:\d{2}", cols[2]):
+        time_str = f"{cols[1]} {cols[2]}"
+        idx = 3
+    else:
+        time_str = cols[1]
+        idx = 2
+
+    def get(i: int) -> str:
+        return cols[i] if i < len(cols) else ""
+
+    status = get(idx); idx += 1
+    verify = get(idx); idx += 1
+    workcode = get(idx); idx += 1
+
+    maskflag = temperature = convtemperature = timeoffset = ""
+    if len(cols) >= 4:
+        tail = cols[-4:]
+        if len(tail) == 4:
+            maskflag, temperature, convtemperature, timeoffset = tail
+
+    return {
+        "pin": pin,
+        "time": time_str,
+        "status": status,
+        "verify": verify,
+        "workcode": workcode,
+        "maskflag": maskflag,
+        "temperature": temperature,
+        "convtemperature": convtemperature,
+        "timeoffset": timeoffset,
+    }
+
+def get_device_status() -> List[Dict[str, str]]:
+    """Return list of devices with last seen, IP, and attlog count for mini GUI."""
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT d.sn, d.last_seen_utc, d.last_ip, d.pushver,
+               (SELECT COUNT(*) FROM attlog a WHERE a.sn = d.sn) AS attlog_count
+        FROM devices d
+        ORDER BY d.last_seen_utc DESC
+    """)
+    rows = cur.fetchall()
+    conn.close()
+    return [
+        {
+            "sn": r["sn"] or "-",
+            "last_seen": (r["last_seen_utc"] or "-")[:19].replace("T", " "),
+            "last_ip": r["last_ip"] or "-",
+            "pushver": r["pushver"] or "-",
+            "records": str(r["attlog_count"]),
+        }
+        for r in rows
+    ]
+
+def upsert_device(sn: str, ip: str, pushver: str = "", language: str = "", info: str = "") -> None:
+    """Store or update device info"""
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("""
+    INSERT INTO devices (sn, last_seen_utc, last_ip, pushver, language, info)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(sn) DO UPDATE SET
+      last_seen_utc=excluded.last_seen_utc,
+      last_ip=excluded.last_ip,
+      pushver=excluded.pushver,
+      language=excluded.language,
+      info=CASE WHEN excluded.info != '' THEN excluded.info ELSE devices.info END
+    """, (sn, utc_now_iso(), ip, pushver, language, info))
+    conn.commit()
+    conn.close()
+
+def upsert_user(sn: str, kv: Dict[str, str], raw_line: str) -> None:
+    """Store or update employee/user info"""
+    pin = kv.get("PIN") or kv.get("Pin") or ""
+    if not pin:
+        return
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("""
+    INSERT INTO users (sn, pin, name, card, grp, tz, pri, verify, raw_line, updated_at_utc)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(sn, pin) DO UPDATE SET
+      name=excluded.name,
+      card=excluded.card,
+      grp=excluded.grp,
+      tz=excluded.tz,
+      pri=excluded.pri,
+      verify=excluded.verify,
+      raw_line=excluded.raw_line,
+      updated_at_utc=excluded.updated_at_utc
+    """, (
+        sn, pin,
+        kv.get("Name", ""),
+        kv.get("Card", ""),
+        kv.get("Grp", ""),
+        kv.get("TZ", ""),
+        kv.get("Pri", ""),
+        kv.get("Verify", ""),
+        raw_line,
+        utc_now_iso(),
+    ))
+    conn.commit()
+    conn.close()
+
+def insert_attlog(sn: str, rec: Dict[str, str], raw_line: str) -> None:
+    """Store attendance record - prevents duplicates"""
+    pin = rec.get("pin", "")
+    punch_time = rec.get("time", "")
+    
+    # Check if this record already exists (duplicate prevention)
+    conn = db()
+    cur = conn.cursor()
+    existing = cur.execute("""
+        SELECT id, synced_to_erpnext FROM attlog 
+        WHERE sn = ? AND pin = ? AND time = ?
+        LIMIT 1
+    """, (sn, pin, punch_time)).fetchone()
+    
+    if existing:
+        # Record already exists
+        record_id = existing["id"]
+        already_synced = existing["synced_to_erpnext"] == 1
+        
+        if already_synced:
+            # Already synced, skip
+            conn.close()
+            return
+        
+        # Exists but not synced - try to sync it
+        conn.close()
+        rec_dict = {
+            "pin": pin,
+            "time": punch_time,
+            "status": rec.get("status", ""),
+            "verify": rec.get("verify", ""),
+            "workcode": rec.get("workcode", ""),
+        }
+        success = send_checkin_to_erpnext(sn, rec_dict, raw_line)
+        
+        if success:
+            conn = db()
+            conn.execute("UPDATE attlog SET synced_to_erpnext = 1 WHERE id = ?", (record_id,))
+            conn.commit()
+            conn.close()
+        return
+    
+    # New record - insert it
+    cur.execute("""
+    INSERT INTO attlog (
+      sn, pin, time, status, verify, workcode,
+      maskflag, temperature, convtemperature, timeoffset,
+      raw_line, received_at_utc, synced_to_erpnext
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        sn,
+        pin,
+        punch_time,
+        rec.get("status", ""),
+        rec.get("verify", ""),
+        rec.get("workcode", ""),
+        rec.get("maskflag", ""),
+        rec.get("temperature", ""),
+        rec.get("convtemperature", ""),
+        rec.get("timeoffset", ""),
+        raw_line,
+        utc_now_iso(),
+        0  # Not synced yet
+    ))
+    record_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+
+    # Send check-in data to ERPNext
+    success = send_checkin_to_erpnext(sn, rec, raw_line)
+    
+    # Mark as synced if successful
+    if success:
+        conn = db()
+        conn.execute("UPDATE attlog SET synced_to_erpnext = 1 WHERE id = ?", (record_id,))
+        conn.commit()
+        conn.close()
+
+
+def check_duplicate_in_erpnext(pin: str, timestamp: str, headers: Dict[str, str]) -> bool:
+    """
+    Check if a check-in record already exists in ERPNext to prevent duplicates.
+    
+    Returns:
+        bool: True if duplicate exists, False otherwise
+    """
+    try:
+        # Search for existing Employee Checkin records
+        checkin_endpoint = f"{ERPNEXT_URL}/api/resource/Employee Checkin"
+        
+        # Format timestamp for search (ERPNext uses ISO format)
+        try:
+            dt = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+            search_time = dt.strftime("%Y-%m-%d %H:%M:%S")
+        except:
+            search_time = timestamp
+        
+        # Search by time (within 1 minute window to account for slight time differences)
+        search_params = {
+            'filters': f'[["time",">=","{search_time}"],["time","<=","{search_time}"]]'
+        }
+        
+        search_response = requests.get(checkin_endpoint, headers=headers, params=search_params, timeout=5)
+        
+        if search_response.status_code == 200:
+            checkins = search_response.json().get('data', [])
+            # Check if any check-in matches the PIN and time (within 1 minute)
+            for checkin in checkins:
+                checkin_time = checkin.get('time', '')
+                checkin_employee = checkin.get('employee', '')
+                
+                # Parse times and check if within 1 minute
+                try:
+                    checkin_dt = datetime.strptime(checkin_time[:19], "%Y-%m-%d %H:%M:%S")
+                    target_dt = datetime.strptime(search_time, "%Y-%m-%d %H:%M:%S")
+                    time_diff = abs((checkin_dt - target_dt).total_seconds())
+                    
+                    # If time difference is less than 60 seconds, might be duplicate
+                    if time_diff < 60:
+                        # Try to verify by checking employee's attendance_device_id or employee_id
+                        employee_endpoint = f"{ERPNEXT_URL}/api/resource/Employee/{checkin_employee}"
+                        emp_response = requests.get(employee_endpoint, headers=headers, timeout=5)
+                        if emp_response.status_code == 200:
+                            emp_data = emp_response.json().get('data', {})
+                            if (emp_data.get('attendance_device_id') == pin or 
+                                emp_data.get('employee_id') == pin):
+                                return True  # Duplicate found
+                except:
+                    pass
+        
+    except Exception as e:
+        # If check fails, proceed anyway (don't block on duplicate check failure)
+        pass
+    
+    return False
+
+
+def send_checkin_to_erpnext(sn: str, rec: Dict[str, str], raw_line: str) -> bool:
+    """
+    Send employee check-in data to ERPNext via API.
+    Prevents duplicates by checking if record already exists.
+    
+    Uses the ERPNext Employee Check-in API endpoint:
+    /api/method/hrms.hr.doctype.employee_checkin.employee_checkin.add_log_based_on_employee_field
+    
+    Returns:
+        bool: True if successfully sent to ERPNext, False otherwise
+    """
+    if not ERPNEXT_URL or not ERPNEXT_API_KEY or not ERPNEXT_API_SECRET:
+        log_error(f"[ERPNext] Configuration missing. URL={bool(ERPNEXT_URL)}, Key={bool(ERPNEXT_API_KEY)}, Secret={bool(ERPNEXT_API_SECRET)}")
+        return False
+
+    pin = rec.get("pin") or ""
+    device_id = sn or ""
+    punch_time = rec.get("time") or ""
+    status = rec.get("status", "").upper()
+
+    # If any of the critical fields are missing, skip
+    if not pin or not device_id or not punch_time:
+        log_warning(f"[ERPNext] Missing required fields: PIN={bool(pin)}, Device={bool(device_id)}, Time={bool(punch_time)}")
+        return False
+
+    # Map attendance status to ERPNext log_type
+    # Common statuses: 0=Check In, 1=Check Out, 255=Break Out, etc.
+    # Default to IN if status is 0 or empty, OUT for others
+    log_type = "IN"
+    if status == "1" or status == "255":
+        log_type = "OUT"
+    elif status and status != "0":
+        # For other statuses, try to determine based on common patterns
+        if "OUT" in status or "CHECKOUT" in status:
+            log_type = "OUT"
+        elif "IN" in status or "CHECKIN" in status:
+            log_type = "IN"
+
+    # Format timestamp for ERPNext (YYYY-MM-DD HH:MM:SS)
+    try:
+        # Parse the time string to ensure proper format
+        dt = datetime.strptime(punch_time, "%Y-%m-%d %H:%M:%S")
+        timestamp = dt.strftime("%Y-%m-%d %H:%M:%S")
+    except Exception as e:
+        # If parsing fails, use as-is
+        timestamp = punch_time
+        log_warning(f"[ERPNext] Warning: Could not parse timestamp '{punch_time}': {e}")
+
+    # Prepare headers for API requests
+    headers = {
+        'Authorization': f"token {ERPNEXT_API_KEY}:{ERPNEXT_API_SECRET}",
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+    }
+    
+    # Check for duplicate in ERPNext before sending
+    if check_duplicate_in_erpnext(pin, timestamp, headers):
+        log_info(f"[ERPNext] Duplicate detected: PIN={pin}, Time={timestamp} - Skipping")
+        return True  # Return True because duplicate means it's already in ERPNext
+
+    # Try hrms.hr endpoint first (most common in newer ERPNext), fallback to erpnext.hr if needed
+    endpoints = [
+        f"{ERPNEXT_URL}/api/method/hrms.hr.doctype.employee_checkin.employee_checkin.add_log_based_on_employee_field",
+        f"{ERPNEXT_URL}/api/method/erpnext.hr.doctype.employee_checkin.employee_checkin.add_log_based_on_employee_field"
+    ]
+    
+    # Try multiple field matching strategies
+    # The API searches by attendance_device_id by default, but we can try:
+    # 1. PIN as-is (for attendance_device_id)
+    # 2. Try creating Employee Checkin directly with employee name/ID if field matching fails
+    
+    data = {
+        'employee_field_value': pin,  # This should match attendance_device_id field in Employee
+        'timestamp': timestamp,
+        'device_id': device_id,
+        'log_type': log_type
+    }
+
+    # Log request details (without exposing secret)
+    log_info(f"[ERPNext] Sending check-in: PIN={pin}, Time={timestamp}, Type={log_type}, Device={device_id}")
+
+    # Try both endpoints
+    success = False
+    for endpoint in endpoints:
+        print(f"[ERPNext] Trying endpoint: {endpoint}")
+        
+        try:
+            response = requests.post(endpoint, headers=headers, json=data, timeout=10)
+            
+            # Print response details for debugging
+            print(f"[ERPNext] Response Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                try:
+                    result = response.json()
+                    print(f"[ERPNext] Response JSON: {result}")
+                    
+                    # Check for success message or error
+                    if result.get('message'):
+                        print(f"[ERPNext] OK Success: Check-in created for PIN={pin}, Time={timestamp}, Type={log_type}")
+                        success = True
+                        break
+                    elif result.get('exc_type'):
+                        error_msg = result.get('exc', 'Unknown error')
+                        error_str = str(error_msg).lower()
+                        print(f"[ERPNext] ERROR Error in response: {result.get('exc_type')} - {error_msg}")
+                        # If it's a method not found error, try next endpoint
+                        if 'method' in error_str or 'not found' in error_str or 'no module' in error_str:
+                            continue
+                        # If employee not found, try alternative API method
+                        elif 'no employee found' in error_str or 'employee' in error_str and 'not found' in error_str:
+                            print(f"[ERPNext] Employee not found with attendance_device_id={pin}, trying alternative method...")
+                            # Try creating Employee Checkin directly
+                            alt_success = try_create_employee_checkin_direct(pin, timestamp, device_id, log_type, headers)
+                            if alt_success:
+                                success = True
+                                break
+                            continue
+                    elif 'error' in result or 'exception' in str(result).lower():
+                        print(f"[ERPNext] ERROR Error response: {result}")
+                    else:
+                        print(f"[ERPNext] WARN Warning: Unexpected response format for PIN={pin}: {result}")
+                except ValueError as e:
+                    print(f"[ERPNext] ERROR Failed to parse JSON response: {e}")
+                    print(f"[ERPNext] Raw response: {response.text[:500]}")
+            elif response.status_code == 404:
+                # Endpoint not found, try next one
+                print(f"[ERPNext] Endpoint not found (404), trying next...")
+                continue
+            elif response.status_code == 417:
+                # Check if it's a "module not found" error - try next endpoint
+                try:
+                    error_data = response.json()
+                    error_text = str(error_data).lower()
+                    if 'method' in error_text or 'module' in error_text or 'not found' in error_text:
+                        print(f"[ERPNext] Method/module error, trying next endpoint...")
+                        continue
+                except:
+                    pass
+                print(f"[ERPNext] ERROR HTTP Error 417: {response.text[:500]}")
+                # Try next endpoint for 417 errors
+                continue
+            else:
+                print(f"[ERPNext] ERROR HTTP Error {response.status_code}: {response.text[:500]}")
+                # For other errors, try next endpoint if it's a method/module error
+                if response.status_code >= 400 and response.status_code < 500:
+                    try:
+                        error_data = response.json()
+                        error_text = str(error_data).lower()
+                        if 'method' in error_text or 'module' in error_text or 'not found' in error_text:
+                            print(f"[ERPNext] Method/module error, trying next endpoint...")
+                            continue
+                    except:
+                        pass
+                break
+                
+        except requests.exceptions.Timeout:
+            print(f"[ERPNext] ERROR Timeout sending check-in for PIN={pin} to {endpoint}")
+            continue
+        except requests.exceptions.ConnectionError as e:
+            print(f"[ERPNext] ERROR Connection error for PIN={pin}: {e}")
+            break  # Connection error means server is unreachable, don't try next endpoint
+        except requests.exceptions.RequestException as e:
+            print(f"[ERPNext] ERROR Request error for PIN={pin}: {e}")
+            break
+        except Exception as e:
+            print(f"[ERPNext] ERROR Unexpected error for PIN={pin}: {type(e).__name__}: {e}")
+            break
+    
+    if not success:
+        print(f"[ERPNext] ERROR Failed to send check-in for PIN={pin} after trying all endpoints")
+        print(f"[ERPNext] Note: Make sure Employee records in ERPNext have 'attendance_device_id' field set to match PIN={pin}")
+    
+    return success
+
+
+def try_create_employee_checkin_direct(pin: str, timestamp: str, device_id: str, log_type: str, headers: Dict[str, str]) -> bool:
+    """
+    Try to create Employee Checkin record directly by searching for employee first.
+    This is a fallback when attendance_device_id matching fails.
+    """
+    try:
+        search_endpoint = f"{ERPNEXT_URL}/api/resource/Employee"
+        
+        # Try searching by employee_id field first (most common)
+        print(f"[ERPNext] Searching for employee with employee_id={pin}...")
+        search_params1 = {
+            'filters': f'[["employee_id","=","{pin}"]]'
+        }
+        search_response1 = requests.get(search_endpoint, headers=headers, params=search_params1, timeout=10)
+        
+        if search_response1.status_code == 200:
+            employees = search_response1.json().get('data', [])
+            if employees:
+                employee_name = employees[0].get('name')
+                print(f"[ERPNext] Found employee: {employee_name} (matched by employee_id)")
+                # Now create check-in directly
+                checkin_endpoint = f"{ERPNEXT_URL}/api/resource/Employee Checkin"
+                checkin_data = {
+                    'employee': employee_name,
+                    'time': timestamp,
+                    'log_type': log_type,
+                    'device_id': device_id
+                }
+                create_response = requests.post(checkin_endpoint, headers=headers, json=checkin_data, timeout=10)
+                if create_response.status_code in [200, 201]:
+                    print(f"[ERPNext] OK Created check-in directly for employee {employee_name}")
+                    return True
+                else:
+                    print(f"[ERPNext] Failed to create check-in: HTTP {create_response.status_code} - {create_response.text[:200]}")
+        
+        # Try searching by attendance_device_id (in case it exists but API method failed)
+        print(f"[ERPNext] Searching for employee with attendance_device_id={pin}...")
+        search_params2 = {
+            'filters': f'[["attendance_device_id","=","{pin}"]]'
+        }
+        search_response2 = requests.get(search_endpoint, headers=headers, params=search_params2, timeout=10)
+        
+        if search_response2.status_code == 200:
+            employees = search_response2.json().get('data', [])
+            if employees:
+                employee_name = employees[0].get('name')
+                print(f"[ERPNext] Found employee: {employee_name} (matched by attendance_device_id)")
+                checkin_endpoint = f"{ERPNEXT_URL}/api/resource/Employee Checkin"
+                checkin_data = {
+                    'employee': employee_name,
+                    'time': timestamp,
+                    'log_type': log_type,
+                    'device_id': device_id
+                }
+                create_response = requests.post(checkin_endpoint, headers=headers, json=checkin_data, timeout=10)
+                if create_response.status_code in [200, 201]:
+                    print(f"[ERPNext] OK Created check-in directly for employee {employee_name}")
+                    return True
+                else:
+                    print(f"[ERPNext] Failed to create check-in: HTTP {create_response.status_code} - {create_response.text[:200]}")
+        
+        # Try searching by name (if PIN happens to match employee name)
+        print(f"[ERPNext] Searching for employee with name={pin}...")
+        search_params3 = {
+            'filters': f'[["name","=","{pin}"]]'
+        }
+        search_response3 = requests.get(search_endpoint, headers=headers, params=search_params3, timeout=10)
+        
+        if search_response3.status_code == 200:
+            employees = search_response3.json().get('data', [])
+            if employees:
+                employee_name = employees[0].get('name')
+                print(f"[ERPNext] Found employee: {employee_name} (matched by name)")
+                checkin_endpoint = f"{ERPNEXT_URL}/api/resource/Employee Checkin"
+                checkin_data = {
+                    'employee': employee_name,
+                    'time': timestamp,
+                    'log_type': log_type,
+                    'device_id': device_id
+                }
+                create_response = requests.post(checkin_endpoint, headers=headers, json=checkin_data, timeout=10)
+                if create_response.status_code in [200, 201]:
+                    print(f"[ERPNext] OK Created check-in directly for employee {employee_name}")
+                    return True
+        
+        print(f"[ERPNext] No employee found matching PIN={pin} in any field")
+        
+    except Exception as e:
+        print(f"[ERPNext] Alternative method exception: {type(e).__name__}: {e}")
+    
+    return False
+
+
+def migrate_sqlite_to_erpnext(limit: Optional[int] = None, device_sn: Optional[str] = None) -> Dict[str, int]:
+    """
+    Migrate all unsynced attendance records from SQLite to ERPNext.
+    
+    Args:
+        limit: Maximum number of records to process (None for all)
+        device_sn: Filter by device serial number (None for all devices)
+    
+    Returns:
+        Dict with counts: {'total': int, 'synced': int, 'failed': int, 'skipped': int}
+    """
+    conn = db()
+    cur = conn.cursor()
+    
+    # Build query for unsynced records
+    where_clauses = ["synced_to_erpnext = 0 OR synced_to_erpnext IS NULL"]
+    params = []
+    
+    if device_sn:
+        where_clauses.append("sn = ?")
+        params.append(device_sn)
+    
+    where_sql = "WHERE " + " AND ".join(where_clauses)
+    limit_sql = f"LIMIT {limit}" if limit else ""
+    
+    cur.execute(f"""
+        SELECT id, sn, pin, time, status, verify, workcode, raw_line
+        FROM attlog
+        {where_sql}
+        ORDER BY id ASC
+        {limit_sql}
+    """, params)
+    
+    records = cur.fetchall()
+    conn.close()
+    
+    total = len(records)
+    synced = 0
+    failed = 0
+    skipped = 0
+    
+    log_info(f"[MIGRATION] Starting migration: {total} records to process")
+    
+    for record in records:
+        record_id = record["id"]
+        sn = record["sn"]
+        pin = record["pin"]
+        punch_time = record["time"]
+        status = record["status"]
+        
+        # Skip if required fields are missing
+        if not pin or not sn or not punch_time:
+            skipped += 1
+            log_warning(f"[MIGRATION] Skipping record {record_id}: Missing required fields")
+            continue
+        
+        # Convert record to dict format expected by send_checkin_to_erpnext
+        rec = {
+            "pin": pin,
+            "time": punch_time,
+            "status": status or "",
+            "verify": record["verify"] or "",
+            "workcode": record["workcode"] or "",
+        }
+        
+        # Send to ERPNext
+        success = send_checkin_to_erpnext(sn, rec, record["raw_line"] or "")
+        
+        if success:
+            # Mark as synced
+            conn = db()
+            conn.execute("UPDATE attlog SET synced_to_erpnext = 1 WHERE id = ?", (record_id,))
+            conn.commit()
+            conn.close()
+            synced += 1
+            
+            # Progress indicator every 10 records
+            if synced % 10 == 0:
+                log_info(f"[MIGRATION] Progress: {synced}/{total} synced...")
+        else:
+            failed += 1
+    
+    result = {
+        'total': total,
+        'synced': synced,
+        'failed': failed,
+        'skipped': skipped
+    }
+    
+    log_info(f"[MIGRATION] Complete: {synced} synced, {failed} failed, {skipped} skipped out of {total} total")
+    return result
+
+# ============================================================================
+# ZKTECO PROTOCOL ENDPOINTS
+# ============================================================================
+
+@app.route("/iclock/cdata", methods=["GET", "POST"])
+@app.route("/iclock/cdata.aspx", methods=["GET", "POST"])
+def iclock_cdata():
+    """Main device initialization and data upload endpoint"""
+    sn = request.args.get("SN", "").strip()
+    if not sn:
+        return Response("Missing SN", status=400, mimetype="text/plain")
+
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "")
+    pushver = request.args.get("pushver", "")
+    language = request.args.get("language", "")
+
+    if request.method == "GET":
+        options = request.args.get("options", "")
+
+        # Initialization handshake (options=all)
+        if options == "all":
+            upsert_device(sn, ip, pushver=pushver, language=language)
+
+            # Send full configuration with zero stamps to force FULL re-sync of ALL 12000+ records
+            body = (
+                f"GET OPTION FROM: {sn}\n"
+                f"ATTLOGStamp=0\n"
+                f"OPERLOGStamp=0\n"
+                f"BIODATAStamp=0\n"
+                f"ATTPHOTOStamp=0\n"
+                f"USERStamp=0\n"
+                f"ErrorDelay=30\n"
+                f"Delay=3\n"
+                f"TransTimes=\n"
+                f"TransInterval=1\n"
+                f"TransFlag=TransData AttLog\tOpLog\tEnrollUser\tChgUser\n"
+                f"TimeZone=330\n"
+                f"Realtime=0\n"
+                f"Encrypt=None\n"
+                f"ServerVer=2.2.14\n"
+                f"PushProtVer={pushver or '2.2.14'}\n"
+            )
+            log_info(f"[INIT] Device {sn} ({ip}) - Full sync request: ATTLOGStamp=0 (will download ALL 12000+ records)")
+            return Response(body, status=200, mimetype="text/plain")
+
+        # Other GET requests
+        upsert_device(sn, ip, pushver=pushver, language=language)
+        return Response("OK", status=200, mimetype="text/plain")
+
+    # POST: Device uploads data
+    upsert_device(sn, ip, pushver=pushver, language=language)
+
+    table = request.args.get("table", "").strip().upper()
+    raw_bytes = request.get_data() or b""
+    text = raw_bytes.decode("utf-8", errors="ignore").strip()
+
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    processed = 0
+    
+    # Log all POST data for debugging
+    if text:
+        log_info(f"[POST] Device {sn}: table={table}, lines={len(lines)}, data_size={len(raw_bytes)}")
+        if len(lines) > 0:
+            log_info(f"       First line: {lines[0][:100]}")
+
+    # Handle USER table (various formats - per protocol, USER data comes with table=OPERLOG)
+    if table in ["USER", "ENROLLUSER", "CHGUSER", "OPERLOG"]:
+        for ln in lines:
+            # Strip USER prefix if present, then parse KEY=VALUE format
+            ln_stripped = ln.replace("USER", "", 1).strip() if ln.upper().startswith("USER") else ln
+            # Try to parse - USER table usually has PIN, Name, Card, etc
+            if "PIN" in ln.upper() or "=" in ln:
+                kv = parse_kv_line(ln_stripped)
+                if "PIN" in kv or "Pin" in kv:
+                    upsert_user(sn, kv, raw_line=ln)
+                    processed += 1
+        if processed > 0:
+            log_info(f"[{table or 'USER'}] Device {sn}: {processed} employee records")
+            return Response(f"OK: {processed}", status=200, mimetype="text/plain")
+
+    if table == "ATTLOG":
+        for ln in lines:
+            rec = parse_attlog_record(ln)
+            if rec:
+                insert_attlog(sn, rec, raw_line=ln)
+                processed += 1
+        
+        if processed > 0:
+            # Show progress
+            conn = db()
+            total = conn.execute("SELECT COUNT(*) c FROM attlog WHERE sn=?", (sn,)).fetchone()["c"]
+            conn.close()
+            log_info(f"[ATTLOG] Device {sn}: +{processed} records (Total synced: {total})")
+        
+        return Response(f"OK: {processed}", status=200, mimetype="text/plain")
+
+    return Response(f"OK: {len(lines)}", status=200, mimetype="text/plain")
+
+
+@app.route("/iclock/getrequest", methods=["GET"])
+@app.route("/iclock/getrequest.aspx", methods=["GET"])
+def iclock_getrequest():
+    """Device polling endpoint (heartbeat)"""
+    sn = request.args.get("SN", "").strip()
+    if sn:
+        ip = request.headers.get("X-Forwarded-For", request.remote_addr or "")
+        info = request.args.get("INFO", "")
+        upsert_device(sn, ip, info=info)
+        
+        # Check if device has sent USER data yet
+        conn = db()
+        user_count = conn.execute("SELECT COUNT(*) c FROM users WHERE sn=?", (sn,)).fetchone()["c"]
+        conn.close()
+        
+        # If no users yet, send download command to pull all USER data
+        if user_count == 0:
+            body = (
+                f"C:Download\n"
+                f"table:USER\n"
+                f"Stamp=0\n"
+            )
+            return Response(body, status=200, mimetype="text/plain")
+    
+    return Response("OK", status=200, mimetype="text/plain")
+
+
+@app.route("/iclock/ping", methods=["GET", "POST"])
+def iclock_ping():
+    """Ping endpoint"""
+    return Response("OK", status=200, mimetype="text/plain")
+
+
+@app.route("/iclock/devicecmd", methods=["POST"])
+def iclock_devicecmd():
+    """Device command response"""
+    return Response("OK", status=200, mimetype="text/plain")
+
+@app.route("/admin/force-sync/<sn>", methods=["GET"])
+def admin_force_sync(sn: str):
+    """Force a device to re-sync all data by marking stamps as expired"""
+    conn = db()
+    device = conn.execute("SELECT * FROM devices WHERE sn=?", (sn,)).fetchone()
+    conn.close()
+    
+    if not device:
+        return {"error": "Device not found"}, 404
+    
+    # Send download command with zero timestamp to force full sync
+    body = (
+        f"C:Download\n"
+        f"table:USER\n"
+        f"Stamp=0\n"
+        f"---\n"
+        f"C:Download\n"
+        f"table:ATTLOG\n"
+        f"Stamp=0\n"
+    )
+    
+    log_info(f"[ADMIN] Force-sync triggered for device {sn}")
+    return Response(body, status=200, mimetype="text/plain")
+
+@app.route("/admin/devices", methods=["GET"])
+def admin_devices():
+    """List all connected devices - JSON API"""
+    conn = db()
+    devices = conn.execute("SELECT sn, last_seen_utc, last_ip, info FROM devices ORDER BY last_seen_utc DESC").fetchall()
+    conn.close()
+    
+    devices_list = [
+        {
+            "sn": d["sn"],
+            "last_seen_utc": d["last_seen_utc"],
+            "last_ip": d["last_ip"],
+            "info": d["info"]
+        }
+        for d in devices
+    ]
+    return jsonify({"devices": devices_list})
+
+@app.route("/admin/migrate-to-erpnext", methods=["GET", "POST"])
+def admin_migrate_to_erpnext():
+    """Migrate all unsynced SQLite attendance records to ERPNext - JSON API"""
+    limit = request.args.get("limit", type=int) or (request.json.get("limit") if request.is_json else None)
+    device_sn = request.args.get("device", "").strip() or (request.json.get("device") if request.is_json else None) or None
+    
+    # Get stats before migration
+    conn = db()
+    total_unsynced = conn.execute(
+        "SELECT COUNT(*) c FROM attlog WHERE synced_to_erpnext = 0 OR synced_to_erpnext IS NULL"
+    ).fetchone()["c"]
+    total_synced = conn.execute(
+        "SELECT COUNT(*) c FROM attlog WHERE synced_to_erpnext = 1"
+    ).fetchone()["c"]
+    conn.close()
+    
+    if request.method == "GET":
+        return jsonify({
+            "status": "ready",
+            "total_records": total_unsynced + total_synced,
+            "already_synced": total_synced,
+            "pending_sync": total_unsynced,
+            "message": "POST to this endpoint to start migration"
+        })
+    
+    # POST: Start migration
+    result = migrate_sqlite_to_erpnext(limit=limit, device_sn=device_sn)
+    return jsonify({
+        "status": "complete",
+        "result": result
+    })
+
+# ============================================================================
+# API ENDPOINTS
+# ============================================================================
+
+@app.route("/api/stats", methods=["GET"])
+def api_stats():
+    """Get server statistics - JSON API"""
+    conn = db()
+    devices_cnt = conn.execute("SELECT COUNT(*) c FROM devices").fetchone()["c"]
+    users_cnt = conn.execute("SELECT COUNT(*) c FROM users").fetchone()["c"]
+    attlog_cnt = conn.execute("SELECT COUNT(*) c FROM attlog").fetchone()["c"]
+    
+    # Get per-device stats
+    device_stats = conn.execute("""
+        SELECT d.sn, d.last_seen_utc, 
+               (SELECT COUNT(*) FROM users WHERE sn=d.sn) as user_count,
+               (SELECT COUNT(*) FROM attlog WHERE sn=d.sn) as att_count
+        FROM devices d
+        ORDER BY d.last_seen_utc DESC
+    """).fetchall()
+    
+    conn.close()
+    
+    return jsonify({
+        "total_devices": devices_cnt,
+        "total_users": users_cnt,
+        "total_attendance_records": attlog_cnt,
+        "devices": [{
+            "sn": d["sn"],
+            "last_seen": d["last_seen_utc"],
+            "employees": d["user_count"],
+            "attendance_records": d["att_count"]
+        } for d in device_stats],
+        "server_time": utc_now_iso()
+    })
+
+# ============================================================================
+# MAIN
+# ============================================================================
+
+def _run_flask() -> None:
+    # Auto-migrate unsynced records to ERPNext on startup
+    def auto_migrate_on_startup() -> None:
+        """Run migration in background thread"""
+        import time
+        time.sleep(2)  # Wait 2 seconds for server to start
+        log_info("\n[Auto-Migration] Starting automatic migration of unsynced records to ERPNext...")
+        result = migrate_sqlite_to_erpnext()
+        log_info(f"[Auto-Migration] Complete: {result['synced']} synced, {result['failed']} failed, {result['skipped']} skipped out of {result['total']} total\n")
+    
+    # Start migration in background thread
+    migration_thread = threading.Thread(target=auto_migrate_on_startup, daemon=True)
+    migration_thread.start()
+
+    global _http_server
+    from werkzeug.serving import make_server
+    _http_server = make_server(APP_HOST, APP_PORT, app)
+    _http_server.serve_forever()
+
+def _shutdown_http_server() -> None:
+    global _http_server
+    srv = _http_server
+    if srv is None:
+        return
+    try:
+        srv.shutdown()
+    except Exception:
+        pass
+
+if __name__ == "__main__":
+    # Check for migration command
+    if "--migrate" in sys.argv or "-m" in sys.argv:
+        init_db()
+        limit = None
+        device_sn = None
+        
+        # Parse limit if provided
+        if "--limit" in sys.argv:
+            idx = sys.argv.index("--limit")
+            if idx + 1 < len(sys.argv):
+                try:
+                    limit = int(sys.argv[idx + 1])
+                except ValueError:
+                    print("Invalid limit value")
+                    sys.exit(1)
+        
+        # Parse device SN if provided
+        if "--device" in sys.argv:
+            idx = sys.argv.index("--device")
+            if idx + 1 < len(sys.argv):
+                device_sn = sys.argv[idx + 1]
+        
+        log_info("Starting migration from SQLite to ERPNext...")
+        result = migrate_sqlite_to_erpnext(limit=limit, device_sn=device_sn)
+        log_info(f"\nMigration Summary:")
+        log_info(f"  Total: {result['total']}")
+        log_info(f"  Synced: {result['synced']}")
+        log_info(f"  Failed: {result['failed']}")
+        log_info(f"  Skipped: {result['skipped']}")
+        sys.exit(0)
+
+    init_db()
+
+    def _handle_signal(_signum: int, _frame: object) -> None:
+        _shutdown_http_server()
+
+    signal.signal(signal.SIGINT, _handle_signal)
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, _handle_signal)
+
+    _run_flask()
