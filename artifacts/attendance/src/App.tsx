@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -35,6 +35,12 @@ const queryClient = new QueryClient({
 });
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+  const token = localStorage.getItem("auth_token");
+
+  if (!token) {
+    return <Redirect to="/login" />;
+  }
+
   return (
     <AppLayout>
       <Component />
