@@ -229,7 +229,7 @@ function DocUploadRow({
 const EMPTY_EMP = {
   employeeId:"", firstName:"", lastName:"", gender:"male", dateOfBirth:"", phone:"", email:"",
   address:"", nicNumber:"", panNumber:"", aadharNumber:"",
-  designation:"", department:"", branchId:1, shiftId:"", joiningDate:"",
+  designation:"", department:"", branchId:1, shiftId:"", weekoffScheduleId:"", joiningDate:"",
   employeeType:"permanent", reportingManagerId:"", biometricId:"", status:"active",
   epfNumber:"", etfNumber:"", basicSalary:"",
 };
@@ -269,6 +269,8 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
   const { data: desigData } = useGet(["designations"], "/designations");
   const { data: hrSettingsData } = useGet(["hr-settings-policy"], "/hr-settings");
   const { data: shiftsData } = useGet(["shifts-for-policy"], "/shifts");
+  const { data: weekoffData } = useGet(["weekoff-schedules"], "/weekoffs");
+  const allWeekoffs: any[] = Array.isArray(weekoffData) ? weekoffData : [];
   const deptOptions: string[] = Array.isArray(deptData) ? deptData.filter((d: any) => d.isActive).map((d: any) => d.name) : [];
   const desigOptions: string[] = Array.isArray(desigData) ? desigData.filter((d: any) => d.isActive).map((d: any) => d.name) : [];
   const hrRules: any[] = Array.isArray(hrSettingsData?.departmentRules) ? hrSettingsData.departmentRules : [];
@@ -280,6 +282,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
     branchId: emp.branchId || 1,
     dateOfBirth: emp.dateOfBirth || "",
     shiftId: emp.shiftId || "",
+    weekoffScheduleId: emp.weekoffScheduleId ? String(emp.weekoffScheduleId) : "",
     reportingManagerId: emp.reportingManagerId || "",
     nicNumber: emp.nicNumber || "",
     aadharNumber: emp.aadharNumber || "",
@@ -366,6 +369,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
       fullName: `${form.firstName} ${form.lastName}`.trim() || form.firstName || "Employee",
       branchId: Number(form.branchId),
       shiftId: form.shiftId ? Number(form.shiftId) : null,
+      weekoffScheduleId: form.weekoffScheduleId ? Number(form.weekoffScheduleId) : null,
       reportingManagerId: form.reportingManagerId ? Number(form.reportingManagerId) : null,
     };
     const onError = (data: any) => {
@@ -693,6 +697,36 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                     <Select value={form.branchId} onChange={e => set("branchId", Number(e.target.value))}>
                       {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                     </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold mb-1.5 block">Week Off Schedule</Label>
+                    <Select value={form.weekoffScheduleId} onChange={e => set("weekoffScheduleId", e.target.value)}>
+                      <option value="">— No Schedule —</option>
+                      {allWeekoffs.map((w: any) => (
+                        <option key={w.id} value={w.id}>{w.name}</option>
+                      ))}
+                    </Select>
+                    {form.weekoffScheduleId && (() => {
+                      const sched = allWeekoffs.find((w: any) => String(w.id) === String(form.weekoffScheduleId));
+                      const DAY_S = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+                      if (!sched) return null;
+                      return (
+                        <div className="flex gap-1 mt-1.5 flex-wrap">
+                          {DAY_S.map((d, i) => {
+                            const isOff  = sched.offDays?.includes(i);
+                            const isHalf = sched.halfDays?.includes(i);
+                            return (
+                              <span key={i} className={cn(
+                                "text-[10px] font-bold px-1.5 py-0.5 rounded",
+                                isOff  ? "bg-red-100 text-red-700" :
+                                isHalf ? "bg-amber-100 text-amber-700" :
+                                "bg-green-50 text-green-700"
+                              )}>{d}</span>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div>
                     <Label className="text-xs font-semibold mb-1.5 block">Biometric Device ID</Label>
