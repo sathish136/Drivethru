@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { attendanceRecords, employees, branches, shifts } from "@workspace/db/schema";
+import { attendanceRecords, employees, branches, shifts, leaveBalances } from "@workspace/db/schema";
 import { eq, and, gte, lte } from "drizzle-orm";
 import { calcWorkHours, getDaysInMonth, today } from "../lib/helpers.js";
 import { loadDeptRules, findRule, timeToMins } from "../lib/hr-rules.js";
@@ -148,7 +148,7 @@ router.get("/monthly-sheet", async (req, res) => {
         const rec = empRecs.get(d);
         if (rec) {
           const effectiveStatus = calcEffectiveStatus(rec, empShift, emp.department);
-          dailyStatus.push({ day: d, status: effectiveStatus, inTime: rec.inTime1, outTime: rec.outTime1, inTime2: rec.inTime2, outTime2: rec.outTime2, hours: rec.totalHours });
+          dailyStatus.push({ day: d, status: effectiveStatus, inTime: rec.inTime1, outTime: rec.outTime1, inTime2: rec.inTime2, outTime2: rec.outTime2, hours: rec.totalHours, leaveType: rec.leaveType ?? null, recordId: rec.id });
           if (effectiveStatus === "present") presentDays++;
           else if (effectiveStatus === "absent") absentDays++;
           else if (effectiveStatus === "late") { lateDays++; presentDays++; }
@@ -165,6 +165,7 @@ router.get("/monthly-sheet", async (req, res) => {
 
       return {
         employeeId: emp.id,
+        branchId: emp.branchId,
         employeeName: emp.fullName,
         employeeCode: emp.employeeId,
         designation: emp.designation,
@@ -229,6 +230,122 @@ router.post("/punch", async (req, res) => {
       res.json({ ...created, employeeName: emp.fullName, employeeCode: emp.employeeId, branchName: "", shiftName: null, createdAt: created.createdAt.toISOString() });
     }
   } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
+});
+
+/* ── Mark Leave (manual entry with leave balance deduction) ── */
+router.post("/mark-leave", async (req, res) => {
+  try {
+    const { employeeId, date, leaveType } = req.body as {
+      employeeId: number;
+      date: string;
+      leaveType: "annual" | "casual" | "no_pay";
+    };
+    if (!employeeId || !date || !leaveType) {
+      return res.status(400).json({ message: "employeeId, date, and leaveType are required" });
+    }
+
+    const [emp] = await db.select().from(employees).where(eq(employees.id, employeeId));
+    if (!emp) return res.status(404).json({ message: "Employee not found" });
+
+    const year = parseInt(date.split("-")[0]);
+
+    if (leaveType === "annual" || leaveType === "casual") {
+      const [bal] = await db.select().from(leaveBalances)
+        .where(and(eq(leaveBalances.employeeId, employeeId), eq(leaveBalances.year, year)));
+
+      const annualRemaining = (bal?.annualLeaveBalance ?? 0) - (bal?.annualLeaveUsed ?? 0);
+      const casualRemaining = (bal?.casualLeaveBalance ?? 0) - (bal?.casualLeaveUsed ?? 0);
+
+      if (leaveType === "annual" && annualRemaining < 1) {
+        return res.status(422).json({
+          message: "No annual leave balance remaining. Please use Casual Leave or No-Pay Leave.",
+          annualRemaining, casualRemaining,
+        });
+      }
+      if (leaveType === "casual" && casualRemaining < 1) {
+        return res.status(422).json({
+          message: "No casual leave balance remaining. Please use Annual Leave or No-Pay Leave.",
+          annualRemaining, casualRemaining,
+        });
+      }
+
+      const [existing] = await db.select().from(attendanceRecords)
+        .where(and(eq(attendanceRecords.employeeId, employeeId), eq(attendanceRecords.date, date)));
+
+      if (existing) {
+        await db.update(attendanceRecords).set({
+          status: "leave",
+          leaveType,
+          source: "manual",
+          approvalStatus: "approved",
+          updatedAt: new Date(),
+        }).where(eq(attendanceRecords.id, existing.id));
+      } else {
+        await db.insert(attendanceRecords).values({
+          employeeId,
+          branchId: emp.branchId!,
+          date,
+          status: "leave",
+          leaveType,
+          source: "manual",
+          approvalStatus: "approved",
+        });
+      }
+
+      if (bal) {
+        if (leaveType === "annual") {
+          await db.update(leaveBalances).set({
+            annualLeaveUsed: (bal.annualLeaveUsed ?? 0) + 1,
+            updatedAt: new Date(),
+          }).where(eq(leaveBalances.id, bal.id));
+        } else {
+          await db.update(leaveBalances).set({
+            casualLeaveUsed: (bal.casualLeaveUsed ?? 0) + 1,
+            updatedAt: new Date(),
+          }).where(eq(leaveBalances.id, bal.id));
+        }
+      } else {
+        await db.insert(leaveBalances).values({
+          employeeId,
+          year,
+          annualLeaveBalance: 0,
+          casualLeaveBalance: 0,
+          annualLeaveUsed: leaveType === "annual" ? 1 : 0,
+          casualLeaveUsed: leaveType === "casual" ? 1 : 0,
+        });
+      }
+
+      return res.json({ success: true, status: "leave", leaveType });
+    }
+
+    /* ── No-pay leave: mark as absent (salary deduction in payroll) ── */
+    const [existing] = await db.select().from(attendanceRecords)
+      .where(and(eq(attendanceRecords.employeeId, employeeId), eq(attendanceRecords.date, date)));
+
+    if (existing) {
+      await db.update(attendanceRecords).set({
+        status: "absent",
+        leaveType: null,
+        source: "manual",
+        approvalStatus: "approved",
+        updatedAt: new Date(),
+      }).where(eq(attendanceRecords.id, existing.id));
+    } else {
+      await db.insert(attendanceRecords).values({
+        employeeId,
+        branchId: emp.branchId!,
+        date,
+        status: "absent",
+        source: "manual",
+        approvalStatus: "approved",
+      });
+    }
+
+    return res.json({ success: true, status: "absent", leaveType: "no_pay" });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Failed to mark leave" });
+  }
 });
 
 /* ── Pending manual punch approvals ───────────────────────── */

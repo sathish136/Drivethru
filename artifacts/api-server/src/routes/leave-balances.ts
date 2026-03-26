@@ -120,6 +120,31 @@ router.post("/accrue", async (req, res) => {
   }
 });
 
+/* ── Get leave balance for a single employee ──────────────── */
+router.get("/employee/:id", async (req, res) => {
+  try {
+    const empId = parseInt(req.params.id);
+    const year = req.query.year ? parseInt(req.query.year as string) : new Date().getFullYear();
+
+    const [bal] = await db.select().from(leaveBalances)
+      .where(and(eq(leaveBalances.employeeId, empId), eq(leaveBalances.year, year)));
+
+    res.json({
+      employeeId: empId,
+      year,
+      annualLeaveBalance: bal?.annualLeaveBalance ?? 0,
+      casualLeaveBalance: bal?.casualLeaveBalance ?? 0,
+      annualLeaveUsed: bal?.annualLeaveUsed ?? 0,
+      casualLeaveUsed: bal?.casualLeaveUsed ?? 0,
+      annualRemaining: (bal?.annualLeaveBalance ?? 0) - (bal?.annualLeaveUsed ?? 0),
+      casualRemaining: (bal?.casualLeaveBalance ?? 0) - (bal?.casualLeaveUsed ?? 0),
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Failed to fetch leave balance" });
+  }
+});
+
 /* ── Manual override: set balance for an employee ─────────── */
 router.put("/:employeeId", async (req, res) => {
   try {
