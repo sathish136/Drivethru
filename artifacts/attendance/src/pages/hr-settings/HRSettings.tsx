@@ -29,6 +29,18 @@ interface DeptShiftRule {
   minPresentHours: number | null;
   remarks: string;
   notes: string;
+  /**
+   * Fixed clock time (HH:MM, 24-hr) after which OT starts.
+   * Used for Kitchen ("20:30") and Night Watcher ("05:00").
+   * When set, overrides the hours-based otAfterHours calculation.
+   */
+  otStartTime: string | null;
+  /**
+   * Night Watcher policy: hours to deduct per missed hourly punch.
+   * Policy: "if they forgot punch a hr then deduct 1 or 2 hrs from their 3hrs OT."
+   * Typically set to 1 or 2. null = not applicable.
+   */
+  nightWatcherMissedPunchDeductHours: number | null;
 }
 
 interface Department { id: number; name: string; isActive: boolean; }
@@ -36,7 +48,10 @@ interface ShiftOption  { id: number; name: string; startTime1: string; endTime1:
 
 const BLANK_RULE: DeptShiftRule = {
   id: "", department: "", shift: "", minHours: 9, maxHours: 9,
-  otEligible: true, otAfterHours: 9.5, lateGraceMinutes: 15, earlyExitGraceMinutes: 15,
+  otEligible: true, otAfterHours: 9.5, lateGraceMinutes: 15,
+  // Policy: "Last check out 5 minutes grace periods" — earlyExitGraceMinutes = 0
+  // so the system adds the flat 5-min grace without extra padding.
+  earlyExitGraceMinutes: 0,
   lunchMinHours: 1, lunchMaxHours: 1,
   flexible: false, multipleLogin: false,
   otMultiplier: 1.5, offdayOtMultiplier: 1.5,
@@ -44,6 +59,8 @@ const BLANK_RULE: DeptShiftRule = {
   minPresentHours: 8,
   remarks: "",
   notes: "",
+  otStartTime: null,
+  nightWatcherMissedPunchDeductHours: null,
 };
 
 const COLS = [
@@ -90,6 +107,14 @@ function generateRemarks(rule: DeptShiftRule, shiftOptions: ShiftOption[]): stri
 
   if (!rule.otEligible) {
     parts.push("No OT");
+  } else if (rule.otStartTime) {
+    // Time-based OT (Kitchen / Night Watcher policy)
+    const [oh, om] = rule.otStartTime.split(":").map(Number);
+    const label = fmtTimeMins(oh * 60 + om);
+    parts.push(`OT after ${label}`);
+    if (rule.nightWatcherMissedPunchDeductHours != null) {
+      parts.push(`deduct ${rule.nightWatcherMissedPunchDeductHours}hr/missed punch`);
+    }
   } else if (rule.otAfterHours != null && shiftStart) {
     const [sh, sm] = shiftStart.split(":").map(Number);
     const otStartMins = sh * 60 + sm + Math.round(rule.otAfterHours * 60);
@@ -180,7 +205,12 @@ export default function HRSettings() {
   }
 
   function openEdit(rule: DeptShiftRule) {
-    setEditing({ ...rule });
+    setEditing({
+      otStartTime: null,
+      nightWatcherMissedPunchDeductHours: null,
+      earlyExitGraceMinutes: 0,
+      ...rule,
+    });
     setModalMode("edit");
     setShowModal(true);
   }
@@ -571,6 +601,45 @@ export default function HRSettings() {
                       value={editing.holidayOtMultiplier ?? ""}
                       onChange={e => setE("holidayOtMultiplier", e.target.value === "" ? null : parseFloat(e.target.value))}
                       placeholder="Use global" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section: Time-Based OT (Kitchen / Night Watcher policy) */}
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-1 h-4 rounded-full bg-red-500" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Time-Based OT Override</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground mb-3">
+                  Use this for Kitchen ("OT after 8:30 pm") and Night Watcher ("OT from 5:00 am").
+                  When set, this <b>overrides</b> the hours-based "OT Starts After" above.
+                  Leave blank for Regular / Receptionist / Flexible shifts.
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">OT Start Clock Time</Label>
+                    <Input
+                      type="time"
+                      value={editing.otStartTime ?? ""}
+                      onChange={e => setE("otStartTime", e.target.value === "" ? null : e.target.value)}
+                      placeholder="HH:MM"
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Kitchen: 20:30 &nbsp;·&nbsp; Night Watcher: 05:00
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">Missed-Punch Deduction (hrs)</Label>
+                    <Input
+                      type="number" step="1" min="0" max="3"
+                      value={editing.nightWatcherMissedPunchDeductHours ?? ""}
+                      onChange={e => setE("nightWatcherMissedPunchDeductHours", e.target.value === "" ? null : parseFloat(e.target.value))}
+                      placeholder="e.g. 1 or 2"
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Night Watcher only — hrs deducted from OT per missed hourly punch
+                    </p>
                   </div>
                 </div>
               </div>
