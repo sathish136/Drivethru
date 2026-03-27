@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Users, Clock, Calendar, Banknote, FileText, ChevronDown, X, Eye, Printer } from "lucide-react";
 import drivethruLogo from "@/assets/drivethru-logo.png";
 import liveuLogo from "@/assets/liveu-logo.png";
+import html2pdf from "html2pdf.js";
 
 interface DeptShiftRule {
   id: string; department: string; shift: string;
@@ -89,24 +90,22 @@ function useDebounce<T>(value: T, ms: number): T {
   return v;
 }
 
-/* ─── Print-to-PDF window ─── */
-function printReport(opts: {
+/* ─── PDF download helper ─── */
+async function printReport(opts: {
   title: string;
   meta: { label: string; value: string }[];
   tableHtml: string;
+  filename?: string;
 }) {
-  const { title, meta, tableHtml } = opts;
+  const { title, meta, tableHtml, filename } = opts;
   const metaHtml = meta.map(m =>
     `<div class="meta-item"><span class="meta-label">${m.label}</span><span class="meta-value">${m.value}</span></div>`
   ).join("");
-  const w = window.open("", "_blank", "width=1200,height=850");
-  if (!w) { alert("Please allow popups to export PDF."); return; }
-  w.document.write(`<!DOCTYPE html><html lang="en"><head>
-<meta charset="UTF-8"/>
-<title>${title} – Drivethru</title>
-<style>
+  const wrapper = document.createElement("div");
+  wrapper.style.cssText = "position:fixed;top:-20000px;left:-20000px;width:1123px;background:#fff";
+  wrapper.innerHTML = `<style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;background:#fff;font-size:10.5px}
+  body,div{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;background:#fff;font-size:10.5px}
   .header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px 12px;border-bottom:3px solid #1565a8;background:#f5f8ff}
   .header-left{display:flex;align-items:center;gap:12px}
   .header-logo{width:46px;height:46px;object-fit:contain;border-radius:12px;background:#fff;padding:4px;box-shadow:0 2px 8px rgba(0,0,0,.1)}
@@ -125,41 +124,45 @@ function printReport(opts: {
   td{padding:5px 9px;font-size:9.5px;border-bottom:1px solid #f0f0f0;white-space:nowrap}
   tbody tr:nth-child(even) td{background:#f8fbff}
   tfoot td{padding:6px 9px;font-size:10px;font-weight:700;background:#e8f0fe;border-top:2px solid #1565a8}
-  .footer{display:flex;align-items:center;justify-content:space-between;padding:10px 24px;border-top:1px solid #e5e7eb;background:#f5f8ff;margin-top:auto}
+  .footer{display:flex;align-items:center;justify-content:space-between;padding:10px 24px;border-top:1px solid #e5e7eb;background:#f5f8ff;margin-top:8px}
   .footer-note{font-size:8.5px;color:#9ca3af}
   .footer-right{display:flex;align-items:center;gap:6px}
   .footer-powered{font-size:9px;color:#9ca3af}
   .footer-liveu{height:20px;object-fit:contain;opacity:.85}
   .footer-liveu-name{font-size:9.5px;font-weight:700;color:#1565a8;letter-spacing:.02em}
-  @media print{@page{margin:8mm;size:landscape} body{font-size:9px}}
-</style>
-</head><body>
-<div class="header">
-  <div class="header-left">
-    <img src="${drivethruLogo}" class="header-logo" alt="Drivethru"/>
-    <div>
-      <div class="company">Drivethru Pvt Ltd</div>
-      <div class="company-sub">Attendance Management System</div>
+  </style>
+  <div class="header">
+    <div class="header-left">
+      <img src="${drivethruLogo}" class="header-logo" alt="Drivethru"/>
+      <div><div class="company">Drivethru Pvt Ltd</div><div class="company-sub">Attendance Management System</div></div>
+    </div>
+    <div class="header-right">
+      <div class="report-title">${title}</div>
+      <div class="report-date">Generated: ${new Date().toLocaleString("en-LK",{dateStyle:"long",timeStyle:"short"})}</div>
     </div>
   </div>
-  <div class="header-right">
-    <div class="report-title">${title}</div>
-    <div class="report-date">Generated: ${new Date().toLocaleString("en-LK",{dateStyle:"long",timeStyle:"short"})}</div>
-  </div>
-</div>
-<div class="meta-bar">${metaHtml}</div>
-${tableHtml}
-<div class="footer">
-  <div class="footer-note">System-generated report. For internal use only. © ${new Date().getFullYear()} Drivethru Pvt Ltd</div>
-  <div class="footer-right">
-    <span class="footer-powered">Powered by</span>
-    <img src="${liveuLogo}" class="footer-liveu" alt="Live U Pvt Ltd"/>
-    <span class="footer-liveu-name">Live U Pvt Ltd</span>
-  </div>
-</div>
-<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},350);});<\/script>
-</body></html>`);
-  w.document.close();
+  <div class="meta-bar">${metaHtml}</div>
+  ${tableHtml}
+  <div class="footer">
+    <div class="footer-note">System-generated report. For internal use only. © ${new Date().getFullYear()} Drivethru Pvt Ltd</div>
+    <div class="footer-right">
+      <span class="footer-powered">Powered by</span>
+      <img src="${liveuLogo}" class="footer-liveu" alt="Live U Pvt Ltd"/>
+      <span class="footer-liveu-name">Live U Pvt Ltd</span>
+    </div>
+  </div>`;
+  document.body.appendChild(wrapper);
+  try {
+    await html2pdf().set({
+      margin: 8,
+      filename: filename || `${title.replace(/\s+/g, "-")}.pdf`,
+      image: { type: "jpeg", quality: 0.97 },
+      html2canvas: { scale: 2, useCORS: true, logging: false },
+      jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
+    }).from(wrapper).save();
+  } finally {
+    document.body.removeChild(wrapper);
+  }
 }
 
 /* ─── CSV export helper ─── */
@@ -451,7 +454,7 @@ function AttendanceReport() {
     return Math.max(0,(ih*60+im)-(oh*60+om));
   }
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const present  = filtered.filter((r: any) => r.status === "present" || r.status === "late").length;
     const absent   = filtered.filter((r: any) => r.status === "absent").length;
     const late     = filtered.filter((r: any) => r.status === "late").length;
@@ -495,7 +498,7 @@ function AttendanceReport() {
         <td>${remarks||"—"}</td>
       </tr>`;
     }).join("");
-    printReport({
+    await printReport({
       title: "Attendance Report",
       meta: [
         { label:"Period",        value:`${dStart} – ${dEnd}` },
@@ -761,7 +764,7 @@ function MonthlyReport() {
 
   const HEADERS = ["Emp ID","Employee","Department","Branch","Designation","Type","Present","Absent","Late (AM)","Lunch Late Days","Half Day","Leave","Holiday","Day Off","Work Hrs","OT Hrs","Late (AM) Min","Lunch Late Min","Att %","Remarks"];
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const thead = `<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
     const tbody = filtered.map((e: any) => `<tr>
       <td>${e.employeeCode}</td><td>${e.employeeName}</td><td>${e.department||""}</td>
@@ -774,7 +777,7 @@ function MonthlyReport() {
       <td>${e.attendancePercentage}%</td>
       <td>${getEmpRemarks(e)||"—"}</td>
     </tr>`).join("");
-    printReport({
+    await printReport({
       title: "Monthly Attendance Report",
       meta: [
         { label:"Period",        value:`${getMonthName(dMonth)} ${dYear}` },
@@ -930,7 +933,7 @@ function OvertimeReport() {
 
   const HEADERS = ["Emp ID","Employee","Branch","Designation","Type","OT Days","Total OT Hrs","Daily Breakdown"];
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const thead = `<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
     const tbody = filtered.map((e: any) => `<tr>
       <td>${e.employeeCode}</td><td>${e.employeeName}</td><td>${e.branchName}</td>
@@ -1093,7 +1096,7 @@ function PayrollReport() {
     "Total Deductions","Net Salary","Status"
   ];
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const thead = `<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
     const tbody = filtered.map(r=>`<tr>
       <td>${r.employee.employeeId}</td><td>${r.employee.fullName}</td>
@@ -1561,25 +1564,22 @@ function IndividualReport() {
 
       if (pagesHtml.length === 0) { alert("No data available for the selected employees."); return; }
 
-      const w = window.open("", "_blank", "width=1200,height=850");
-      if (!w) { alert("Please allow popups to export PDF."); return; }
-      w.document.write(`<!DOCTYPE html><html lang="en"><head>
-<meta charset="UTF-8"/>
-<title>Individual Monthly Reports – ${period} (${pagesHtml.length} employees)</title>
-<style>
+      const wrapper = document.createElement("div");
+      wrapper.style.cssText = "position:fixed;top:-20000px;left:-20000px;width:1123px;background:#fff";
+      wrapper.innerHTML = `<style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;background:#fff;font-size:10.5px}
+  div,span,td,th{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:10.5px}
   .report-wrap{page-break-after:always}
   .report-wrap:last-child{page-break-after:avoid}
   .header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px 12px;border-bottom:3px solid #1565a8;background:#f5f8ff}
   .header-left{display:flex;align-items:center;gap:12px}
-  .header-logo{width:46px;height:46px;object-fit:contain;border-radius:12px;background:#fff;padding:4px;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+  .header-logo{width:46px;height:46px;object-fit:contain;border-radius:12px;background:#fff;padding:4px}
   .company{font-size:18px;font-weight:700;color:#1565a8}
   .company-sub{font-size:9.5px;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-top:1px}
   .header-right{text-align:right}
   .report-title{font-size:13px;font-weight:700;color:#1565a8}
   .report-date{font-size:9px;color:#9ca3af;margin-top:3px}
-  .emp-card{display:flex;flex-wrap:wrap;gap:0;background:#fff;border:1px solid #e5e7eb;border-radius:8px;margin:14px 24px;overflow:hidden}
+  .emp-card{display:flex;flex-wrap:wrap;background:#fff;border:1px solid #e5e7eb;border-radius:8px;margin:14px 24px;overflow:hidden}
   .emp-field{padding:8px 16px;border-right:1px solid #f0f0f0;flex:1;min-width:130px}
   .emp-label{font-size:8.5px;text-transform:uppercase;letter-spacing:.07em;color:#9ca3af;font-weight:600}
   .emp-value{font-size:11.5px;font-weight:700;color:#111827;margin-top:2px}
@@ -1592,13 +1592,24 @@ function IndividualReport() {
   .footer-note{font-size:8.5px;color:#9ca3af}
   .footer-right{display:flex;align-items:center;gap:6px}
   .footer-liveu-name{font-size:9.5px;font-weight:700;color:#1565a8}
-  @media print{@page{margin:8mm;size:A4 landscape} body{font-size:9px}}
-</style>
-</head><body>
-${pagesHtml.join("")}
-<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},400);});<\/script>
-</body></html>`);
-      w.document.close();
+  </style>${pagesHtml.join("")}`;
+      document.body.appendChild(wrapper);
+      const safeMonth = `${getMonthName(month)}-${year}`.replace(/\s+/g, "-");
+      const outFile = empIds.length === 1
+        ? `attendance-${employees.find((e: any) => String(e.id) === empIds[0])?.employeeId || "employee"}-${safeMonth}.pdf`
+        : `attendance-all-${empIds.length}-employees-${safeMonth}.pdf`;
+      try {
+        await html2pdf().set({
+          margin: 8,
+          filename: outFile,
+          image: { type: "jpeg", quality: 0.97 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
+          pagebreak: { mode: ["css", "legacy"] },
+        }).from(wrapper).save();
+      } finally {
+        document.body.removeChild(wrapper);
+      }
     } finally {
       setGeneratingPdfs(false);
     }
