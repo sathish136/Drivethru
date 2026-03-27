@@ -107,17 +107,28 @@ function getEffectiveStatus(
   empShift: { startTime1?: string | null; graceMinutes?: number | null; name?: string } | undefined,
   department: string | null,
   rule: DeptShiftRule,
+  date: string,                 // "YYYY-MM-DD" — needed for day-of-week rules
 ): string {
   let st = rec.status;
+
+  const dayOfWeek = new Date(date + "T00:00:00Z").getUTCDay(); // 0=Sun, 6=Sat
+  const isSaturday = dayOfWeek === 6;
+  const isSunday = dayOfWeek === 0;
 
   // 1. Late check — skipped entirely for flexible shifts (managers, surf instructors, etc.)
   //    Also reset any stored "late" status back to "present" for flexible-shift employees.
   if (rule.flexible) {
     if (st === "late") st = "present"; // undo any previously stored late
-  } else if (st === "present" && rec.inTime1) {
-    const shiftStartMins = empShift?.startTime1 ? timeToMins(empShift.startTime1) : 8 * 60;
+  } else if ((st === "present" || st === "late") && rec.inTime1) {
+    // Use Sunday-specific start time when the rule provides one
+    const baseStart = (isSunday && rule.sundayStartTime)
+      ? rule.sundayStartTime
+      : empShift?.startTime1;
+    const shiftStartMins = baseStart ? timeToMins(baseStart) : 8 * 60;
     const grace = rule.lateGraceMinutes ?? (empShift?.graceMinutes ?? 15);
-    if (timeToMins(rec.inTime1) > shiftStartMins + grace) st = "late";
+    const isLate = timeToMins(rec.inTime1) > shiftStartMins + grace;
+    if (st === "present" && isLate) st = "late";
+    else if (st === "late" && !isLate) st = "present"; // stored late but actually on time
   }
 
   // 2. Hours-based status with checkout grace
@@ -126,8 +137,19 @@ function getEffectiveStatus(
     const minPresentHrs = rule.minPresentHours ?? 8;
     // Add 5-minute policy checkout grace on top of the rule's own early-exit grace
     const earlyExitGraceHrs = ((rule.earlyExitGraceMinutes ?? rule.lateGraceMinutes ?? 15) + 5) / 60;
-    const presentThreshold = Math.max(halfDayHrs + 0.01, minPresentHrs - earlyExitGraceHrs);
-    if (rec.totalHours < halfDayHrs) st = "absent";
+
+    // Saturday short-shift: if the rule declares a shorter Saturday schedule,
+    // treat that as the full day (present threshold = saturdayShiftHours - grace).
+    // effectiveHalfDayHrs is halved on Saturdays so the Math.max() doesn't cancel the grace.
+    const effectiveHalfDayHrs = (isSaturday && rule.saturdayShiftHours != null)
+      ? rule.saturdayShiftHours / 2   // 2.5 hrs for a 5-hr Saturday shift
+      : halfDayHrs;
+    const presentThreshold = (isSaturday && rule.saturdayShiftHours != null)
+      ? Math.max(effectiveHalfDayHrs + 0.01, rule.saturdayShiftHours - earlyExitGraceHrs)
+      : Math.max(halfDayHrs + 0.01, minPresentHrs - earlyExitGraceHrs);
+    const effectiveAbsentCutoff = effectiveHalfDayHrs;
+
+    if (rec.totalHours < effectiveAbsentCutoff) st = "absent";
     else if (rec.totalHours < presentThreshold) st = "half_day";
   }
 
@@ -172,11 +194,13 @@ router.get("/attendance", async (req, res) => {
     let enriched = processedAll.map(r => {
       const empShift = r.empShiftId ? shiftMap.get(r.empShiftId) ?? undefined : undefined;
       const rule = findRule(hrRules, r.empDepartment || "", empShift?.name);
+      const date = r.rec.date;            // "YYYY-MM-DD"
       return {
         ...r,
         _rule: rule,
         _empShift: empShift,
-        effectiveStatus: getEffectiveStatus(r.rec, empShift, r.empDepartment, rule),
+        _date: date,
+        effectiveStatus: getEffectiveStatus(r.rec, empShift, r.empDepartment, rule, date),
       };
     });
 
@@ -205,12 +229,20 @@ router.get("/attendance", async (req, res) => {
       records: enriched.map(r => {
         const rule = r._rule;
         const empShift = r._empShift;
-        const lateCutoff = lateCutoffMins(rule, empShift?.startTime1);
 
-        // Morning late minutes — zero for flexible shifts
-        const morningLateMinutes = (!rule.flexible && r.effectiveStatus === "late" && r.rec.inTime1)
-          ? Math.max(0, timeToMins(r.rec.inTime1) - lateCutoff)
-          : 0;
+        // Choose Sunday-specific start time for late calculation when applicable
+        const dayOfWeek = new Date(r._date + "T00:00:00Z").getUTCDay();
+        const effectiveStartTime =
+          (dayOfWeek === 0 && rule.sundayStartTime) ? rule.sundayStartTime : empShift?.startTime1;
+        const lateCutoff = lateCutoffMins(rule, effectiveStartTime);
+
+        // Morning late minutes — zero for flexible shifts; tracked even for half_day records
+        const morningLateMinutes =
+          (!rule.flexible &&
+           (r.effectiveStatus === "late" || r.effectiveStatus === "half_day") &&
+           r.rec.inTime1)
+            ? Math.max(0, timeToMins(r.rec.inTime1) - lateCutoff)
+            : 0;
 
         // Lunch late — uses 10-min grace (built into calcLunchLateMinutes)
         const lunchLateMinutes = calcLunchLateMinutes(r.rec.outTime1, r.rec.inTime2, rule);

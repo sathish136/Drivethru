@@ -24,6 +24,13 @@ export interface DeptShiftRule {
   minPresentHours: number | null;
   remarks: string;
   notes: string;
+  /** Saturday scheduled shift length in hours (e.g. 5 for 8am–1pm). When set,
+   *  Saturday records only need this many hours to count as PRESENT. */
+  saturdayShiftHours: number | null;
+  /** Shift start time on Sundays if different from the regular startTime1
+   *  (e.g. "08:00" for Kitchen staff who start at 8 am on Sundays vs 7 am
+   *  on weekdays). Used for late calculation on Sundays. */
+  sundayStartTime: string | null;
 }
 
 export const DEFAULT_RULE: DeptShiftRule = {
@@ -48,6 +55,8 @@ export const DEFAULT_RULE: DeptShiftRule = {
   minPresentHours: 8,
   remarks: "",
   notes: "Default fallback rule",
+  saturdayShiftHours: null,
+  sundayStartTime: null,
 };
 
 /**
