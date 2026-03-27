@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useGetAttendanceReport, useGetMonthlyReport, useGetOvertimeReport, useListBranches, useListEmployees } from "@workspace/api-client-react";
 import { PageHeader, Card, Input, Select, Label } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { Users, Clock, Calendar, Banknote, FileText } from "lucide-react";
+import { Users, Clock, Calendar, Banknote, FileText, ChevronDown, X, Eye, Printer } from "lucide-react";
 import drivethruLogo from "@/assets/drivethru-logo.png";
 import liveuLogo from "@/assets/liveu-logo.png";
 
@@ -231,6 +231,117 @@ function FilterCard({ title, onExport, onExportExcel, children }: { title: strin
       </div>
       <div className="p-4">{children}</div>
     </Card>
+  );
+}
+
+/* ─── Searchable multi-select employee picker ─── */
+function MultiEmployeeSelect({
+  employees,
+  selectedIds,
+  onChange,
+}: {
+  employees: any[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtered = useMemo(() =>
+    employees.filter(e =>
+      !search ||
+      (e.fullName || "").toLowerCase().includes(search.toLowerCase()) ||
+      (e.employeeId || "").toLowerCase().includes(search.toLowerCase())
+    ), [employees, search]);
+
+  const toggle = (id: string) => {
+    onChange(selectedIds.includes(id) ? selectedIds.filter(i => i !== id) : [...selectedIds, id]);
+  };
+
+  const selectedEmps = employees.filter(e => selectedIds.includes(String(e.id)));
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => { setOpen(v => !v); setSearch(""); }}
+        className="flex w-full items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+      >
+        <span className={selectedIds.length === 0 ? "text-muted-foreground" : ""}>
+          {selectedIds.length === 0
+            ? "— Select Employees —"
+            : selectedIds.length === 1
+            ? selectedEmps[0]?.fullName || "1 selected"
+            : `${selectedIds.length} employees selected`}
+        </span>
+        <ChevronDown className={cn("w-4 h-4 text-muted-foreground shrink-0 transition-transform", open && "rotate-180")} />
+      </button>
+
+      {selectedEmps.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {selectedEmps.map(e => (
+            <span key={e.id} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium border border-primary/20">
+              {e.fullName}
+              <button type="button" onClick={() => toggle(String(e.id))} className="hover:text-red-500 transition-colors ml-0.5">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+          {selectedEmps.length > 1 && (
+            <button type="button" onClick={() => onChange([])} className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-red-50 text-red-500 text-xs font-medium border border-red-200 hover:bg-red-100 transition-colors">
+              <X className="w-3 h-3" /> Clear all
+            </button>
+          )}
+        </div>
+      )}
+
+      {open && (
+        <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-card border border-border rounded-lg shadow-xl overflow-hidden" style={{ minWidth: "280px" }}>
+          <div className="p-2 border-b border-border">
+            <input
+              autoFocus
+              type="text"
+              placeholder="Search by name or ID…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full px-2.5 py-1.5 text-sm rounded-md border border-border bg-background focus:outline-none focus:border-primary"
+            />
+          </div>
+          <div className="flex items-center gap-3 px-3 py-1.5 bg-muted/40 border-b border-border">
+            <button type="button" onClick={() => onChange(filtered.map(e => String(e.id)))} className="text-xs text-primary hover:underline">Select all ({filtered.length})</button>
+            <span className="text-muted-foreground text-xs">·</span>
+            <button type="button" onClick={() => onChange([])} className="text-xs text-red-500 hover:underline">Clear</button>
+          </div>
+          <div className="max-h-56 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-5 text-center text-xs text-muted-foreground">No employees found</div>
+            ) : (
+              filtered.map(e => (
+                <label key={e.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-muted/40 cursor-pointer transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(String(e.id))}
+                    onChange={() => toggle(String(e.id))}
+                    className="accent-primary w-3.5 h-3.5"
+                  />
+                  <span className="text-sm flex-1 font-medium">{e.fullName}</span>
+                  <span className="text-xs text-muted-foreground font-mono">{e.employeeId}</span>
+                </label>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1227,12 +1338,13 @@ const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 function IndividualReport() {
   const now = new Date();
-  const [month, setMonth]   = useState(now.getMonth() + 1);
-  const [year, setYear]     = useState(now.getFullYear());
-  const [empId, setEmpId]   = useState<string>("");
+  const [month, setMonth]         = useState(now.getMonth() + 1);
+  const [year, setYear]           = useState(now.getFullYear());
+  const [empIds, setEmpIds]       = useState<string[]>([]);
+  const [activeEmpId, setActiveEmpId] = useState<string>("");
   const [showReport, setShowReport] = useState(false);
 
-  const { data: empData } = useListEmployees({ limit: 500, status: "active" });
+  const { data: empData } = useListEmployees({ limit: 1000 });
   const { rules: hrRules, shifts: shiftOptions } = useHrRules();
 
   const employees = useMemo(() => {
@@ -1240,15 +1352,25 @@ function IndividualReport() {
     return [...list].sort((a, b) => (a.fullName || "").localeCompare(b.fullName || ""));
   }, [empData]);
 
-  const selectedEmp = useMemo(() => employees.find((e: any) => String(e.id) === empId), [employees, empId]);
+  useEffect(() => {
+    if (empIds.length > 0 && !empIds.includes(activeEmpId)) {
+      setActiveEmpId(empIds[0]);
+      setShowReport(false);
+    } else if (empIds.length === 0) {
+      setActiveEmpId("");
+      setShowReport(false);
+    }
+  }, [empIds]);
+
+  const selectedEmp = useMemo(() => employees.find((e: any) => String(e.id) === activeEmpId), [employees, activeEmpId]);
 
   const daysInMonth = new Date(year, month, 0).getDate();
   const startDate = `${year}-${String(month).padStart(2,"0")}-01`;
   const endDate   = `${year}-${String(month).padStart(2,"0")}-${String(daysInMonth).padStart(2,"0")}`;
 
   const { data, isLoading } = useGetAttendanceReport(
-    { startDate, endDate, employeeId: empId ? Number(empId) : undefined },
-    { query: { enabled: !!empId && showReport } }
+    { startDate, endDate, employeeId: activeEmpId ? Number(activeEmpId) : undefined },
+    { query: { enabled: !!activeEmpId && showReport } }
   );
 
   const records: any[] = useMemo(() => (data?.records || []).sort((a: any, b: any) => a.date.localeCompare(b.date)), [data]);
@@ -1440,6 +1562,8 @@ function IndividualReport() {
     w.document.close();
   }
 
+  const selectedEmps = useMemo(() => empIds.map(id => employees.find((e: any) => String(e.id) === id)).filter(Boolean), [employees, empIds]);
+
   return (
     <div className="space-y-4">
       <Card className="p-0 overflow-hidden">
@@ -1447,17 +1571,10 @@ function IndividualReport() {
           <span className="text-sm font-semibold text-foreground">Individual Monthly Report</span>
         </div>
         <div className="p-4 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-start">
             <div>
-              <Label className="text-xs">Employee</Label>
-              <Select value={empId} onChange={e => { setEmpId(e.target.value); setShowReport(false); }}>
-                <option value="">— Select Employee —</option>
-                {employees.map((e: any) => (
-                  <option key={e.id} value={String(e.id)}>
-                    {e.employeeId} · {e.fullName}
-                  </option>
-                ))}
-              </Select>
+              <Label className="text-xs">Employee(s)</Label>
+              <MultiEmployeeSelect employees={employees} selectedIds={empIds} onChange={ids => { setEmpIds(ids); setShowReport(false); }} />
             </div>
             <div>
               <Label className="text-xs">Month</Label>
@@ -1471,22 +1588,59 @@ function IndividualReport() {
                 {[2024,2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
               </Select>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 pt-5">
               <button
-                disabled={!empId}
+                disabled={empIds.length === 0}
                 onClick={() => setShowReport(true)}
                 className={cn(
                   "flex-1 flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all",
-                  empId
+                  empIds.length > 0
                     ? "bg-primary text-white hover:bg-primary/90 shadow-sm active:scale-95"
                     : "bg-muted text-muted-foreground cursor-not-allowed"
                 )}
               >
-                <FileText className="w-4 h-4"/> View
+                <Eye className="w-4 h-4"/> View Report
               </button>
-              <PdfIconButton onClick={handleGeneratePdf} />
+              <button
+                disabled={!activeEmpId || !showReport}
+                onClick={handleGeneratePdf}
+                className={cn(
+                  "flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all",
+                  activeEmpId && showReport
+                    ? "bg-[#E02B20] text-white hover:bg-[#C4241A] shadow-sm active:scale-95"
+                    : "bg-muted text-muted-foreground cursor-not-allowed"
+                )}
+              >
+                <Printer className="w-4 h-4"/> Generate PDF
+              </button>
             </div>
           </div>
+
+          {empIds.length > 1 && (
+            <div>
+              <Label className="text-xs mb-1.5">Viewing Employee</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {selectedEmps.map((e: any) => (
+                  <button
+                    key={e.id}
+                    type="button"
+                    onClick={() => { setActiveEmpId(String(e.id)); setShowReport(false); }}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all",
+                      String(e.id) === activeEmpId
+                        ? "bg-primary text-white border-primary shadow-sm"
+                        : "bg-card text-foreground border-border hover:border-primary/50 hover:text-primary"
+                    )}
+                  >
+                    <div className="w-5 h-5 rounded-full bg-current/20 flex items-center justify-center text-[10px] font-bold shrink-0">
+                      {(e.fullName || "?")[0].toUpperCase()}
+                    </div>
+                    {e.fullName}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {selectedEmp && (
             <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-50 border border-blue-200">
@@ -1503,7 +1657,7 @@ function IndividualReport() {
         </div>
       </Card>
 
-      {empId && showReport && (
+      {activeEmpId && showReport && (
         <>
           {summary && records.length > 0 && (
             <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-11 gap-2">
@@ -1627,11 +1781,11 @@ function IndividualReport() {
         </>
       )}
 
-      {!empId && (
+      {empIds.length === 0 && (
         <Card className="p-12 text-center">
           <FileText className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3"/>
-          <div className="text-sm font-medium text-muted-foreground">Search and select an employee above to view their individual monthly report</div>
-          <div className="text-xs text-muted-foreground/60 mt-1">You can then generate a PDF for any month</div>
+          <div className="text-sm font-medium text-muted-foreground">Select one or more employees above, then click View Report</div>
+          <div className="text-xs text-muted-foreground/60 mt-1">You can select multiple employees and switch between their reports. Use Generate PDF to export.</div>
         </Card>
       )}
     </div>
