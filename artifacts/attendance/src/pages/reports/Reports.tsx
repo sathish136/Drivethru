@@ -6,6 +6,46 @@ import { Users, Clock, Calendar, Banknote } from "lucide-react";
 import drivethruLogo from "@/assets/drivethru-logo.png";
 import liveuLogo from "@/assets/liveu-logo.png";
 
+interface DeptShiftRule {
+  id: string; department: string; shift: string;
+  lateGraceMinutes: number | null; otAfterHours: number | null;
+  otEligible: boolean; flexible: boolean; remarks: string;
+  [key: string]: any;
+}
+function clientFindRule(rules: DeptShiftRule[], department: string, shiftName?: string | null): DeptShiftRule | null {
+  if (!rules.length) return null;
+  const dept  = (department ?? "").toLowerCase().trim();
+  const shift = (shiftName  ?? "").toLowerCase().trim();
+  if (shift) {
+    const both = rules.find(r =>
+      r.department.toLowerCase().trim() === dept && r.shift.toLowerCase().trim() === shift
+    );
+    if (both) return both;
+  }
+  const exactDept = rules.find(r => r.department.toLowerCase().trim() === dept);
+  if (exactDept) return exactDept;
+  const partial = rules.find(r => {
+    const rd = r.department.toLowerCase().trim();
+    return dept.includes(rd) || rd.includes(dept);
+  });
+  return partial ?? null;
+}
+function useHrRules() {
+  const [rules, setRules] = useState<DeptShiftRule[]>([]);
+  const [shifts, setShifts] = useState<{ id: number; name: string }[]>([]);
+  useEffect(() => {
+    const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+    Promise.all([
+      fetch(`${BASE}/api/hr-settings`).then(r => r.json()),
+      fetch(`${BASE}/api/shifts`).then(r => r.json()),
+    ]).then(([hrData, shiftsData]) => {
+      if (Array.isArray(hrData.departmentRules)) setRules(hrData.departmentRules as DeptShiftRule[]);
+      if (Array.isArray(shiftsData)) setShifts(shiftsData);
+    }).catch(() => {});
+  }, []);
+  return { rules, shifts };
+}
+
 type Tab = "attendance" | "monthly" | "overtime" | "payroll";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -242,12 +282,22 @@ function AttendanceReport() {
   const dBranch  = useDebounce(branchId, 200);
   const dStatus  = useDebounce(status, 200);
 
+  const { rules: hrRules, shifts: shiftOptions } = useHrRules();
+
   const { data: branches } = useListBranches();
   const { data, isLoading } = useGetAttendanceReport({
     startDate: dStart, endDate: dEnd,
     ...(dBranch ? { branchId: Number(dBranch) } : {}),
     ...(dStatus ? { status: dStatus } : {}),
   });
+
+  function getRemarks(r: any): string {
+    const shiftName = r.shiftName
+      ?? shiftOptions.find((s: any) => s.id === Number(r.shiftId))?.name
+      ?? null;
+    const rule = clientFindRule(hrRules, r.department ?? "", shiftName);
+    return rule?.remarks ?? "";
+  }
 
   const departments = useMemo(() => {
     const set = new Set((data?.records || []).map((r: any) => r.department).filter(Boolean));
@@ -260,7 +310,7 @@ function AttendanceReport() {
     && (!empName || (r.employeeName || "").toLowerCase().includes(empName.toLowerCase()))
   ), [data, empType, department, empName]);
 
-  const HEADERS = ["Date","Emp ID","Employee","Department","Branch","Designation","Status","In 1","Out 1 (Lunch)","In 2 (After Lunch)","Out 2","Lunch Break","Total Hrs","Late","OT Hrs"];
+  const HEADERS = ["Date","Emp ID","Employee","Department","Branch","Designation","Status","In 1","Out 1 (Lunch)","In 2 (After Lunch)","Out 2","Lunch Break","Total Hrs","Late","OT Hrs","Remarks"];
 
   function calcMins(inT: string|null, outT: string|null): number {
     if (!inT || !outT) return 0;
@@ -313,6 +363,7 @@ function AttendanceReport() {
           ? `${totalLateMin} min${tag}`
           : `${totalLateMin} min / ${hrsStr}${tag}`;
       })();
+      const remarks = getRemarks(r);
       return `<tr>
         <td>${r.date}</td><td>${r.employeeCode}</td><td>${r.employeeName}</td>
         <td>${r.department||""}</td><td>${r.branchName}</td><td>${r.designation||""}</td>
@@ -322,6 +373,7 @@ function AttendanceReport() {
         <td>${lbStr}</td><td>${tot}</td>
         <td>${lateStr}</td>
         <td>${r.overtimeHours>0?r.overtimeHours.toFixed(1)+"h":"—"}</td>
+        <td>${remarks||"—"}</td>
       </tr>`;
     }).join("");
     printReport({
@@ -367,6 +419,7 @@ function AttendanceReport() {
         r.totalHours!=null?fmtTotal(r.totalHours):"",
         lateStr,
         r.overtimeHours>0?r.overtimeHours.toFixed(1):"",
+        getRemarks(r),
       ];
     });
     exportCsv(HEADERS, rows, `attendance-report-${dStart}-${dEnd}.csv`);
@@ -442,6 +495,7 @@ function AttendanceReport() {
                   <th className="px-3 py-2.5 text-left font-semibold text-purple-600 whitespace-nowrap bg-purple-50/50">Lunch Break</th>
                   <th className="px-3 py-2.5 text-left font-semibold text-green-700 whitespace-nowrap bg-green-50/50">Total Hrs</th>
                   <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">OT Hrs</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-indigo-600 whitespace-nowrap bg-indigo-50/30">Remarks</th>
                 </tr>
                 <tr className="border-b border-border">
                   {["Date","Emp ID","Employee","Department","Branch","Designation","Status"].map(h=>(
@@ -454,6 +508,7 @@ function AttendanceReport() {
                   <th className="px-3 py-1 bg-purple-50/30"></th>
                   <th className="px-3 py-1 bg-green-50/30"></th>
                   <th className="px-3 py-1"></th>
+                  <th className="px-3 py-1 bg-indigo-50/20"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -524,10 +579,18 @@ function AttendanceReport() {
                       ) : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="px-3 py-2 font-mono whitespace-nowrap">{r.overtimeHours>0?`${r.overtimeHours.toFixed(1)}h`:"—"}</td>
+                    <td className="px-3 py-2 bg-indigo-50/10 max-w-[220px]">
+                      {(() => {
+                        const rm = getRemarks(r);
+                        return rm ? (
+                          <span className="text-[10px] leading-snug text-indigo-700 block" title={rm}>{rm}</span>
+                        ) : <span className="text-muted-foreground text-[10px]">—</span>;
+                      })()}
+                    </td>
                   </tr>
                   );
                 })}
-                {!filtered.length&&<tr><td colSpan={14} className="text-center py-8 text-muted-foreground">No records found for the selected filters.</td></tr>}
+                {!filtered.length&&<tr><td colSpan={15} className="text-center py-8 text-muted-foreground">No records found for the selected filters.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -548,6 +611,12 @@ function MonthlyReport() {
   const [empType, setEmpType]       = useState("");
   const [department, setDepartment] = useState("");
   const [empName, setEmpName]       = useState("");
+
+  const { rules: hrRules } = useHrRules();
+  function getEmpRemarks(e: any): string {
+    const rule = clientFindRule(hrRules, e.department ?? "", e.shiftName ?? null);
+    return rule?.remarks ?? "";
+  }
 
   const dMonth  = useDebounce(month, 200);
   const dYear   = useDebounce(year, 200);
@@ -570,7 +639,7 @@ function MonthlyReport() {
     && (!empName || (e.employeeName || "").toLowerCase().includes(empName.toLowerCase()))
   ), [data, empType, department, empName]);
 
-  const HEADERS = ["Emp ID","Employee","Department","Branch","Designation","Type","Present","Absent","Late (AM)","Lunch Late Days","Half Day","Leave","Holiday","Work Hrs","OT Hrs","Late (AM) Min","Lunch Late Min","Att %"];
+  const HEADERS = ["Emp ID","Employee","Department","Branch","Designation","Type","Present","Absent","Late (AM)","Lunch Late Days","Half Day","Leave","Holiday","Work Hrs","OT Hrs","Late (AM) Min","Lunch Late Min","Att %","Remarks"];
 
   const handleExport = () => {
     const thead = `<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
@@ -581,6 +650,7 @@ function MonthlyReport() {
       <td>${e.halfDays}</td><td>${e.leaveDays}</td><td>${e.holidayDays}</td>
       <td>${e.totalWorkHours.toFixed(1)}h</td><td>${e.overtimeHours.toFixed(1)}h</td>
       <td>${e.attendancePercentage}%</td>
+      <td>${getEmpRemarks(e)||"—"}</td>
     </tr>`).join("");
     printReport({
       title: "Monthly Attendance Report",
@@ -599,6 +669,7 @@ function MonthlyReport() {
       e.employeeCode, e.employeeName, e.department||"", e.branchName, e.designation, e.employeeType||"",
       e.presentDays, e.absentDays, e.lateDays, e.halfDays, e.leaveDays, e.holidayDays,
       e.totalWorkHours.toFixed(1), e.overtimeHours.toFixed(1), `${e.attendancePercentage}%`,
+      getEmpRemarks(e),
     ]);
     exportCsv(HEADERS, rows, `monthly-report-${getMonthName(dMonth)}-${dYear}.csv`);
   };
@@ -649,7 +720,10 @@ function MonthlyReport() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-muted/50">
-                <tr>{HEADERS.map(h=><th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>)}</tr>
+                <tr>
+                  {HEADERS.filter(h => h !== "Remarks").map(h=><th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>)}
+                  <th className="px-3 py-2.5 text-left font-semibold text-indigo-600 whitespace-nowrap bg-indigo-50/30">Remarks</th>
+                </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.map((e:any)=>(
@@ -677,9 +751,17 @@ function MonthlyReport() {
                         e.attendancePercentage>=90?"bg-green-100 text-green-700":e.attendancePercentage>=75?"bg-yellow-100 text-yellow-700":"bg-red-100 text-red-700"
                       )}>{e.attendancePercentage}%</span>
                     </td>
+                    <td className="px-3 py-2 bg-indigo-50/10 max-w-[200px]">
+                      {(() => {
+                        const rm = getEmpRemarks(e);
+                        return rm ? (
+                          <span className="text-[10px] leading-snug text-indigo-700 block" title={rm}>{rm}</span>
+                        ) : <span className="text-muted-foreground text-[10px]">—</span>;
+                      })()}
+                    </td>
                   </tr>
                 ))}
-                {!filtered.length&&<tr><td colSpan={15} className="text-center py-8 text-muted-foreground">No data available for the selected period.</td></tr>}
+                {!filtered.length&&<tr><td colSpan={19} className="text-center py-8 text-muted-foreground">No data available for the selected period.</td></tr>}
               </tbody>
             </table>
           </div>

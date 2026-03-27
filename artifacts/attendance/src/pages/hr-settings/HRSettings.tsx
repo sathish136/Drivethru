@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { PageHeader, Card, Button, Input, Label, Select } from "@/components/ui";
 import {
-  Plus, Trash2, Save, RefreshCw, Check, AlertTriangle, X, Edit2, Users, Settings,
+  Plus, Trash2, Save, RefreshCw, Check, AlertTriangle, X, Edit2, Users, Settings, Sparkles,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -27,6 +27,7 @@ interface DeptShiftRule {
   weeklyLeaveDays: number | null;
   halfDayHours: number | null;
   minPresentHours: number | null;
+  remarks: string;
   notes: string;
 }
 
@@ -41,13 +42,64 @@ const BLANK_RULE: DeptShiftRule = {
   otMultiplier: 1.5, offdayOtMultiplier: 1.5,
   holidayOtMultiplier: 1.5, weeklyLeaveDays: 1.5, halfDayHours: 5,
   minPresentHours: 8,
+  remarks: "",
   notes: "",
 };
 
 const COLS = [
   "Department", "Shift", "Start Time", "End Time", "Min h", "Break h", "OT?", "OT After",
-  "Late Grace", "Exit Grace", "Flex", "Multi", "Wk Leave", "Half-day h", "Present h", "Holiday OT", "Offday OT", "OT ×", "Staff", "Notes", "",
+  "Late Grace", "Exit Grace", "Flex", "Multi", "Wk Leave", "Half-day h", "Present h", "Holiday OT", "Offday OT", "OT ×", "Staff", "Remarks", "Notes", "",
 ];
+
+function fmtTimeMins(totalMins: number): string {
+  const h = Math.floor(totalMins / 60) % 24;
+  const m = totalMins % 60;
+  const period = h >= 12 ? "pm" : "am";
+  const displayH = h > 12 ? h - 12 : (h === 0 ? 12 : h);
+  return m > 0 ? `${displayH}.${String(m).padStart(2, "0")} ${period}` : `${displayH} ${period}`;
+}
+
+function generateRemarks(rule: DeptShiftRule, shiftOptions: ShiftOption[]): string {
+  if (rule.flexible) {
+    if (!rule.otEligible) return "No OT / No late hr deductions";
+    if (rule.otAfterHours != null)
+      return `No late hr deduction / Add OT if exceed total hrs ${rule.otAfterHours}hrs`;
+    return "No late hr deduction / Flexible schedule";
+  }
+
+  const shift = shiftOptions.find(s => s.name.toLowerCase() === rule.shift.toLowerCase());
+  const shiftStart = shift?.startTime1 ?? null;
+
+  const parts: string[] = [];
+
+  if (!rule.otEligible && (!rule.lateGraceMinutes || rule.lateGraceMinutes === 0)) {
+    return "No OT / No late hr deductions";
+  }
+
+  if (rule.lateGraceMinutes != null && rule.lateGraceMinutes > 0) {
+    if (shiftStart) {
+      const [h, m] = shiftStart.split(":").map(Number);
+      const lateMins = h * 60 + m + rule.lateGraceMinutes;
+      parts.push(`Late deduction after ${fmtTimeMins(lateMins)}`);
+    } else {
+      parts.push(`Late deduction after ${rule.lateGraceMinutes} min`);
+    }
+  } else {
+    parts.push("No late deduction");
+  }
+
+  if (!rule.otEligible) {
+    parts.push("No OT");
+  } else if (rule.otAfterHours != null && shiftStart) {
+    const [sh, sm] = shiftStart.split(":").map(Number);
+    const otStartMins = sh * 60 + sm + Math.round(rule.otAfterHours * 60);
+    parts.push(`OT after ${fmtTimeMins(otStartMins)}`);
+  } else if (rule.otAfterHours != null) {
+    parts.push(`OT after ${rule.otAfterHours}h`);
+  }
+
+  return parts.join(" / ");
+}
 
 function clientFindRule(rules: DeptShiftRule[], department: string, shiftName?: string | null) {
   const dept  = (department ?? "").toLowerCase().trim();
@@ -309,6 +361,13 @@ export default function HRSettings() {
                         );
                       })()}
                     </td>
+                    <td className="px-3 py-2.5 max-w-[200px]">
+                      {rule.remarks ? (
+                        <span className="text-[10px] leading-snug text-indigo-700 bg-indigo-50 px-2 py-1 rounded block truncate" title={rule.remarks}>
+                          {rule.remarks}
+                        </span>
+                      ) : <span className="text-muted-foreground text-[10px]">—</span>}
+                    </td>
                     <td className="px-3 py-2.5 text-muted-foreground max-w-[120px] truncate">{rule.notes || "—"}</td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1">
@@ -325,7 +384,7 @@ export default function HRSettings() {
                 })}
                 {rules.length === 0 && (
                   <tr>
-                    <td colSpan={20} className="px-3 py-10 text-center text-muted-foreground text-xs">
+                    <td colSpan={23} className="px-3 py-10 text-center text-muted-foreground text-xs">
                       No rules yet.{" "}
                       {noDepts || noShifts
                         ? "Add departments and shifts first, then click Add Rule."
@@ -360,6 +419,7 @@ export default function HRSettings() {
           <span><b>Offday OT</b> — off-day worked rate multiplier</span>
           <span><b>OT ×</b> — regular overtime rate multiplier</span>
           <span><b>Staff</b> — active employees assigned to this rule (click to view)</span>
+          <span><b>Remarks</b> — policy text auto-assigned to matched employees in reports</span>
         </div>
       </Card>
 
@@ -574,6 +634,37 @@ export default function HRSettings() {
                 <div className="mt-4">
                   <Label className="text-xs font-medium mb-1.5 block">Notes</Label>
                   <Input value={editing.notes} onChange={e => setE("notes", e.target.value)} placeholder="Any additional notes about this rule…" />
+                </div>
+              </div>
+
+              {/* Section: Remarks Policy */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-1 h-4 rounded-full bg-indigo-500" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Remarks Policy</span>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-medium block">Auto-assigned Remarks</Label>
+                    <button
+                      type="button"
+                      onClick={() => setE("remarks", generateRemarks(editing, shiftOptions))}
+                      className="flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors border border-indigo-200"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      Auto-generate
+                    </button>
+                  </div>
+                  <textarea
+                    className="w-full min-h-[72px] px-3 py-2 text-xs rounded-lg border border-border bg-background resize-y focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"
+                    value={editing.remarks}
+                    onChange={e => setE("remarks", e.target.value)}
+                    placeholder="e.g. Late deduction after 8.15 am / OT after 5.30pm — leave blank for no remarks"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    This text is shown in reports and auto-assigned to employees matched to this rule.
+                    Click <b>Auto-generate</b> to fill from the rule settings above.
+                  </p>
                 </div>
               </div>
 
