@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { attendanceRecords, employees, branches, shifts } from "@workspace/db/schema";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 import { getDaysInMonth, today } from "../lib/helpers.js";
-import { loadDeptRules, findRule, timeToMins, calcLunchLateMinutes, lateCutoffMins } from "../lib/hr-rules.js";
+import { loadDeptRules, findRule, timeToMins, calcLunchLateMinutes, lateCutoffMins, calcOtHours } from "../lib/hr-rules.js";
 
 const router = Router();
 
@@ -80,6 +80,14 @@ router.get("/attendance", async (req, res) => {
           ? Math.max(0, timeToMins(r.rec.inTime1) - lateCutoff)
           : 0;
         const lunchLateMinutes = calcLunchLateMinutes(r.rec.outTime1, r.rec.inTime2, rule);
+        // Recalculate OT from HR rules instead of using stored value
+        const shiftStartMins = empShift?.startTime1 ? timeToMins(empShift.startTime1) : 8 * 60;
+        const rawEarly = r.rec.inTime1 ? shiftStartMins - timeToMins(r.rec.inTime1) : 0;
+        // Cap at 4h to avoid overnight shift midnight-wrap false positives
+        const earlyMinutes = rawEarly > 0 && rawEarly < 240 ? rawEarly : 0;
+        const recalcOt = (r.rec.totalHours != null && r.effectiveStatus !== "absent" && r.effectiveStatus !== "half_day")
+          ? calcOtHours(r.rec.totalHours, rule, earlyMinutes)
+          : 0;
         return {
           ...r.rec,
           status: r.effectiveStatus,
@@ -88,10 +96,11 @@ router.get("/attendance", async (req, res) => {
           designation: r.empDesignation || "",
           department: r.empDepartment || "",
           branchName: r.branchName || "",
-          shiftName: null,
+          shiftName: empShift?.name ?? null,
           createdAt: r.rec.createdAt.toISOString(),
           morningLateMinutes,
           lunchLateMinutes,
+          overtimeHours: recalcOt,
         };
       }),
     });
@@ -160,6 +169,7 @@ router.get("/monthly", async (req, res) => {
       let presentDays = 0, absentDays = 0, lateDays = 0, halfDays = 0, leaveDays = 0, holidayDays = 0;
       let totalWorkHours = 0, overtimeHours = 0;
       let lunchLateDays = 0, totalMorningLateMinutes = 0, totalLunchLateMinutes = 0;
+      const shiftStartMins = empShift?.startTime1 ? timeToMins(empShift.startTime1) : 8 * 60;
       for (const r of recs) {
         const st = calcEffectiveStatus(r, empShift, emp.department);
         if (st === "present") presentDays++;
@@ -172,7 +182,11 @@ router.get("/monthly", async (req, res) => {
         else if (st === "leave") leaveDays++;
         else if (st === "holiday") holidayDays++;
         totalWorkHours += r.totalHours || 0;
-        overtimeHours += r.overtimeHours || 0;
+        // Recalculate OT from HR rules for accuracy
+        if (r.totalHours != null && st !== "absent" && st !== "half_day") {
+          const earlyMins = r.inTime1 ? Math.max(0, shiftStartMins - timeToMins(r.inTime1)) : 0;
+          overtimeHours += calcOtHours(r.totalHours, rule, earlyMins);
+        }
         const ll = calcLunchLateMinutes(r.outTime1, r.inTime2, rule);
         if (ll > 0) { lunchLateDays++; totalLunchLateMinutes += ll; }
       }
