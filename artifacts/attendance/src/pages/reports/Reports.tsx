@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
-import { useGetAttendanceReport, useGetMonthlyReport, useGetOvertimeReport, useListBranches } from "@workspace/api-client-react";
+import { useGetAttendanceReport, useGetMonthlyReport, useGetOvertimeReport, useListBranches, useListEmployees } from "@workspace/api-client-react";
 import { PageHeader, Card, Input, Select, Label } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { Users, Clock, Calendar, Banknote } from "lucide-react";
+import { Users, Clock, Calendar, Banknote, FileText } from "lucide-react";
 import drivethruLogo from "@/assets/drivethru-logo.png";
 import liveuLogo from "@/assets/liveu-logo.png";
 
@@ -46,7 +46,7 @@ function useHrRules() {
   return { rules, shifts };
 }
 
-type Tab = "attendance" | "monthly" | "overtime" | "payroll";
+type Tab = "attendance" | "monthly" | "overtime" | "payroll" | "individual";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 function apiUrl(path: string) { return `${BASE}/api${path}`; }
@@ -240,12 +240,13 @@ export default function Reports() {
   return (
     <div className="space-y-4">
       <PageHeader title="Reports" description="Detailed attendance, monthly, overtime and payroll reports." />
-      <div className="flex gap-1 border-b border-border">
+      <div className="flex gap-1 border-b border-border flex-wrap">
         {([
-          { id:"attendance", label:"Attendance Report", icon:Users },
-          { id:"monthly",    label:"Monthly Report",    icon:Calendar },
-          { id:"overtime",   label:"Overtime Report",   icon:Clock },
-          { id:"payroll",    label:"Payroll Report",    icon:Banknote },
+          { id:"attendance", label:"Attendance Report",        icon:Users },
+          { id:"monthly",    label:"Monthly Report",           icon:Calendar },
+          { id:"individual", label:"Individual Monthly Report", icon:FileText },
+          { id:"overtime",   label:"Overtime Report",          icon:Clock },
+          { id:"payroll",    label:"Payroll Report",           icon:Banknote },
         ] as const).map(({ id, label, icon: Icon }) => (
           <button key={id} onClick={() => setTab(id)}
             className={cn("flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
@@ -257,6 +258,7 @@ export default function Reports() {
       </div>
       {tab==="attendance" && <AttendanceReport/>}
       {tab==="monthly"    && <MonthlyReport/>}
+      {tab==="individual" && <IndividualReport/>}
       {tab==="overtime"   && <OvertimeReport/>}
       {tab==="payroll"    && <PayrollReport/>}
     </div>
@@ -1214,6 +1216,426 @@ function PayrollReport() {
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   INDIVIDUAL MONTHLY REPORT
+══════════════════════════════════════════════════════════ */
+const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+function IndividualReport() {
+  const now = new Date();
+  const [month, setMonth]       = useState(now.getMonth() + 1);
+  const [year, setYear]         = useState(now.getFullYear());
+  const [empId, setEmpId]       = useState<string>("");
+  const [empSearch, setEmpSearch] = useState("");
+
+  const { data: empData } = useListEmployees({ limit: 500, status: "active" });
+  const { rules: hrRules, shifts: shiftOptions } = useHrRules();
+
+  const employees = useMemo(() => (empData?.employees || empData?.data || empData || []) as any[], [empData]);
+
+  const filteredEmps = useMemo(() => {
+    const q = empSearch.toLowerCase();
+    return employees.filter((e: any) =>
+      !q ||
+      (e.fullName || "").toLowerCase().includes(q) ||
+      (e.employeeId || "").toLowerCase().includes(q)
+    );
+  }, [employees, empSearch]);
+
+  const selectedEmp = useMemo(() => employees.find((e: any) => String(e.id) === empId), [employees, empId]);
+
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const startDate = `${year}-${String(month).padStart(2,"0")}-01`;
+  const endDate   = `${year}-${String(month).padStart(2,"0")}-${String(daysInMonth).padStart(2,"0")}`;
+
+  const { data, isLoading } = useGetAttendanceReport(
+    { startDate, endDate, employeeId: empId ? Number(empId) : undefined },
+    { query: { enabled: !!empId } }
+  );
+
+  const records: any[] = useMemo(() => (data?.records || []).sort((a: any, b: any) => a.date.localeCompare(b.date)), [data]);
+
+  function getRemarks(r: any): string {
+    const shiftName = r.shiftName ?? shiftOptions.find((s: any) => s.id === Number(r.shiftId))?.name ?? null;
+    const rule = clientFindRule(hrRules, r.department ?? "", shiftName);
+    return rule?.remarks ?? "";
+  }
+
+  const summary = useMemo(() => {
+    let present = 0, absent = 0, late = 0, halfDay = 0, leave = 0, holiday = 0, offDay = 0;
+    let totalHours = 0, totalOT = 0, totalLateMins = 0;
+    for (const r of records) {
+      const st = r.status;
+      if (st === "present") present++;
+      else if (st === "absent") absent++;
+      else if (st === "late") { late++; present++; }
+      else if (st === "half_day") halfDay++;
+      else if (st === "leave") leave++;
+      else if (st === "holiday") holiday++;
+      else if (st === "off_day") offDay++;
+      totalHours += r.totalHours || 0;
+      totalOT += r.overtimeHours || 0;
+      totalLateMins += (r.morningLateMinutes || 0) + (r.lunchLateMinutes || 0);
+    }
+    const effectiveDays = daysInMonth - holiday - offDay;
+    const attPct = effectiveDays > 0 ? Math.round(((present + halfDay * 0.5) / effectiveDays) * 100) : 0;
+    return { present, absent, late, halfDay, leave, holiday, offDay, totalHours, totalOT, totalLateMins, attPct };
+  }, [records, daysInMonth]);
+
+  function fmtHM(mins: number) {
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return `${h}h ${String(m).padStart(2,"0")}m`;
+  }
+  function fmtTotal(h: number | null) {
+    if (h == null) return "—";
+    const hh = Math.floor(h), mm = Math.round((h - hh) * 60);
+    return `${hh}:${String(mm).padStart(2,"0")}`;
+  }
+  function statusColor(st: string) {
+    const map: Record<string, string> = {
+      present:"bg-green-100 text-green-700", late:"bg-amber-100 text-amber-700",
+      absent:"bg-red-100 text-red-700", half_day:"bg-yellow-100 text-yellow-700",
+      leave:"bg-purple-100 text-purple-700", holiday:"bg-gray-100 text-gray-600",
+      off_day:"bg-violet-100 text-violet-700",
+    };
+    return map[st] || "bg-gray-100 text-gray-600";
+  }
+
+  function handleGeneratePdf() {
+    if (!selectedEmp) return;
+    const empName = selectedEmp.fullName || "";
+    const empCode = selectedEmp.employeeId || "";
+    const designation = selectedEmp.designation || "—";
+    const department = selectedEmp.department || "—";
+    const branch = selectedEmp.branchName || selectedEmp.branch || "—";
+    const period = `${getMonthName(month)} ${year}`;
+
+    const rowsHtml = (() => {
+      const recMap = new Map(records.map((r: any) => [r.date, r]));
+      let html = "";
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${year}-${String(month).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+        const dow = new Date(dateStr + "T00:00:00Z").getUTCDay();
+        const dayName = DAY_NAMES[dow];
+        const r = recMap.get(dateStr);
+        if (!r) {
+          html += `<tr><td>${d}</td><td>${dayName}</td><td colspan="8" style="text-align:center;color:#ccc">—</td></tr>`;
+          continue;
+        }
+        const st = r.status;
+        const statusLabel = st==="late"?"PRESENT (LATE)":st==="half_day"?"HALF DAY":st==="off_day"?"DAY OFF":st.replace("_"," ").toUpperCase();
+        const stColorMap: Record<string,string> = {
+          present:"#dcfce7",late:"#fef3c7",absent:"#fee2e2",half_day:"#fefce8",
+          leave:"#f3e8ff",holiday:"#f3f4f6",off_day:"#ede9fe",
+        };
+        const bg = stColorMap[st] || "#f9fafb";
+        const lm = (r.morningLateMinutes || 0) + (r.lunchLateMinutes || 0);
+        const lateStr = lm > 0 ? (lm < 60 ? `${lm}m` : `${Math.floor(lm/60)}h${lm%60}m`) : "—";
+        const otStr = (r.overtimeHours || 0) > 0 ? `${r.overtimeHours.toFixed(1)}h` : "—";
+        const lbMins = (() => {
+          if (!r.outTime1 || !r.inTime2) return 0;
+          const [oh,om] = r.outTime1.split(":").map(Number);
+          const [ih,im] = r.inTime2.split(":").map(Number);
+          return Math.max(0,(ih*60+im)-(oh*60+om));
+        })();
+        html += `<tr style="background:${bg}">
+          <td>${d}</td><td>${dayName}</td>
+          <td style="font-weight:700">${statusLabel}</td>
+          <td>${r.inTime1||"—"}</td><td>${r.outTime1||"—"}</td>
+          <td>${r.inTime2||"—"}</td><td>${r.outTime2||"—"}</td>
+          <td>${lbMins>0?fmtHM(lbMins):"—"}</td>
+          <td>${fmtTotal(r.totalHours)}</td>
+          <td>${lateStr}</td>
+          <td>${otStr}</td>
+        </tr>`;
+      }
+      return html;
+    })();
+
+    const sumCards = [
+      { label:"Present", val:summary.present, color:"#16a34a" },
+      { label:"Absent", val:summary.absent, color:"#dc2626" },
+      { label:"Late Days", val:summary.late, color:"#d97706" },
+      { label:"Half Day", val:summary.halfDay, color:"#ca8a04" },
+      { label:"Leave", val:summary.leave, color:"#9333ea" },
+      { label:"Holiday", val:summary.holiday, color:"#6b7280" },
+      { label:"Day Off", val:summary.offDay, color:"#7c3aed" },
+      { label:"Total Hours", val:`${Math.floor(summary.totalHours)}:${String(Math.round((summary.totalHours%1)*60)).padStart(2,"0")}`, color:"#0369a1" },
+      { label:"OT Hours", val:`${summary.totalOT.toFixed(1)}h`, color:"#ea580c" },
+      { label:"Late (Total)", val:summary.totalLateMins>0?(summary.totalLateMins<60?`${summary.totalLateMins}m`:fmtHM(summary.totalLateMins)):"0m", color:"#dc2626" },
+      { label:"Att. %", val:`${summary.attPct}%`, color:summary.attPct>=90?"#16a34a":summary.attPct>=75?"#ca8a04":"#dc2626" },
+    ].map(c => `<div style="padding:8px 14px;border-right:1px solid #e5e7eb;text-align:center;min-width:70px">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;font-weight:600">${c.label}</div>
+      <div style="font-size:14px;font-weight:800;color:${c.color};margin-top:2px">${c.val}</div>
+    </div>`).join("");
+
+    const w = window.open("", "_blank", "width=1200,height=850");
+    if (!w) { alert("Please allow popups to export PDF."); return; }
+    w.document.write(`<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"/>
+<title>Individual Monthly Report – ${empName}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;background:#fff;font-size:10.5px}
+  .header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px 12px;border-bottom:3px solid #1565a8;background:#f5f8ff}
+  .header-left{display:flex;align-items:center;gap:12px}
+  .header-logo{width:46px;height:46px;object-fit:contain;border-radius:12px;background:#fff;padding:4px;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+  .company{font-size:18px;font-weight:700;color:#1565a8}
+  .company-sub{font-size:9.5px;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-top:1px}
+  .header-right{text-align:right}
+  .report-title{font-size:13px;font-weight:700;color:#1565a8}
+  .report-date{font-size:9px;color:#9ca3af;margin-top:3px}
+  .emp-card{display:flex;flex-wrap:wrap;gap:0;background:#fff;border:1px solid #e5e7eb;border-radius:8px;margin:14px 24px;overflow:hidden}
+  .emp-field{padding:8px 16px;border-right:1px solid #f0f0f0;flex:1;min-width:130px}
+  .emp-label{font-size:8.5px;text-transform:uppercase;letter-spacing:.07em;color:#9ca3af;font-weight:600}
+  .emp-value{font-size:11.5px;font-weight:700;color:#111827;margin-top:2px}
+  .summary-bar{display:flex;flex-wrap:wrap;background:#f8faff;border:1px solid #e5e7eb;border-radius:8px;margin:0 24px 14px;overflow:hidden}
+  table{width:100%;border-collapse:collapse;margin:0 0 0}
+  thead tr{background:#1565a8}
+  th{color:#fff;padding:7px 9px;text-align:left;font-size:8.5px;font-weight:600;white-space:nowrap;letter-spacing:.03em}
+  td{padding:5px 9px;font-size:9px;border-bottom:1px solid #f0f0f0;white-space:nowrap}
+  .footer{display:flex;align-items:center;justify-content:space-between;padding:10px 24px;border-top:1px solid #e5e7eb;background:#f5f8ff;margin-top:auto}
+  .footer-note{font-size:8.5px;color:#9ca3af}
+  .footer-right{display:flex;align-items:center;gap:6px}
+  .footer-liveu-name{font-size:9.5px;font-weight:700;color:#1565a8}
+  @media print{@page{margin:8mm;size:A4 landscape} body{font-size:9px}}
+</style>
+</head><body>
+<div class="header">
+  <div class="header-left">
+    <img src="${drivethruLogo}" class="header-logo" alt="Drivethru"/>
+    <div><div class="company">Drivethru Pvt Ltd</div><div class="company-sub">Attendance Management System</div></div>
+  </div>
+  <div class="header-right">
+    <div class="report-title">Individual Monthly Attendance Report</div>
+    <div class="report-date">Generated: ${new Date().toLocaleString("en-LK",{dateStyle:"long",timeStyle:"short"})}</div>
+  </div>
+</div>
+<div class="emp-card">
+  <div class="emp-field"><div class="emp-label">Employee Name</div><div class="emp-value">${empName}</div></div>
+  <div class="emp-field"><div class="emp-label">Employee ID</div><div class="emp-value">${empCode}</div></div>
+  <div class="emp-field"><div class="emp-label">Designation</div><div class="emp-value">${designation}</div></div>
+  <div class="emp-field"><div class="emp-label">Department</div><div class="emp-value">${department}</div></div>
+  <div class="emp-field"><div class="emp-label">Branch</div><div class="emp-value">${branch}</div></div>
+  <div class="emp-field"><div class="emp-label">Period</div><div class="emp-value">${period}</div></div>
+  <div class="emp-field"><div class="emp-label">Working Days</div><div class="emp-value">${daysInMonth}</div></div>
+</div>
+<div class="summary-bar">${sumCards}</div>
+<table>
+  <thead><tr>
+    <th>#</th><th>Day</th><th>Status</th>
+    <th>In 1</th><th>Out 1 (Lunch)</th><th>In 2</th><th>Out 2</th>
+    <th>Lunch Break</th><th>Total Hrs</th><th>Late</th><th>OT</th>
+  </tr></thead>
+  <tbody>${rowsHtml}</tbody>
+</table>
+<div class="footer">
+  <div class="footer-note">System-generated report. For internal use only. © ${new Date().getFullYear()} Drivethru Pvt Ltd</div>
+  <div class="footer-right">
+    <span style="font-size:9px;color:#9ca3af">Powered by</span>
+    <img src="${liveuLogo}" style="height:20px;object-fit:contain;opacity:.85" alt="Live U"/>
+    <span class="footer-liveu-name">Live U Pvt Ltd</span>
+  </div>
+</div>
+<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},350);});<\/script>
+</body></html>`);
+    w.document.close();
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-0 overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+          <span className="text-sm font-semibold text-foreground">Individual Monthly Report</span>
+          <PdfIconButton onClick={handleGeneratePdf} />
+        </div>
+        <div className="p-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div><Label className="text-xs">Month</Label>
+              <Select value={month} onChange={e=>setMonth(Number(e.target.value))}>
+                {Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{getMonthName(i+1)}</option>)}
+              </Select></div>
+            <div><Label className="text-xs">Year</Label>
+              <Select value={year} onChange={e=>setYear(Number(e.target.value))}>
+                {[2024,2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
+              </Select></div>
+            <div className="md:col-span-2 relative">
+              <Label className="text-xs">Search & Select Employee</Label>
+              <Input
+                placeholder="Type name or ID to search…"
+                value={empSearch}
+                onChange={e=>setEmpSearch(e.target.value)}
+                onBlur={() => setTimeout(() => setEmpSearch(""), 200)}
+              />
+              {empSearch && filteredEmps.length > 0 && (
+                <div className="mt-1 border border-border rounded-lg bg-white shadow-xl max-h-52 overflow-y-auto z-50 absolute w-full left-0 top-full">
+                  {filteredEmps.slice(0, 25).map((e: any) => (
+                    <button key={e.id}
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50 flex items-center gap-2 text-sm border-b border-border/40 last:border-0"
+                      onMouseDown={() => { setEmpId(String(e.id)); setEmpSearch(""); }}>
+                      <span className="font-mono text-xs text-muted-foreground w-16 shrink-0">{e.employeeId}</span>
+                      <span className="font-medium">{e.fullName}</span>
+                      <span className="text-xs text-muted-foreground ml-auto">{e.department}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {empSearch && filteredEmps.length === 0 && (
+                <div className="mt-1 border border-border rounded-lg bg-white shadow-xl z-50 absolute w-full left-0 top-full px-3 py-2 text-sm text-muted-foreground">No employees found</div>
+              )}
+            </div>
+          </div>
+
+          {selectedEmp && (
+            <div className="mt-3 flex items-center gap-3 p-3 rounded-lg bg-blue-50 border border-blue-200">
+              <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                {(selectedEmp.fullName||"?")[0].toUpperCase()}
+              </div>
+              <div>
+                <div className="font-semibold text-sm text-blue-900">{selectedEmp.fullName}</div>
+                <div className="text-xs text-blue-600">{selectedEmp.employeeId} · {selectedEmp.designation} · {selectedEmp.department}</div>
+              </div>
+              <button onClick={()=>{setEmpId("");setEmpSearch("");}} className="ml-auto text-xs text-blue-500 hover:text-red-500">✕ Clear</button>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {empId && (
+        <>
+          {summary && records.length > 0 && (
+            <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-11 gap-2">
+              {[
+                {label:"Present",   val:summary.present,   cls:"text-green-600"},
+                {label:"Absent",    val:summary.absent,    cls:"text-red-600"},
+                {label:"Late Days", val:summary.late,      cls:"text-amber-600"},
+                {label:"Half Day",  val:summary.halfDay,   cls:"text-yellow-600"},
+                {label:"Leave",     val:summary.leave,     cls:"text-purple-600"},
+                {label:"Holiday",   val:summary.holiday,   cls:"text-gray-500"},
+                {label:"Day Off",   val:summary.offDay,    cls:"text-violet-600"},
+                {label:"Work Hrs",  val:`${Math.floor(summary.totalHours)}:${String(Math.round((summary.totalHours%1)*60)).padStart(2,"0")}`, cls:"text-blue-600"},
+                {label:"OT Hrs",    val:`${summary.totalOT.toFixed(1)}h`,                                                                     cls:"text-orange-600"},
+                {label:"Late Min",  val:summary.totalLateMins>0?`${summary.totalLateMins}m`:"0",                                              cls:"text-red-500"},
+                {label:"Att %",     val:`${summary.attPct}%`,                                                                                  cls:summary.attPct>=90?"text-green-600":summary.attPct>=75?"text-yellow-600":"text-red-600"},
+              ].map(({label,val,cls})=>(
+                <Card key={label} className="p-2 text-center">
+                  <div className={cn("text-lg font-bold",cls)}>{val}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{label}</div>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          <Card className="overflow-hidden">
+            {isLoading ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">Loading attendance data…</div>
+            ) : records.length === 0 ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">No attendance records found for {getMonthName(month)} {year}.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground w-8">#</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">Day</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">Date</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">Status</th>
+                      <th className="px-3 py-2.5 text-center font-semibold text-blue-600 bg-blue-50/50" colSpan={2}>Morning Session</th>
+                      <th className="px-3 py-2.5 text-center font-semibold text-orange-600 bg-orange-50/50" colSpan={2}>Afternoon Session</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-purple-600 bg-purple-50/50">Lunch</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-green-700 bg-green-50/50">Total Hrs</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-red-500">Late</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">OT</th>
+                    </tr>
+                    <tr className="border-b border-border">
+                      <th className="px-3 py-1" colSpan={4}></th>
+                      <th className="px-3 py-1 text-xs font-medium text-blue-500 bg-blue-50/30 text-center">In</th>
+                      <th className="px-3 py-1 text-xs font-medium text-blue-500 bg-blue-50/30 text-center">Out</th>
+                      <th className="px-3 py-1 text-xs font-medium text-orange-500 bg-orange-50/30 text-center">In</th>
+                      <th className="px-3 py-1 text-xs font-medium text-orange-500 bg-orange-50/30 text-center">Out</th>
+                      <th className="px-3 py-1 bg-purple-50/30"></th>
+                      <th className="px-3 py-1 bg-green-50/30"></th>
+                      <th className="px-3 py-1" colSpan={2}></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {(() => {
+                      const recMap = new Map(records.map((r: any) => [r.date, r]));
+                      return Array.from({length: daysInMonth}, (_, i) => {
+                        const d = i + 1;
+                        const dateStr = `${year}-${String(month).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+                        const dow = new Date(dateStr + "T00:00:00Z").getUTCDay();
+                        const dayName = DAY_NAMES[dow];
+                        const r = recMap.get(dateStr);
+                        const isWeekend = dow === 0 || dow === 6;
+                        if (!r) {
+                          return (
+                            <tr key={dateStr} className={cn("transition-colors", isWeekend ? "bg-slate-50/60" : "")}>
+                              <td className="px-3 py-2 font-mono text-muted-foreground">{d}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{dayName}</td>
+                              <td className="px-3 py-2 font-mono text-muted-foreground">{dateStr}</td>
+                              <td className="px-3 py-2" colSpan={9}><span className="text-muted-foreground text-[10px]">No record</span></td>
+                            </tr>
+                          );
+                        }
+                        const lm = (r.morningLateMinutes || 0) + (r.lunchLateMinutes || 0);
+                        const lbMins = (() => {
+                          if (!r.outTime1 || !r.inTime2) return 0;
+                          const [oh,om] = r.outTime1.split(":").map(Number);
+                          const [ih,im] = r.inTime2.split(":").map(Number);
+                          return Math.max(0,(ih*60+im)-(oh*60+om));
+                        })();
+                        return (
+                          <tr key={dateStr} className="hover:bg-muted/30 transition-colors">
+                            <td className="px-3 py-2 font-mono text-muted-foreground">{d}</td>
+                            <td className="px-3 py-2 font-medium">{dayName}</td>
+                            <td className="px-3 py-2 font-mono whitespace-nowrap">{dateStr}</td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              <span className={cn("px-2 py-0.5 rounded text-[10px] font-semibold", statusColor(r.status))}>
+                                {fmtStatus(r.status)}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 font-mono text-blue-700 bg-blue-50/20">{r.inTime1||"—"}</td>
+                            <td className="px-3 py-2 font-mono text-blue-700 bg-blue-50/20">{r.outTime1||"—"}</td>
+                            <td className="px-3 py-2 font-mono text-orange-700 bg-orange-50/20">{r.inTime2||"—"}</td>
+                            <td className="px-3 py-2 font-mono text-orange-700 bg-orange-50/20">{r.outTime2||"—"}</td>
+                            <td className="px-3 py-2 bg-purple-50/20">
+                              {lbMins>0 ? <span className="text-purple-700">{fmtHM(lbMins)}</span> : <span className="text-muted-foreground">—</span>}
+                            </td>
+                            <td className="px-3 py-2 font-semibold text-green-700 bg-green-50/20 font-mono">
+                              {r.totalHours!=null ? fmtTotal(r.totalHours)+" hrs" : "—"}
+                            </td>
+                            <td className="px-3 py-2">
+                              {lm > 0 ? (
+                                <span className="text-red-500 font-semibold">{lm < 60 ? `${lm}m` : fmtHM(lm)}</span>
+                              ) : <span className="text-muted-foreground">—</span>}
+                            </td>
+                            <td className="px-3 py-2 font-mono">
+                              {(r.overtimeHours||0)>0 ? <span className="text-orange-600 font-semibold">{r.overtimeHours.toFixed(1)}h</span> : <span className="text-muted-foreground">—</span>}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </>
+      )}
+
+      {!empId && (
+        <Card className="p-12 text-center">
+          <FileText className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3"/>
+          <div className="text-sm font-medium text-muted-foreground">Search and select an employee above to view their individual monthly report</div>
+          <div className="text-xs text-muted-foreground/60 mt-1">You can then generate a PDF for any month</div>
+        </Card>
+      )}
     </div>
   );
 }
