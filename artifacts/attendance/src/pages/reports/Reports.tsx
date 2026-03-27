@@ -239,10 +239,12 @@ function MultiEmployeeSelect({
   employees,
   selectedIds,
   onChange,
+  loading = false,
 }: {
   employees: any[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
+  loading?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -322,7 +324,9 @@ function MultiEmployeeSelect({
             <button type="button" onClick={() => onChange([])} className="text-xs text-red-500 hover:underline">Clear</button>
           </div>
           <div className="max-h-56 overflow-y-auto">
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div className="px-3 py-5 text-center text-xs text-muted-foreground">Loading employees…</div>
+            ) : filtered.length === 0 ? (
               <div className="px-3 py-5 text-center text-xs text-muted-foreground">No employees found</div>
             ) : (
               filtered.map(e => (
@@ -1344,7 +1348,7 @@ function IndividualReport() {
   const [activeEmpId, setActiveEmpId] = useState<string>("");
   const [showReport, setShowReport] = useState(false);
 
-  const { data: empData } = useListEmployees({ limit: 1000 });
+  const { data: empData, isLoading: empLoading } = useListEmployees({ limit: 1000 });
   const { rules: hrRules, shifts: shiftOptions } = useHrRules();
 
   const employees = useMemo(() => {
@@ -1566,15 +1570,15 @@ function IndividualReport() {
 
   return (
     <div className="space-y-4">
-      <Card className="p-0 overflow-hidden">
-        <div className="px-4 py-3 border-b border-border bg-muted/30">
+      <Card className="p-0">
+        <div className="px-4 py-3 border-b border-border bg-muted/30 rounded-t-xl">
           <span className="text-sm font-semibold text-foreground">Individual Monthly Report</span>
         </div>
-        <div className="p-4 space-y-4">
+        <div className="p-4 space-y-4 overflow-visible relative">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-start">
             <div>
               <Label className="text-xs">Employee(s)</Label>
-              <MultiEmployeeSelect employees={employees} selectedIds={empIds} onChange={ids => { setEmpIds(ids); setShowReport(false); }} />
+              <MultiEmployeeSelect employees={employees} selectedIds={empIds} onChange={ids => { setEmpIds(ids); setShowReport(false); }} loading={empLoading} />
             </div>
             <div>
               <Label className="text-xs">Month</Label>
