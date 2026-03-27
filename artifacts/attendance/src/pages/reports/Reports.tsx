@@ -1227,24 +1227,18 @@ const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 function IndividualReport() {
   const now = new Date();
-  const [month, setMonth]       = useState(now.getMonth() + 1);
-  const [year, setYear]         = useState(now.getFullYear());
-  const [empId, setEmpId]       = useState<string>("");
-  const [empSearch, setEmpSearch] = useState("");
+  const [month, setMonth]   = useState(now.getMonth() + 1);
+  const [year, setYear]     = useState(now.getFullYear());
+  const [empId, setEmpId]   = useState<string>("");
+  const [showReport, setShowReport] = useState(false);
 
   const { data: empData } = useListEmployees({ limit: 500, status: "active" });
   const { rules: hrRules, shifts: shiftOptions } = useHrRules();
 
-  const employees = useMemo(() => (empData?.employees || empData?.data || empData || []) as any[], [empData]);
-
-  const filteredEmps = useMemo(() => {
-    const q = empSearch.toLowerCase();
-    return employees.filter((e: any) =>
-      !q ||
-      (e.fullName || "").toLowerCase().includes(q) ||
-      (e.employeeId || "").toLowerCase().includes(q)
-    );
-  }, [employees, empSearch]);
+  const employees = useMemo(() => {
+    const list = (empData?.employees || []) as any[];
+    return [...list].sort((a, b) => (a.fullName || "").localeCompare(b.fullName || ""));
+  }, [empData]);
 
   const selectedEmp = useMemo(() => employees.find((e: any) => String(e.id) === empId), [employees, empId]);
 
@@ -1254,7 +1248,7 @@ function IndividualReport() {
 
   const { data, isLoading } = useGetAttendanceReport(
     { startDate, endDate, employeeId: empId ? Number(empId) : undefined },
-    { query: { enabled: !!empId } }
+    { query: { enabled: !!empId && showReport } }
   );
 
   const records: any[] = useMemo(() => (data?.records || []).sort((a: any, b: any) => a.date.localeCompare(b.date)), [data]);
@@ -1449,63 +1443,67 @@ function IndividualReport() {
   return (
     <div className="space-y-4">
       <Card className="p-0 overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+        <div className="px-4 py-3 border-b border-border bg-muted/30">
           <span className="text-sm font-semibold text-foreground">Individual Monthly Report</span>
-          <PdfIconButton onClick={handleGeneratePdf} />
         </div>
-        <div className="p-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div><Label className="text-xs">Month</Label>
-              <Select value={month} onChange={e=>setMonth(Number(e.target.value))}>
+        <div className="p-4 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+            <div>
+              <Label className="text-xs">Employee</Label>
+              <Select value={empId} onChange={e => { setEmpId(e.target.value); setShowReport(false); }}>
+                <option value="">— Select Employee —</option>
+                {employees.map((e: any) => (
+                  <option key={e.id} value={String(e.id)}>
+                    {e.employeeId} · {e.fullName}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Month</Label>
+              <Select value={month} onChange={e => { setMonth(Number(e.target.value)); setShowReport(false); }}>
                 {Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{getMonthName(i+1)}</option>)}
-              </Select></div>
-            <div><Label className="text-xs">Year</Label>
-              <Select value={year} onChange={e=>setYear(Number(e.target.value))}>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Year</Label>
+              <Select value={year} onChange={e => { setYear(Number(e.target.value)); setShowReport(false); }}>
                 {[2024,2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
-              </Select></div>
-            <div className="md:col-span-2 relative">
-              <Label className="text-xs">Search & Select Employee</Label>
-              <Input
-                placeholder="Type name or ID to search…"
-                value={empSearch}
-                onChange={e=>setEmpSearch(e.target.value)}
-                onBlur={() => setTimeout(() => setEmpSearch(""), 200)}
-              />
-              {empSearch && filteredEmps.length > 0 && (
-                <div className="mt-1 border border-border rounded-lg bg-white shadow-xl max-h-52 overflow-y-auto z-50 absolute w-full left-0 top-full">
-                  {filteredEmps.slice(0, 25).map((e: any) => (
-                    <button key={e.id}
-                      className="w-full text-left px-3 py-2 hover:bg-blue-50 flex items-center gap-2 text-sm border-b border-border/40 last:border-0"
-                      onMouseDown={() => { setEmpId(String(e.id)); setEmpSearch(""); }}>
-                      <span className="font-mono text-xs text-muted-foreground w-16 shrink-0">{e.employeeId}</span>
-                      <span className="font-medium">{e.fullName}</span>
-                      <span className="text-xs text-muted-foreground ml-auto">{e.department}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {empSearch && filteredEmps.length === 0 && (
-                <div className="mt-1 border border-border rounded-lg bg-white shadow-xl z-50 absolute w-full left-0 top-full px-3 py-2 text-sm text-muted-foreground">No employees found</div>
-              )}
+              </Select>
+            </div>
+            <div className="flex gap-2">
+              <button
+                disabled={!empId}
+                onClick={() => setShowReport(true)}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all",
+                  empId
+                    ? "bg-primary text-white hover:bg-primary/90 shadow-sm active:scale-95"
+                    : "bg-muted text-muted-foreground cursor-not-allowed"
+                )}
+              >
+                <FileText className="w-4 h-4"/> View
+              </button>
+              <PdfIconButton onClick={handleGeneratePdf} />
             </div>
           </div>
 
           {selectedEmp && (
-            <div className="mt-3 flex items-center gap-3 p-3 rounded-lg bg-blue-50 border border-blue-200">
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-50 border border-blue-200">
               <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
                 {(selectedEmp.fullName||"?")[0].toUpperCase()}
               </div>
-              <div>
+              <div className="flex-1 min-w-0">
                 <div className="font-semibold text-sm text-blue-900">{selectedEmp.fullName}</div>
-                <div className="text-xs text-blue-600">{selectedEmp.employeeId} · {selectedEmp.designation} · {selectedEmp.department}</div>
+                <div className="text-xs text-blue-600 truncate">{selectedEmp.employeeId} · {selectedEmp.designation} · {selectedEmp.department} · {selectedEmp.branchName}</div>
               </div>
-              <button onClick={()=>{setEmpId("");setEmpSearch("");}} className="ml-auto text-xs text-blue-500 hover:text-red-500">✕ Clear</button>
+              <div className="text-xs font-medium text-blue-700 bg-blue-100 px-2 py-1 rounded">{getMonthName(month)} {year}</div>
             </div>
           )}
         </div>
       </Card>
 
-      {empId && (
+      {empId && showReport && (
         <>
           {summary && records.length > 0 && (
             <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-11 gap-2">
