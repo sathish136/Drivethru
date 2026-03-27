@@ -178,22 +178,28 @@ export function halfDayThresholdHours(rule: DeptShiftRule): number {
 
 /**
  * Calculate how many minutes an employee returned late from lunch.
- * Returns 0 if both times aren't present, or if actual break ≤ allocated break.
+ * Returns 0 if both times aren't present, or if actual break ≤ allocated break + grace.
+ *
+ * Policy: "Lunch out add 10 minutes grace" — employees have allocated + 10 min before
+ * a lunch-late deduction applies.
  *
  * @param outTime1     Time they left for lunch  ("HH:MM")
  * @param inTime2      Time they returned         ("HH:MM")
  * @param rule         Department/shift rule (lunchMinHours is the allocated lunch in hours)
  * @param stdLunchMins Fallback allocated lunch minutes when rule has no lunchMinHours (default 60)
+ * @param lunchGraceMins Extra grace minutes on top of allocated lunch (policy default: 10)
  */
 export function calcLunchLateMinutes(
   outTime1: string | null | undefined,
   inTime2: string | null | undefined,
   rule: DeptShiftRule,
   stdLunchMins = 60,
+  lunchGraceMins = 10,
 ): number {
   if (!outTime1 || !inTime2) return 0;
   const actualLunchMins = timeToMins(inTime2) - timeToMins(outTime1);
   if (actualLunchMins <= 0) return 0;
-  const allocatedLunchMins = rule.lunchMinHours != null ? rule.lunchMinHours * 60 : stdLunchMins;
+  // Allocated lunch + 10-minute grace period per policy
+  const allocatedLunchMins = (rule.lunchMinHours != null ? rule.lunchMinHours * 60 : stdLunchMins) + lunchGraceMins;
   return Math.max(0, actualLunchMins - allocatedLunchMins);
 }
