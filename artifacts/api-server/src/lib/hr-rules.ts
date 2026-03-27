@@ -186,6 +186,77 @@ export function halfDayThresholdHours(rule: DeptShiftRule): number {
 }
 
 /**
+ * Returns true when the shift is a night shift (start time ≥ 18:00).
+ */
+export function isNightShiftRecord(shiftStartTime: string | null | undefined): boolean {
+  if (!shiftStartTime) return false;
+  return timeToMins(shiftStartTime) >= 18 * 60;
+}
+
+/**
+ * Compute the effective attendance status for a single record, applying all
+ * HR-policy corrections:
+ *
+ *  1. Flexible-shift employees are never "late".  Any stored "late" is reset to "present".
+ *  2. Non-flexible employees are re-checked for late arrival against the shift start
+ *     (uses sundayStartTime on Sundays when rule provides it).
+ *  3. Hours-based status with checkout grace:
+ *      - On Saturdays with `saturdayShiftHours`, uses that as the full-day reference.
+ *      - Otherwise uses `minPresentHours`.
+ *
+ * This is the single source of truth shared by the attendance report and payroll engines.
+ */
+export function computeEffectiveStatus(
+  rec: {
+    status: string;
+    inTime1?: string | null;
+    totalHours?: number | null;
+  },
+  empShift: { startTime1?: string | null; graceMinutes?: number | null } | null | undefined,
+  rule: DeptShiftRule,
+  date: string,           // "YYYY-MM-DD"
+): string {
+  let st = rec.status;
+
+  const dayOfWeek = new Date(date + "T00:00:00Z").getUTCDay(); // 0=Sun, 6=Sat
+  const isSaturday = dayOfWeek === 6;
+  const isSunday   = dayOfWeek === 0;
+
+  // 1. Late check
+  if (rule.flexible) {
+    if (st === "late") st = "present";
+  } else if ((st === "present" || st === "late") && rec.inTime1) {
+    const baseStart = (isSunday && rule.sundayStartTime)
+      ? rule.sundayStartTime
+      : empShift?.startTime1;
+    const shiftStartMins = baseStart ? timeToMins(baseStart) : 8 * 60;
+    const grace          = rule.lateGraceMinutes ?? (empShift?.graceMinutes ?? 15);
+    const isLate         = timeToMins(rec.inTime1) > shiftStartMins + grace;
+    if (st === "present" && isLate)  st = "late";
+    if (st === "late"    && !isLate) st = "present";
+  }
+
+  // 2. Hours-based status with checkout grace
+  if ((st === "present" || st === "late") && rec.totalHours != null) {
+    const halfDayHrs    = rule.halfDayHours ?? 5;
+    const minPresentHrs = rule.minPresentHours ?? 8;
+    const earlyExitGraceHrs = ((rule.earlyExitGraceMinutes ?? rule.lateGraceMinutes ?? 15) + 5) / 60;
+
+    const effectiveHalfDayHrs = (isSaturday && rule.saturdayShiftHours != null)
+      ? rule.saturdayShiftHours / 2
+      : halfDayHrs;
+    const presentThreshold = (isSaturday && rule.saturdayShiftHours != null)
+      ? Math.max(effectiveHalfDayHrs + 0.01, rule.saturdayShiftHours - earlyExitGraceHrs)
+      : Math.max(halfDayHrs + 0.01, minPresentHrs - earlyExitGraceHrs);
+
+    if (rec.totalHours < effectiveHalfDayHrs) st = "absent";
+    else if (rec.totalHours < presentThreshold) st = "half_day";
+  }
+
+  return st;
+}
+
+/**
  * Calculate how many minutes an employee returned late from lunch.
  * Returns 0 if both times aren't present, or if actual break ≤ allocated break + grace.
  *
