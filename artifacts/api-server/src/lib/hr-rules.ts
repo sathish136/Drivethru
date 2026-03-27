@@ -31,6 +31,31 @@ export interface DeptShiftRule {
    *  (e.g. "08:00" for Kitchen staff who start at 8 am on Sundays vs 7 am
    *  on weekdays). Used for late calculation on Sundays. */
   sundayStartTime: string | null;
+  /**
+   * Fixed clock time (HH:MM, 24-hr) after which OT starts accumulating.
+   * When set, OT = max(0, lastCheckout − otStartTime) instead of the
+   * default hours-based calculation.
+   *
+   * Examples:
+   *  - Kitchen shift: "20:30"  (OT after 8:30 pm)
+   *  - Night Watcher: "05:00"  (OT after 5 am — shift ends, runs to 8 am)
+   *
+   * Set to null to use the existing hours-based (otAfterHours) approach.
+   */
+  otStartTime: string | null;
+  /**
+   * Night Watcher / security hourly-punch policy.
+   * When > 0, each missed expected hourly punch deducts this many hours from
+   * the employee's OT for that day.
+   *
+   * Policy: "They must punch every hr and if they forgot punch a hr then
+   * deduct 1 or 2 hrs from their 3hrs OT."
+   *
+   * Expected punches = ceil(shiftHours) — one punch per scheduled hour.
+   * Actual punches derived from the punch pairs (inTime1/outTime1/inTime2/outTime2).
+   * Set to null when not applicable.
+   */
+  nightWatcherMissedPunchDeductHours: number | null;
 }
 
 export const DEFAULT_RULE: DeptShiftRule = {
@@ -42,7 +67,10 @@ export const DEFAULT_RULE: DeptShiftRule = {
   otEligible: true,
   otAfterHours: 9.5,
   lateGraceMinutes: 15,
-  earlyExitGraceMinutes: 15,
+  // Policy note: "Last check out 5 minutes grace periods"
+  // earlyExitGraceMinutes = 0 so the +5 constant in computeEffectiveStatus
+  // yields exactly a 5-minute checkout grace for ALL shifts by default.
+  earlyExitGraceMinutes: 0,
   lunchMinHours: 1,
   lunchMaxHours: 1,
   flexible: false,
@@ -57,6 +85,8 @@ export const DEFAULT_RULE: DeptShiftRule = {
   notes: "Default fallback rule",
   saturdayShiftHours: null,
   sundayStartTime: null,
+  otStartTime: null,
+  nightWatcherMissedPunchDeductHours: null,
 };
 
 /**
@@ -254,6 +284,89 @@ export function computeEffectiveStatus(
   }
 
   return st;
+}
+
+/**
+ * ── TIME-BASED OT ────────────────────────────────────────────────────────────
+ *
+ * Used for Kitchen Shift ("OT after 8:30 pm") and Night Watcher Shift
+ * ("actual off time 8 am — add 3 hours OT").
+ *
+ * Instead of counting hours worked, we look at the actual clock time the
+ * employee left (lastCheckoutTime) and compare it to a fixed OT-start time
+ * (rule.otStartTime).  Any minutes past that fixed threshold are OT.
+ *
+ * Night-shift midnight crossover: when the checkout time (HH:MM) is earlier
+ * than the OT-start time — meaning the employee crossed midnight — we add
+ * 24 hours to the checkout to compute the correct difference.
+ *
+ * @param lastCheckoutTime  "HH:MM" of the last recorded checkout (outTime2 ?? outTime1)
+ * @param otStartTime       "HH:MM" fixed clock time after which OT begins
+ * @param isNightShift      true when the shift crosses midnight (start ≥ 18:00)
+ * @returns OT hours (rounded to 2 dp), 0 when lastCheckoutTime is missing or before threshold
+ */
+export function calcTimeBasedOtHours(
+  lastCheckoutTime: string | null | undefined,
+  otStartTime: string,
+  isNightShift = false,
+): number {
+  if (!lastCheckoutTime) return 0;
+
+  let checkoutMins = timeToMins(lastCheckoutTime);
+  const otStartMins = timeToMins(otStartTime);
+
+  // Night-shift crossover: e.g. Night Watcher otStartTime = "05:00",
+  // checkout "07:30" → 7*60+30 = 450 < 300 (05:00) is FALSE for this example,
+  // but for otStartTime "20:30" with checkout "23:00" it is also fine.
+  // The crossover only matters when the shift spans midnight and the checkout
+  // timestamp is on the NEXT calendar day (i.e., checkout HH:MM < otStartTime HH:MM).
+  if (isNightShift && checkoutMins < otStartMins) {
+    checkoutMins += 24 * 60;
+  }
+
+  const otMins = Math.max(0, checkoutMins - otStartMins);
+  return Math.round((otMins / 60) * 100) / 100;
+}
+
+/**
+ * ── NIGHT WATCHER HOURLY-PUNCH DEDUCTION ─────────────────────────────────────
+ *
+ * Policy: Night Watchers must punch the biometric reader every hour during
+ * their shift.  If a punch is missed, 1–2 hours are deducted from their OT.
+ *
+ * Implementation:
+ *  - expectedPunches  = number of scheduled shift hours (e.g. 9 for 8pm–5am)
+ *  - recordedPunches  = number of non-null time fields captured in the record
+ *                       (inTime1, outTime1, inTime2, outTime2 each count as 1)
+ *  - missedPunches    = max(0, expectedPunches − recordedPunches)
+ *  - OT deduction hrs = missedPunches × rule.nightWatcherMissedPunchDeductHours
+ *
+ * The result is subtracted from the calculated OT hours; it cannot make OT go
+ * below zero.
+ *
+ * @param rec                             Attendance record for the night
+ * @param shiftScheduledHours             Scheduled shift length in hours (e.g. 9)
+ * @param deductHoursPerMissedPunch       From rule.nightWatcherMissedPunchDeductHours
+ * @returns Hours to deduct from the employee's OT for this record
+ */
+export function calcNightWatcherPunchDeduction(
+  rec: {
+    inTime1?: string | null;
+    outTime1?: string | null;
+    inTime2?: string | null;
+    outTime2?: string | null;
+  },
+  shiftScheduledHours: number,
+  deductHoursPerMissedPunch: number,
+): number {
+  const expectedPunches = Math.ceil(shiftScheduledHours);
+
+  // Count how many time-stamp slots are actually recorded for this day
+  const recordedPunches = [rec.inTime1, rec.outTime1, rec.inTime2, rec.outTime2]
+    .filter(t => t != null && t !== "").length;
+
+  const missed = Math.max(0, expectedPunches - recordedPunches);
+  return Math.round(missed * deductHoursPerMissedPunch * 100) / 100;
 }
 
 /**

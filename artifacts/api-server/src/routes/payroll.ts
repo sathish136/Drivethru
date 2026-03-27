@@ -6,7 +6,11 @@ import {
   weekoffSchedules,
 } from "@workspace/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
-import { loadDeptRules, findRule, effectiveHours, calcOtHours, lateCutoffMins, timeToMins, calcLunchLateMinutes } from "../lib/hr-rules.js";
+import {
+  loadDeptRules, findRule, effectiveHours, calcOtHours, lateCutoffMins,
+  timeToMins, calcLunchLateMinutes, calcTimeBasedOtHours,
+  calcNightWatcherPunchDeduction, isNightShiftRecord,
+} from "../lib/hr-rules.js";
 
 const STATUTORY_NAMES = ["EPF – Employee", "EPF – Employer", "ETF"];
 
@@ -415,6 +419,19 @@ router.post("/generate", async (req, res) => {
       let offDayOtPay    = 0;
       let regularOtPay   = 0;
 
+      /* Whether this employee's shift crosses midnight (Night Watcher etc.) */
+      const isNightShift = isNightShiftRecord(shiftStart1);
+
+      /* Scheduled shift hours — used for Night Watcher punch-count expectation.
+         e.g. 8pm–5am = 9 hours. Derived from minHours when shift times are absent. */
+      const scheduledShiftHours = (shiftStart1 && shiftEnd1)
+        ? (() => {
+            let mins = timeToMins(shiftEnd1) - timeToMins(shiftStart1);
+            if (mins <= 0) mins += 24 * 60; // midnight crossover
+            return mins / 60;
+          })()
+        : reqHoursPerDay;
+
       for (const rec of empAtt) {
         const rawHrs = rec.totalHours ?? 0;
         const recInOffSeason = cfg.offSeasonEnabled &&
@@ -439,16 +456,60 @@ router.post("/generate", async (req, res) => {
           if (rawHrs > 0) offDayOtPay += Math.round(dailyRate * ruleOffdayOtMult);
 
         } else if (!recInOffSeason && isOtEligible) {
-          /* Regular day OT:
-             - Exclude early sign-in (time before shift start) per policy.
-             - otAfterHours is total clock-time threshold (incl. lunch). */
-          const earlyMins = (rec.inTime1 && shiftStart1 && timeToMins(rec.inTime1) < timeToMins(shiftStart1))
-            ? timeToMins(shiftStart1) - timeToMins(rec.inTime1)
-            : 0;
-          const ot = calcOtHours(rawHrs, rule, earlyMins);
-          if (ot > 0) {
-            regularOtHours += ot;
-            regularOtPay   += Math.round(ot * hourlyRate * ruleOtMult);
+          /* ── Regular-day OT — two branches depending on rule configuration ── */
+
+          if (rule.otStartTime) {
+            /* ── BRANCH A: TIME-BASED OT (Kitchen Shift / Night Watcher) ────────
+             *
+             * Policy:
+             *   Kitchen:      "add 3 hr OT after 8:30 pm"  → otStartTime = "20:30"
+             *   Night Watcher:"actual off time 8am, add 3hrs OT" → otStartTime = "05:00"
+             *
+             * OT = max(0, lastCheckout − otStartTime).
+             * For night shifts that cross midnight the checkout may be a small
+             * HH:MM value (e.g. "07:30") even though it is on the next calendar
+             * day; calcTimeBasedOtHours handles the 24-hour offset automatically.
+             * ─────────────────────────────────────────────────────────────────── */
+            const lastCheckout = rec.outTime2 ?? rec.outTime1;
+            let ot = calcTimeBasedOtHours(lastCheckout, rule.otStartTime, isNightShift);
+
+            /* Night Watcher hourly-punch deduction
+             * Policy: "if they forgot punch a hr then deduct 1 or 2 hrs from their 3hrs OT"
+             * Each missing hourly punch reduces OT by nightWatcherMissedPunchDeductHours. */
+            if (ot > 0 && rule.nightWatcherMissedPunchDeductHours != null) {
+              const punchDeduct = calcNightWatcherPunchDeduction(
+                rec,
+                scheduledShiftHours,
+                rule.nightWatcherMissedPunchDeductHours,
+              );
+              ot = Math.max(0, ot - punchDeduct);
+            }
+
+            if (ot > 0) {
+              regularOtHours += ot;
+              regularOtPay   += Math.round(ot * hourlyRate * ruleOtMult);
+            }
+          } else {
+            /* ── BRANCH B: HOURS-BASED OT (Regular / Flexible / Receptionist) ───
+             *
+             * Policy:
+             *   "OT calculation after 30 minutes"
+             *   Example: shift 8am–5pm, out at 5:45pm → OT = 15 min.
+             *   → otAfterHours = 9.5 (9 shift-hrs + 0.5 hr buffer before OT kicks in)
+             *
+             *   Flexible staff: OT if total hours > 9.5 hrs (otAfterHours = 9.5).
+             *   Receptionist: shift 8:30–5:30 (9 hrs) + 30 min buffer = OT after 6 pm.
+             *
+             * - Exclude early sign-in (time before shift start) per policy.
+             * ─────────────────────────────────────────────────────────────────── */
+            const earlyMins = (rec.inTime1 && shiftStart1 && timeToMins(rec.inTime1) < timeToMins(shiftStart1))
+              ? timeToMins(shiftStart1) - timeToMins(rec.inTime1)
+              : 0;
+            const ot = calcOtHours(rawHrs, rule, earlyMins);
+            if (ot > 0) {
+              regularOtHours += ot;
+              regularOtPay   += Math.round(ot * hourlyRate * ruleOtMult);
+            }
           }
         }
       }
