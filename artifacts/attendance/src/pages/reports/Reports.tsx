@@ -341,6 +341,7 @@ function AttendanceReport() {
     const halfDay  = filtered.filter((r: any) => r.status === "half_day").length;
     const leave    = filtered.filter((r: any) => r.status === "leave").length;
     const holiday  = filtered.filter((r: any) => r.status === "holiday").length;
+    const offDay   = filtered.filter((r: any) => r.status === "off_day").length;
     const thead = `<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
     const tbody = filtered.map((r: any) => {
       const s1m = calcMins(r.inTime1, r.outTime1);
@@ -364,10 +365,11 @@ function AttendanceReport() {
           : `${totalLateMin} min / ${hrsStr}${tag}`;
       })();
       const remarks = getRemarks(r);
+      const statusLabel = r.status==="late"?"PRESENT (LATE)":r.status==="half_day"?"HALF DAY":r.status==="off_day"?"DAY OFF":r.status.replace("_"," ").toUpperCase();
       return `<tr>
         <td>${r.date}</td><td>${r.employeeCode}</td><td>${r.employeeName}</td>
         <td>${r.department||""}</td><td>${r.branchName}</td><td>${r.designation||""}</td>
-        <td>${r.status==="late"?"PRESENT (LATE)":r.status==="half_day"?"HALF DAY":r.status.replace("_"," ").toUpperCase()}</td>
+        <td>${statusLabel}</td>
         <td>${r.inTime1||"—"}</td><td>${r.outTime1||"—"}</td>
         <td>${r.inTime2||"—"}</td><td>${r.outTime2||"—"}</td>
         <td>${lbStr}</td><td>${tot}</td>
@@ -387,6 +389,7 @@ function AttendanceReport() {
         { label:"Half Day",      value:String(halfDay) },
         { label:"Leave",         value:String(leave) },
         { label:"Holiday",       value:String(holiday) },
+        { label:"Day Off",       value:String(offDay) },
         { label:"Branch",        value:dBranch?(branches?.find(b=>String(b.id)===dBranch)?.name||"—"):"All Branches" },
       ],
       tableHtml: `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`,
@@ -413,7 +416,7 @@ function AttendanceReport() {
       })();
       return [
         r.date, r.employeeCode, r.employeeName, r.department||"", r.branchName,
-        r.designation||"", r.status==="late"?"PRESENT (LATE)":r.status==="half_day"?"HALF DAY":r.status.replace("_"," ").toUpperCase(),
+        r.designation||"", r.status==="late"?"PRESENT (LATE)":r.status==="half_day"?"HALF DAY":r.status==="off_day"?"DAY OFF":r.status.replace("_"," ").toUpperCase(),
         r.inTime1||"", r.outTime1||"", r.inTime2||"", r.outTime2||"",
         lb>0?fmtHM(lb):"",
         r.totalHours!=null?fmtTotal(r.totalHours):"",
@@ -639,7 +642,7 @@ function MonthlyReport() {
     && (!empName || (e.employeeName || "").toLowerCase().includes(empName.toLowerCase()))
   ), [data, empType, department, empName]);
 
-  const HEADERS = ["Emp ID","Employee","Department","Branch","Designation","Type","Present","Absent","Late (AM)","Lunch Late Days","Half Day","Leave","Holiday","Work Hrs","OT Hrs","Late (AM) Min","Lunch Late Min","Att %","Remarks"];
+  const HEADERS = ["Emp ID","Employee","Department","Branch","Designation","Type","Present","Absent","Late (AM)","Lunch Late Days","Half Day","Leave","Holiday","Day Off","Work Hrs","OT Hrs","Late (AM) Min","Lunch Late Min","Att %","Remarks"];
 
   const handleExport = () => {
     const thead = `<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
@@ -647,8 +650,10 @@ function MonthlyReport() {
       <td>${e.employeeCode}</td><td>${e.employeeName}</td><td>${e.department||""}</td>
       <td>${e.branchName}</td><td>${e.designation}</td><td>${e.employeeType||""}</td>
       <td>${e.presentDays}</td><td>${e.absentDays}</td><td>${e.lateDays}</td>
-      <td>${e.halfDays}</td><td>${e.leaveDays}</td><td>${e.holidayDays}</td>
+      <td>${e.lunchLateDays||0}</td><td>${e.halfDays}</td><td>${e.leaveDays}</td>
+      <td>${e.holidayDays}</td><td>${e.offDays||0}</td>
       <td>${e.totalWorkHours.toFixed(1)}h</td><td>${e.overtimeHours.toFixed(1)}h</td>
+      <td>${e.totalMorningLateMinutes||0} min</td><td>${e.totalLunchLateMinutes||0} min</td>
       <td>${e.attendancePercentage}%</td>
       <td>${getEmpRemarks(e)||"—"}</td>
     </tr>`).join("");
@@ -667,8 +672,11 @@ function MonthlyReport() {
   const handleExportExcel = () => {
     const rows = filtered.map((e: any) => [
       e.employeeCode, e.employeeName, e.department||"", e.branchName, e.designation, e.employeeType||"",
-      e.presentDays, e.absentDays, e.lateDays, e.halfDays, e.leaveDays, e.holidayDays,
-      e.totalWorkHours.toFixed(1), e.overtimeHours.toFixed(1), `${e.attendancePercentage}%`,
+      e.presentDays, e.absentDays, e.lateDays, e.lunchLateDays||0, e.halfDays, e.leaveDays,
+      e.holidayDays, e.offDays||0,
+      e.totalWorkHours.toFixed(1), e.overtimeHours.toFixed(1),
+      e.totalMorningLateMinutes||0, e.totalLunchLateMinutes||0,
+      `${e.attendancePercentage}%`,
       getEmpRemarks(e),
     ]);
     exportCsv(HEADERS, rows, `monthly-report-${getMonthName(dMonth)}-${dYear}.csv`);
@@ -741,11 +749,15 @@ function MonthlyReport() {
                     <td className="px-3 py-2 text-center whitespace-nowrap text-green-600 font-semibold">{e.presentDays}</td>
                     <td className="px-3 py-2 text-center whitespace-nowrap text-red-600 font-semibold">{e.absentDays}</td>
                     <td className="px-3 py-2 text-center whitespace-nowrap text-amber-600 font-semibold">{e.lateDays}</td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap text-orange-500 font-semibold">{e.lunchLateDays||0}</td>
                     <td className="px-3 py-2 text-center whitespace-nowrap text-yellow-600 font-semibold">{e.halfDays}</td>
                     <td className="px-3 py-2 text-center whitespace-nowrap text-purple-600 font-semibold">{e.leaveDays}</td>
                     <td className="px-3 py-2 text-center whitespace-nowrap text-gray-600 font-semibold">{e.holidayDays}</td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap text-violet-600 font-semibold">{e.offDays||0}</td>
                     <td className="px-3 py-2 text-center font-mono whitespace-nowrap">{e.totalWorkHours.toFixed(1)}h</td>
                     <td className="px-3 py-2 text-center font-mono whitespace-nowrap text-amber-600">{e.overtimeHours.toFixed(1)}h</td>
+                    <td className="px-3 py-2 text-center font-mono whitespace-nowrap text-red-500">{e.totalMorningLateMinutes||0}m</td>
+                    <td className="px-3 py-2 text-center font-mono whitespace-nowrap text-orange-500">{e.totalLunchLateMinutes||0}m</td>
                     <td className="px-3 py-2 text-center whitespace-nowrap">
                       <span className={cn("px-2 py-0.5 rounded text-xs font-bold",
                         e.attendancePercentage>=90?"bg-green-100 text-green-700":e.attendancePercentage>=75?"bg-yellow-100 text-yellow-700":"bg-red-100 text-red-700"
@@ -761,7 +773,7 @@ function MonthlyReport() {
                     </td>
                   </tr>
                 ))}
-                {!filtered.length&&<tr><td colSpan={19} className="text-center py-8 text-muted-foreground">No data available for the selected period.</td></tr>}
+                {!filtered.length&&<tr><td colSpan={20} className="text-center py-8 text-muted-foreground">No data available for the selected period.</td></tr>}
               </tbody>
             </table>
           </div>

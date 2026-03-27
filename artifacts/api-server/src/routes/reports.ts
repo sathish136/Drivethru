@@ -210,7 +210,7 @@ router.get("/attendance", async (req, res) => {
     if (employeeId) enriched = enriched.filter(r => r.rec.employeeId === Number(employeeId));
     if (status) enriched = enriched.filter(r => r.effectiveStatus === status);
 
-    const summary = { present: 0, absent: 0, late: 0, halfDay: 0, leave: 0, holiday: 0 };
+    const summary = { present: 0, absent: 0, late: 0, halfDay: 0, leave: 0, holiday: 0, offDay: 0 };
     for (const r of enriched) {
       const st = r.effectiveStatus;
       if (st === "present") summary.present++;
@@ -219,6 +219,7 @@ router.get("/attendance", async (req, res) => {
       else if (st === "half_day") summary.halfDay++;
       else if (st === "leave") summary.leave++;
       else if (st === "holiday") summary.holiday++;
+      else if (st === "off_day") summary.offDay++;
     }
 
     res.json({
@@ -329,7 +330,7 @@ router.get("/monthly", async (req, res) => {
         recs = merged.map(x => x.rec);
       }
 
-      let presentDays = 0, absentDays = 0, lateDays = 0, halfDays = 0, leaveDays = 0, holidayDays = 0;
+      let presentDays = 0, absentDays = 0, lateDays = 0, halfDays = 0, leaveDays = 0, holidayDays = 0, offDays = 0;
       let totalWorkHours = 0, overtimeHours = 0;
       let lunchLateDays = 0, totalMorningLateMinutes = 0, totalLunchLateMinutes = 0;
 
@@ -346,6 +347,7 @@ router.get("/monthly", async (req, res) => {
         else if (st === "half_day") halfDays++;
         else if (st === "leave") leaveDays++;
         else if (st === "holiday") holidayDays++;
+        else if (st === "off_day") offDays++;
 
         totalWorkHours += r.totalHours || 0;
 
@@ -372,7 +374,7 @@ router.get("/monthly", async (req, res) => {
         employeeId: emp.id, employeeName: emp.fullName, employeeCode: emp.employeeId,
         branchName: branchName || "", designation: emp.designation,
         department: emp.department || "", employeeType: emp.employeeType || "",
-        presentDays, absentDays, lateDays, halfDays, leaveDays, holidayDays,
+        presentDays, absentDays, lateDays, halfDays, leaveDays, holidayDays, offDays,
         totalWorkHours: Math.round(totalWorkHours * 10) / 10,
         overtimeHours: Math.round(overtimeHours * 10) / 10,
         attendancePercentage,
