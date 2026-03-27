@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import {
   employees, branches, shifts,
   attendanceRecords, leaveBalances,
@@ -235,6 +235,18 @@ router.put("/:id", async (req, res) => {
     const [emp] = await db.update(employees).set(body).where(eq(employees.id, dbId)).returning();
     const [branch] = await db.select().from(branches).where(eq(branches.id, emp.branchId));
     res.json(mapEmp(emp, branch?.name || "", null));
+  } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
+});
+
+router.patch("/:id/remarks", async (req, res) => {
+  try {
+    const dbId = Number(req.params.id);
+    const { remarks } = req.body;
+    await pool.query(
+      "UPDATE employees SET remarks = $1 WHERE id = $2",
+      [remarks ?? null, dbId]
+    );
+    res.json({ success: true, remarks: remarks ?? null });
   } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
 });
 

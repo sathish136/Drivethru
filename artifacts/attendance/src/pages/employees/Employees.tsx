@@ -231,7 +231,7 @@ const EMPTY_EMP = {
   address:"", nicNumber:"", panNumber:"", aadharNumber:"",
   designation:"", department:"", branchId:1, shiftId:"", weekoffScheduleId:"", joiningDate:"",
   employeeType:"permanent", reportingManagerId:"", biometricId:"", status:"active",
-  epfNumber:"", etfNumber:"", basicSalary:"",
+  epfNumber:"", etfNumber:"", basicSalary:"", remarks:"",
 };
 
 /* ── HR Policy helpers (client-side mirror of hr-rules.ts) ─── */
@@ -290,6 +290,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
     epfNumber: emp.epfNumber || "",
     etfNumber: emp.etfNumber || "",
     basicSalary: emp.basicSalary || "",
+    remarks: emp.remarks || "",
   } : { ...EMPTY_EMP });
   const empShiftName = allShifts.find((s: any) => s.id === Number(form.shiftId))?.name ?? null;
   const { rule: matchedRule, matchType } = findHrRule(hrRules, form.department, empShiftName);
@@ -783,6 +784,26 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                     </div>
                     <p className="text-[10px] text-muted-foreground mt-1">ETF — Employees' Trust Fund number.</p>
                   </div>
+                </div>
+              </div>
+
+              {/* Remarks / Attendance Rules */}
+              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
+                  <FileText className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Remarks / Attendance Rules</span>
+                </div>
+                <div className="p-4">
+                  <Label className="text-xs font-semibold mb-1.5 block">Remarks</Label>
+                  <textarea
+                    className="w-full min-h-[90px] resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all placeholder:text-muted-foreground/60"
+                    placeholder="e.g. Late deduction after 8:15 am / OT after 5:30pm"
+                    value={form.remarks}
+                    onChange={e => set("remarks", e.target.value)}
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Attendance and payroll rules specific to this employee (late deduction rules, OT thresholds, etc.)
+                  </p>
                 </div>
               </div>
 

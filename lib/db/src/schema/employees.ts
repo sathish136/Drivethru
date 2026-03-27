@@ -57,6 +57,7 @@ export const employees = pgTable("employees", {
   panDocUrl: text("pan_doc_url"),
   certificatesDocUrl: text("certificates_doc_url"),
   resumeDocUrl: text("resume_doc_url"),
+  remarks: text("remarks"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
