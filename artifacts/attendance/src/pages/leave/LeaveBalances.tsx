@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { PageHeader, Card, Button, Input, Label } from "@/components/ui";
 import {
   RefreshCw, AlertTriangle, X, Search, CheckCircle2,
-  CalendarDays, Users, Edit2, Save, RotateCcw,
+  CalendarDays, Users, Edit2, Save, RotateCcw, Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -105,6 +105,47 @@ export default function LeaveBalances() {
   );
 
   const totalEmployees = records.length;
+
+  function exportReport() {
+    const dataToExport = search ? filtered : records;
+    const headers = [
+      "Employee ID",
+      "Full Name",
+      "Department",
+      "Designation",
+      "Total Leave (days)",
+      "Used (days)",
+      "Remaining (days)",
+      "Year",
+    ];
+    const rows = dataToExport.map(rec => {
+      const bal = getLeaveBalance(rec);
+      const used = getLeaveUsed(rec);
+      const rem = getLeaveRemaining(rec);
+      return [
+        rec.employeeCode,
+        rec.fullName,
+        rec.department,
+        rec.designation,
+        bal.toFixed(1),
+        used.toFixed(1),
+        rem.toFixed(1),
+        rec.year,
+      ];
+    });
+
+    const csv = [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
+      .join("\r\n");
+
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `leave-balances-${year}${search ? "-filtered" : ""}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
   const avgRemaining = records.length
     ? (records.reduce((s, r) => s + getLeaveRemaining(r), 0) / records.length).toFixed(1)
     : "0";
@@ -150,6 +191,14 @@ export default function LeaveBalances() {
         >
           {syncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
           Sync Used Leave
+        </Button>
+        <Button
+          onClick={exportReport}
+          disabled={records.length === 0}
+          className="gap-2 shrink-0 bg-green-600 hover:bg-green-700 text-white"
+        >
+          <Download className="w-4 h-4" />
+          Export Report
         </Button>
       </div>
 
