@@ -238,7 +238,7 @@ router.post("/mark-leave", async (req, res) => {
     const { employeeId, date, leaveType } = req.body as {
       employeeId: number;
       date: string;
-      leaveType: "annual" | "casual" | "no_pay";
+      leaveType: "leave" | "annual" | "casual" | "no_pay";
     };
     if (!employeeId || !date || !leaveType) {
       return res.status(400).json({ message: "employeeId, date, and leaveType are required" });
@@ -249,23 +249,16 @@ router.post("/mark-leave", async (req, res) => {
 
     const year = parseInt(date.split("-")[0]);
 
-    if (leaveType === "annual" || leaveType === "casual") {
+    if (leaveType === "leave" || leaveType === "annual" || leaveType === "casual") {
       const [bal] = await db.select().from(leaveBalances)
         .where(and(eq(leaveBalances.employeeId, employeeId), eq(leaveBalances.year, year)));
 
-      const annualRemaining = (bal?.annualLeaveBalance ?? 0) - (bal?.annualLeaveUsed ?? 0);
-      const casualRemaining = (bal?.casualLeaveBalance ?? 0) - (bal?.casualLeaveUsed ?? 0);
+      const leaveRemaining = (bal?.annualLeaveBalance ?? 0) - (bal?.annualLeaveUsed ?? 0);
 
-      if (leaveType === "annual" && annualRemaining < 1) {
+      if (leaveRemaining < 1) {
         return res.status(422).json({
-          message: "No annual leave balance remaining. Please use Casual Leave or No-Pay Leave.",
-          annualRemaining, casualRemaining,
-        });
-      }
-      if (leaveType === "casual" && casualRemaining < 1) {
-        return res.status(422).json({
-          message: "No casual leave balance remaining. Please use Annual Leave or No-Pay Leave.",
-          annualRemaining, casualRemaining,
+          message: "No leave balance remaining. Please use No-Pay Leave instead.",
+          leaveRemaining,
         });
       }
 
@@ -275,7 +268,7 @@ router.post("/mark-leave", async (req, res) => {
       if (existing) {
         await db.update(attendanceRecords).set({
           status: "leave",
-          leaveType,
+          leaveType: "leave",
           source: "manual",
           approvalStatus: "approved",
           updatedAt: new Date(),
@@ -286,36 +279,29 @@ router.post("/mark-leave", async (req, res) => {
           branchId: emp.branchId!,
           date,
           status: "leave",
-          leaveType,
+          leaveType: "leave",
           source: "manual",
           approvalStatus: "approved",
         });
       }
 
       if (bal) {
-        if (leaveType === "annual") {
-          await db.update(leaveBalances).set({
-            annualLeaveUsed: (bal.annualLeaveUsed ?? 0) + 1,
-            updatedAt: new Date(),
-          }).where(eq(leaveBalances.id, bal.id));
-        } else {
-          await db.update(leaveBalances).set({
-            casualLeaveUsed: (bal.casualLeaveUsed ?? 0) + 1,
-            updatedAt: new Date(),
-          }).where(eq(leaveBalances.id, bal.id));
-        }
+        await db.update(leaveBalances).set({
+          annualLeaveUsed: (bal.annualLeaveUsed ?? 0) + 1,
+          updatedAt: new Date(),
+        }).where(eq(leaveBalances.id, bal.id));
       } else {
         await db.insert(leaveBalances).values({
           employeeId,
           year,
-          annualLeaveBalance: 0,
+          annualLeaveBalance: 21,
           casualLeaveBalance: 0,
-          annualLeaveUsed: leaveType === "annual" ? 1 : 0,
-          casualLeaveUsed: leaveType === "casual" ? 1 : 0,
+          annualLeaveUsed: 1,
+          casualLeaveUsed: 0,
         });
       }
 
-      return res.json({ success: true, status: "leave", leaveType });
+      return res.json({ success: true, status: "leave", leaveType: "leave" });
     }
 
     /* ── No-pay leave: mark as absent (salary deduction in payroll) ── */

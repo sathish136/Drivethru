@@ -10,7 +10,7 @@ export const attendanceRecords = pgTable("attendance_records", {
   branchId: integer("branch_id").notNull().references(() => branches.id),
   date: date("date").notNull(),
   status: text("status").notNull().$type<"present" | "absent" | "late" | "half_day" | "holiday" | "leave" | "off_day">(),
-  leaveType: text("leave_type").$type<"annual" | "casual">(),
+  leaveType: text("leave_type").$type<"leave" | "annual" | "casual">(),
   inTime1: text("in_time1"),
   outTime1: text("out_time1"),
   workHours1: real("work_hours1"),

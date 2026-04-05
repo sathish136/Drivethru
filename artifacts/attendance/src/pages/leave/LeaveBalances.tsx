@@ -16,15 +16,16 @@ interface LeaveBalance {
   designation: string;
   department: string;
   year: number;
-  annualLeaveBalance: number;
-  casualLeaveBalance: number;
-  annualLeaveUsed: number;
-  casualLeaveUsed: number;
+  leaveBalance?: number;
+  leaveUsed?: number;
+  leaveRemaining?: number;
+  annualLeaveBalance?: number;
+  annualLeaveUsed?: number;
   lastAccrualDate: string | null;
   balanceId: number | null;
 }
 
-interface EditState { annual: string; casual: string; }
+interface EditState { leaveBalance: string; leaveUsed: string; }
 
 export default function LeaveBalances() {
   const year = new Date().getFullYear();
@@ -33,9 +34,8 @@ export default function LeaveBalances() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [editId, setEditId] = useState<number | null>(null);
-  const [editState, setEditState] = useState<EditState>({ annual: "0", casual: "0" });
+  const [editState, setEditState] = useState<EditState>({ leaveBalance: "21", leaveUsed: "0" });
   const [saving, setSaving] = useState(false);
-  const [accruing, setAccruing] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
 
@@ -50,9 +50,16 @@ export default function LeaveBalances() {
 
   useEffect(() => { load(); }, [load]);
 
+  const getLeaveBalance = (r: LeaveBalance) => r.leaveBalance ?? r.annualLeaveBalance ?? 21;
+  const getLeaveUsed = (r: LeaveBalance) => r.leaveUsed ?? r.annualLeaveUsed ?? 0;
+  const getLeaveRemaining = (r: LeaveBalance) => r.leaveRemaining ?? (getLeaveBalance(r) - getLeaveUsed(r));
+
   function startEdit(rec: LeaveBalance) {
     setEditId(rec.employeeId);
-    setEditState({ annual: String(rec.annualLeaveBalance), casual: String(rec.casualLeaveBalance) });
+    setEditState({
+      leaveBalance: String(getLeaveBalance(rec)),
+      leaveUsed: String(getLeaveUsed(rec)),
+    });
   }
 
   async function saveOverride(empId: number) {
@@ -63,8 +70,8 @@ export default function LeaveBalances() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           year,
-          annualLeaveBalance: parseFloat(editState.annual) || 0,
-          casualLeaveBalance: parseFloat(editState.casual) || 0,
+          leaveBalance: parseFloat(editState.leaveBalance) || 0,
+          leaveUsed: parseFloat(editState.leaveUsed) || 0,
         }),
       });
       const d = await r.json();
@@ -76,18 +83,6 @@ export default function LeaveBalances() {
     } catch { setError("Failed to save balance"); }
     setSaving(false);
     setTimeout(() => setActionMsg(null), 3000);
-  }
-
-  async function accrueAll() {
-    setAccruing(true); setError(null);
-    try {
-      const r = await fetch(apiUrl("/leave-balances/accrue"), { method: "POST" });
-      const d = await r.json();
-      setActionMsg(d.message || "Accrual done.");
-      load();
-    } catch { setError("Failed to run accrual"); }
-    setAccruing(false);
-    setTimeout(() => setActionMsg(null), 4000);
   }
 
   async function syncUsed() {
@@ -109,11 +104,19 @@ export default function LeaveBalances() {
     r.department?.toLowerCase().includes(search.toLowerCase())
   );
 
+  const totalEmployees = records.length;
+  const avgRemaining = records.length
+    ? (records.reduce((s, r) => s + getLeaveRemaining(r), 0) / records.length).toFixed(1)
+    : "0";
+  const avgUsed = records.length
+    ? (records.reduce((s, r) => s + getLeaveUsed(r), 0) / records.length).toFixed(1)
+    : "0";
+
   return (
     <div className="space-y-5 max-w-6xl">
       <PageHeader
         title="Leave Balances"
-        description={`Annual & casual leave balances for ${year} — accrues at 1.5 days per week`}
+        description={`Common leave balances for ${year} — 21 days total entitlement per employee`}
       />
 
       {error && (
@@ -140,14 +143,6 @@ export default function LeaveBalances() {
           <RefreshCw className="w-4 h-4" /> Refresh
         </Button>
         <Button
-          onClick={accrueAll}
-          disabled={accruing}
-          className="gap-2 shrink-0 bg-blue-600 hover:bg-blue-700 text-white"
-        >
-          {accruing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CalendarDays className="w-4 h-4" />}
-          Run Accrual (1.5 days/week)
-        </Button>
-        <Button
           variant="outline"
           onClick={syncUsed}
           disabled={syncing}
@@ -161,15 +156,15 @@ export default function LeaveBalances() {
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: "Total Employees", value: records.length, icon: Users, color: "blue" },
+          { label: "Total Employees", value: totalEmployees, icon: Users, color: "blue" },
           {
-            label: "Avg Annual Balance",
-            value: records.length ? (records.reduce((s, r) => s + r.annualLeaveBalance, 0) / records.length).toFixed(1) : "0",
+            label: "Avg Leave Remaining",
+            value: avgRemaining,
             icon: CalendarDays, color: "green",
           },
           {
-            label: "Avg Casual Balance",
-            value: records.length ? (records.reduce((s, r) => s + r.casualLeaveBalance, 0) / records.length).toFixed(1) : "0",
+            label: "Avg Leave Used",
+            value: avgUsed,
             icon: CalendarDays, color: "violet",
           },
         ].map(({ label, value, icon: Icon, color }) => (
@@ -199,18 +194,16 @@ export default function LeaveBalances() {
                 <tr className="bg-muted/50 border-b border-border">
                   <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Employee</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Department</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Annual Balance</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Annual Used</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Casual Balance</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Casual Used</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Last Accrual</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Total</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Used</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Remaining</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-12 text-muted-foreground">
+                    <td colSpan={6} className="text-center py-12 text-muted-foreground">
                       {search ? "No employees match your search." : "No leave balance records found."}
                     </td>
                   </tr>
@@ -227,29 +220,38 @@ export default function LeaveBalances() {
                       <td className="px-4 py-3 text-center">
                         {isEditing ? (
                           <Input type="number" step="0.5" min="0" className="w-20 text-center h-8 text-sm mx-auto"
-                            value={editState.annual} onChange={e => setEditState(s => ({ ...s, annual: e.target.value }))} />
+                            value={editState.leaveBalance}
+                            onChange={e => setEditState(s => ({ ...s, leaveBalance: e.target.value }))} />
                         ) : (
-                          <span className={cn("font-bold text-base", rec.annualLeaveBalance < 3 ? "text-red-600" : "text-green-700")}>
-                            {rec.annualLeaveBalance.toFixed(1)}
+                          <span className="font-bold text-base text-foreground">
+                            {(rec.leaveBalance ?? rec.annualLeaveBalance ?? 21).toFixed(1)}
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-center text-muted-foreground">{rec.annualLeaveUsed.toFixed(1)}</td>
                       <td className="px-4 py-3 text-center">
                         {isEditing ? (
                           <Input type="number" step="0.5" min="0" className="w-20 text-center h-8 text-sm mx-auto"
-                            value={editState.casual} onChange={e => setEditState(s => ({ ...s, casual: e.target.value }))} />
+                            value={editState.leaveUsed}
+                            onChange={e => setEditState(s => ({ ...s, leaveUsed: e.target.value }))} />
                         ) : (
-                          <span className={cn("font-bold text-base", rec.casualLeaveBalance < 2 ? "text-amber-600" : "text-blue-700")}>
-                            {rec.casualLeaveBalance.toFixed(1)}
-                          </span>
+                          <span className="text-muted-foreground">{(rec.leaveUsed ?? rec.annualLeaveUsed ?? 0).toFixed(1)}</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-center text-muted-foreground">{rec.casualLeaveUsed.toFixed(1)}</td>
-                      <td className="px-4 py-3 text-center text-xs text-muted-foreground">
-                        {rec.lastAccrualDate
-                          ? new Date(rec.lastAccrualDate).toLocaleDateString("en-LK", { day: "numeric", month: "short" })
-                          : <span className="italic">Never</span>}
+                      <td className="px-4 py-3 text-center">
+                        {(() => {
+                          const bal = rec.leaveBalance ?? rec.annualLeaveBalance ?? 21;
+                          const used = rec.leaveUsed ?? rec.annualLeaveUsed ?? 0;
+                          const rem = rec.leaveRemaining ?? (bal - used);
+                          return (
+                            <span className={cn("font-bold text-base",
+                              rem < 0 ? "text-red-600"
+                              : rem < 5 ? "text-amber-600"
+                              : "text-green-700"
+                            )}>
+                              {rem.toFixed(1)}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-right">
                         {isEditing ? (

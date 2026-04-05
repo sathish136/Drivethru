@@ -33,6 +33,8 @@ router.get("/", async (req, res) => {
 
     const result = filteredEmps.map(emp => {
       const bal = balanceMap.get(emp.id);
+      const leaveBalance = bal?.annualLeaveBalance ?? 21;
+      const leaveUsed = bal?.annualLeaveUsed ?? 0;
       return {
         employeeId: emp.id,
         employeeCode: emp.employeeId,
@@ -41,10 +43,13 @@ router.get("/", async (req, res) => {
         department: emp.department,
         branchId: emp.branchId,
         year: y,
-        annualLeaveBalance: bal?.annualLeaveBalance ?? 0,
-        casualLeaveBalance: bal?.casualLeaveBalance ?? 0,
-        annualLeaveUsed: bal?.annualLeaveUsed ?? 0,
-        casualLeaveUsed: bal?.casualLeaveUsed ?? 0,
+        leaveBalance,
+        leaveUsed,
+        leaveRemaining: leaveBalance - leaveUsed,
+        annualLeaveBalance: leaveBalance,
+        casualLeaveBalance: 0,
+        annualLeaveUsed: leaveUsed,
+        casualLeaveUsed: 0,
         lastAccrualDate: bal?.lastAccrualDate ?? null,
         balanceId: bal?.id ?? null,
       };
@@ -57,69 +62,6 @@ router.get("/", async (req, res) => {
   }
 });
 
-/* ── Accrue 1.5 days per week for all employees up to today ── */
-router.post("/accrue", async (req, res) => {
-  try {
-    const { year } = req.body as { year?: number };
-    const y = year ?? new Date().getFullYear();
-    const todayStr = new Date().toISOString().split("T")[0];
-
-    const allEmps = await db.select({ id: employees.id }).from(employees)
-      .where(eq(employees.status, "active"));
-
-    const empIds = allEmps.map(e => e.id);
-    if (!empIds.length) return res.json({ message: "No active employees" });
-
-    const existingBalances = await db.select().from(leaveBalances)
-      .where(and(eq(leaveBalances.year, y), inArray(leaveBalances.employeeId, empIds)));
-    const balanceMap = new Map(existingBalances.map(b => [b.employeeId, b]));
-
-    let accrued = 0;
-    const ACCRUAL_RATE = 1.5;
-
-    for (const emp of allEmps) {
-      const bal = balanceMap.get(emp.id);
-      const lastAccrual = bal?.lastAccrualDate ?? `${y}-01-01`;
-      const lastDate = new Date(lastAccrual);
-      const todayDate = new Date(todayStr);
-
-      const diffMs = todayDate.getTime() - lastDate.getTime();
-      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-      const weeksElapsed = Math.floor(diffDays / 7);
-
-      if (weeksElapsed <= 0) continue;
-
-      const newDays = weeksElapsed * ACCRUAL_RATE;
-      const newLastAccrual = new Date(lastDate.getTime() + weeksElapsed * 7 * 24 * 60 * 60 * 1000)
-        .toISOString().split("T")[0];
-
-      if (bal) {
-        await db.update(leaveBalances).set({
-          annualLeaveBalance: (bal.annualLeaveBalance ?? 0) + newDays,
-          lastAccrualDate: newLastAccrual,
-          updatedAt: new Date(),
-        }).where(eq(leaveBalances.id, bal.id));
-      } else {
-        await db.insert(leaveBalances).values({
-          employeeId: emp.id,
-          year: y,
-          annualLeaveBalance: newDays,
-          casualLeaveBalance: 0,
-          annualLeaveUsed: 0,
-          casualLeaveUsed: 0,
-          lastAccrualDate: newLastAccrual,
-        });
-      }
-      accrued++;
-    }
-
-    res.json({ success: true, accrued, message: `Leave accrued for ${accrued} employees` });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: "Failed to accrue leave" });
-  }
-});
-
 /* ── Get leave balance for a single employee ──────────────── */
 router.get("/employee/:id", async (req, res) => {
   try {
@@ -129,15 +71,22 @@ router.get("/employee/:id", async (req, res) => {
     const [bal] = await db.select().from(leaveBalances)
       .where(and(eq(leaveBalances.employeeId, empId), eq(leaveBalances.year, year)));
 
+    const leaveBalance = bal?.annualLeaveBalance ?? 21;
+    const leaveUsed = bal?.annualLeaveUsed ?? 0;
+    const leaveRemaining = leaveBalance - leaveUsed;
+
     res.json({
       employeeId: empId,
       year,
-      annualLeaveBalance: bal?.annualLeaveBalance ?? 0,
-      casualLeaveBalance: bal?.casualLeaveBalance ?? 0,
-      annualLeaveUsed: bal?.annualLeaveUsed ?? 0,
-      casualLeaveUsed: bal?.casualLeaveUsed ?? 0,
-      annualRemaining: (bal?.annualLeaveBalance ?? 0) - (bal?.annualLeaveUsed ?? 0),
-      casualRemaining: (bal?.casualLeaveBalance ?? 0) - (bal?.casualLeaveUsed ?? 0),
+      leaveBalance,
+      leaveUsed,
+      leaveRemaining,
+      annualLeaveBalance: leaveBalance,
+      casualLeaveBalance: 0,
+      annualLeaveUsed: leaveUsed,
+      casualLeaveUsed: 0,
+      annualRemaining: leaveRemaining,
+      casualRemaining: 0,
     });
   } catch (e) {
     console.error(e);
@@ -145,40 +94,43 @@ router.get("/employee/:id", async (req, res) => {
   }
 });
 
-/* ── Manual override: set balance for an employee ─────────── */
+/* ── Manual override: set leave balance for an employee ───── */
 router.put("/:employeeId", async (req, res) => {
   try {
     const empId = parseInt(req.params.employeeId);
-    const { year, annualLeaveBalance, casualLeaveBalance, annualLeaveUsed, casualLeaveUsed } = req.body as {
+    const { year, leaveBalance, leaveUsed, annualLeaveBalance, annualLeaveUsed } = req.body as {
       year: number;
+      leaveBalance?: number;
+      leaveUsed?: number;
       annualLeaveBalance?: number;
-      casualLeaveBalance?: number;
       annualLeaveUsed?: number;
-      casualLeaveUsed?: number;
     };
+
+    const newBalance = leaveBalance ?? annualLeaveBalance;
+    const newUsed = leaveUsed ?? annualLeaveUsed;
 
     const [existing] = await db.select().from(leaveBalances)
       .where(and(eq(leaveBalances.employeeId, empId), eq(leaveBalances.year, year)));
 
     if (existing) {
       const [updated] = await db.update(leaveBalances).set({
-        annualLeaveBalance: annualLeaveBalance ?? existing.annualLeaveBalance,
-        casualLeaveBalance: casualLeaveBalance ?? existing.casualLeaveBalance,
-        annualLeaveUsed: annualLeaveUsed ?? existing.annualLeaveUsed,
-        casualLeaveUsed: casualLeaveUsed ?? existing.casualLeaveUsed,
+        annualLeaveBalance: newBalance ?? existing.annualLeaveBalance,
+        casualLeaveBalance: 0,
+        annualLeaveUsed: newUsed ?? existing.annualLeaveUsed,
+        casualLeaveUsed: 0,
         updatedAt: new Date(),
       }).where(eq(leaveBalances.id, existing.id)).returning();
-      res.json(updated);
+      res.json({ ...updated, id: updated.id, employeeId: empId });
     } else {
       const [created] = await db.insert(leaveBalances).values({
         employeeId: empId,
         year,
-        annualLeaveBalance: annualLeaveBalance ?? 0,
-        casualLeaveBalance: casualLeaveBalance ?? 0,
-        annualLeaveUsed: annualLeaveUsed ?? 0,
-        casualLeaveUsed: casualLeaveUsed ?? 0,
+        annualLeaveBalance: newBalance ?? 21,
+        casualLeaveBalance: 0,
+        annualLeaveUsed: newUsed ?? 0,
+        casualLeaveUsed: 0,
       }).returning();
-      res.json(created);
+      res.json({ ...created, employeeId: empId });
     }
   } catch (e) {
     console.error(e);
@@ -208,26 +160,25 @@ router.post("/sync-used", async (req, res) => {
     let synced = 0;
     for (const emp of allEmps) {
       const empLeaves = yearAtt.filter(a => a.employeeId === emp.id);
-      const annualUsed = empLeaves.filter(a => a.leaveType === "annual").length;
-      const casualUsed = empLeaves.filter(a => a.leaveType === "casual").length;
+      const totalUsed = empLeaves.length;
 
       const [existing] = await db.select().from(leaveBalances)
         .where(and(eq(leaveBalances.employeeId, emp.id), eq(leaveBalances.year, y)));
 
       if (existing) {
         await db.update(leaveBalances).set({
-          annualLeaveUsed: annualUsed,
-          casualLeaveUsed: casualUsed,
+          annualLeaveUsed: totalUsed,
+          casualLeaveUsed: 0,
           updatedAt: new Date(),
         }).where(eq(leaveBalances.id, existing.id));
       } else {
         await db.insert(leaveBalances).values({
           employeeId: emp.id,
           year: y,
-          annualLeaveBalance: 0,
+          annualLeaveBalance: 21,
           casualLeaveBalance: 0,
-          annualLeaveUsed: annualUsed,
-          casualLeaveUsed: casualUsed,
+          annualLeaveUsed: totalUsed,
+          casualLeaveUsed: 0,
         });
       }
       synced++;
@@ -237,6 +188,54 @@ router.post("/sync-used", async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: "Failed to sync leave usage" });
+  }
+});
+
+/* ── Bulk set leave balances (from Excel import) ─────────── */
+router.post("/bulk-set", async (req, res) => {
+  try {
+    const { year, records: inputRecords } = req.body as {
+      year: number;
+      records: Array<{ employeeCode: string; leaveBalance: number; leaveUsed: number }>;
+    };
+
+    const allEmps = await db.select({ id: employees.id, employeeId: employees.employeeId })
+      .from(employees);
+    const empMap = new Map(allEmps.map(e => [e.employeeId, e.id]));
+
+    let updated = 0;
+    for (const rec of inputRecords) {
+      const empId = empMap.get(rec.employeeCode);
+      if (!empId) continue;
+
+      const [existing] = await db.select().from(leaveBalances)
+        .where(and(eq(leaveBalances.employeeId, empId), eq(leaveBalances.year, year)));
+
+      if (existing) {
+        await db.update(leaveBalances).set({
+          annualLeaveBalance: rec.leaveBalance,
+          casualLeaveBalance: 0,
+          annualLeaveUsed: rec.leaveUsed,
+          casualLeaveUsed: 0,
+          updatedAt: new Date(),
+        }).where(eq(leaveBalances.id, existing.id));
+      } else {
+        await db.insert(leaveBalances).values({
+          employeeId: empId,
+          year,
+          annualLeaveBalance: rec.leaveBalance,
+          casualLeaveBalance: 0,
+          annualLeaveUsed: rec.leaveUsed,
+          casualLeaveUsed: 0,
+        });
+      }
+      updated++;
+    }
+
+    res.json({ success: true, updated, message: `Balances set for ${updated} employees` });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Failed to bulk-set leave balances" });
   }
 });
 

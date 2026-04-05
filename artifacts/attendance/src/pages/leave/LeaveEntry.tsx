@@ -21,10 +21,11 @@ interface Employee {
 }
 
 interface LeaveBalance {
+  leaveBalance: number;
+  leaveUsed: number;
+  leaveRemaining: number;
   annualRemaining: number;
   casualRemaining: number;
-  annualLeaveUsed: number;
-  casualLeaveUsed: number;
 }
 
 interface RecentEntry {
@@ -38,22 +39,13 @@ interface RecentEntry {
 
 const LEAVE_TYPES = [
   {
-    id: "annual",
-    label: "Annual Leave",
-    desc: "Deducted from annual leave balance",
+    id: "leave",
+    label: "Leave",
+    desc: "Deducted from leave balance (21 days total)",
     iconBg: "bg-blue-50",
     iconColor: "text-blue-600",
     badge: "info" as const,
-    balanceKey: "annualRemaining" as keyof LeaveBalance,
-  },
-  {
-    id: "casual",
-    label: "Casual Leave",
-    desc: "Deducted from casual leave balance",
-    iconBg: "bg-amber-50",
-    iconColor: "text-amber-600",
-    badge: "warning" as const,
-    balanceKey: "casualRemaining" as keyof LeaveBalance,
+    balanceKey: "leaveRemaining" as keyof LeaveBalance,
   },
   {
     id: "no_pay",
@@ -76,7 +68,7 @@ export default function LeaveEntry() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedEmp, setSelectedEmp] = useState<Employee | null>(null);
   const [date, setDate] = useState(todayStr());
-  const [leaveType, setLeaveType] = useState<string>("annual");
+  const [leaveType, setLeaveType] = useState<string>("leave");
   const [balance, setBalance] = useState<LeaveBalance | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -165,7 +157,7 @@ export default function LeaveEntry() {
     setSelectedEmp(null);
     setEmpSearch("");
     setDate(todayStr());
-    setLeaveType("annual");
+    setLeaveType("leave");
     setBalance(null);
     setSuccessMsg("");
     setErrorMsg("");
@@ -179,8 +171,7 @@ export default function LeaveEntry() {
   const noBalance = remainingForType !== null && remainingForType <= 0;
 
   const leaveTypeLabel = (type: string) => {
-    if (type === "annual") return "Annual";
-    if (type === "casual") return "Casual";
+    if (type === "leave" || type === "annual" || type === "casual") return "Leave";
     if (type === "no_pay") return "No-Pay";
     return type;
   };
@@ -189,7 +180,7 @@ export default function LeaveEntry() {
     <div className="space-y-5 max-w-5xl">
       <PageHeader
         title="Leave Entry"
-        description="Manually record leave for an employee — Annual, Casual, or No-Pay."
+        description="Manually record leave for an employee — Leave (21 days) or No-Pay."
       />
 
       {successMsg && (
@@ -335,7 +326,7 @@ export default function LeaveEntry() {
             {noBalance && (
               <div className="mt-3 flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
                 <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                <span>No <strong>{selectedTypeDef.label}</strong> balance remaining. Choose Casual Leave or No-Pay Leave instead.</span>
+                <span>No <strong>Leave</strong> balance remaining. Please use No-Pay Leave instead.</span>
               </div>
             )}
           </Card>
@@ -381,40 +372,21 @@ export default function LeaveEntry() {
 
             {selectedEmp && !balanceLoading && balance && (
               <div className="space-y-3">
-                {[
-                  {
-                    label: "Annual Leave",
-                    remaining: balance.annualRemaining,
-                    used: balance.annualLeaveUsed,
-                    iconBg: "bg-blue-50",
-                    iconColor: "text-blue-600",
-                    valueColor: balance.annualRemaining < 3 ? "text-red-600" : "text-blue-700",
-                  },
-                  {
-                    label: "Casual Leave",
-                    remaining: balance.casualRemaining,
-                    used: balance.casualLeaveUsed,
-                    iconBg: "bg-amber-50",
-                    iconColor: "text-amber-600",
-                    valueColor: balance.casualRemaining < 2 ? "text-red-600" : "text-amber-700",
-                  },
-                ].map(item => (
-                  <div key={item.label} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/20">
-                    <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", item.iconBg)}>
-                      <CalendarDays className={cn("w-4 h-4", item.iconColor)} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-muted-foreground">{item.label}</p>
-                      <p className={cn("text-xl font-bold leading-tight", item.valueColor)}>
-                        {item.remaining}
-                        <span className="text-xs font-normal text-muted-foreground ml-1">
-                          / {item.remaining + item.used} days
-                        </span>
-                      </p>
-                      <p className="text-xs text-muted-foreground">{item.used} used this year</p>
-                    </div>
+                <div className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/20">
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-blue-50">
+                    <CalendarDays className="w-4 h-4 text-blue-600" />
                   </div>
-                ))}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground">Leave</p>
+                    <p className={cn("text-xl font-bold leading-tight", balance.leaveRemaining < 3 ? "text-red-600" : "text-blue-700")}>
+                      {balance.leaveRemaining}
+                      <span className="text-xs font-normal text-muted-foreground ml-1">
+                        / {balance.leaveBalance} days
+                      </span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">{balance.leaveUsed} used this year</p>
+                  </div>
+                </div>
 
                 <div className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/20">
                   <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-red-50">
@@ -473,10 +445,7 @@ export default function LeaveEntry() {
                   <Td>
                     <Badge
                       variant={
-                        entry.leaveType === "annual" ? "info"
-                          : entry.leaveType === "casual" ? "warning"
-                          : entry.leaveType === "no_pay" ? "danger"
-                          : "neutral"
+                        entry.leaveType === "no_pay" ? "danger" : "info"
                       }
                     >
                       {leaveTypeLabel(entry.leaveType)}
