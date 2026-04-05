@@ -293,22 +293,28 @@ export default function LeaveBalances() {
           {syncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
           Sync Used Leave
         </Button>
-        <Button
-          onClick={exportReport}
-          disabled={records.length === 0}
-          className="gap-2 shrink-0 bg-green-600 hover:bg-green-700 text-white"
-        >
-          <Download className="w-4 h-4" />
-          Export CSV
-        </Button>
-        <Button
-          onClick={exportPDF}
-          disabled={records.length === 0}
-          className="gap-2 shrink-0 bg-rose-600 hover:bg-rose-700 text-white"
-        >
-          <FileText className="w-4 h-4" />
-          Export PDF
-        </Button>
+
+        {/* Export icon buttons */}
+        <div className="flex items-center gap-1 border border-border rounded-lg overflow-hidden shrink-0">
+          <button
+            onClick={exportReport}
+            disabled={records.length === 0}
+            title="Export as CSV"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors border-r border-border"
+          >
+            <Download className="w-3.5 h-3.5" />
+            CSV
+          </button>
+          <button
+            onClick={exportPDF}
+            disabled={records.length === 0}
+            title="Export as PDF"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            PDF
+          </button>
+        </div>
       </div>
 
       {/* Summary cards */}
