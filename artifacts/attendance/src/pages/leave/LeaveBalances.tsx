@@ -5,6 +5,8 @@ import {
   CalendarDays, Users, Edit2, Save, RotateCcw, Download, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import drivethruLogo from "@/assets/drivethru-logo.png";
+import liveuLogo from "@/assets/liveu-logo.png";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 function apiUrl(path: string) { return `${BASE}/api${path}`; }
@@ -170,16 +172,23 @@ export default function LeaveBalances() {
     const html = `
       <div style="font-family:Arial,sans-serif;padding:32px;max-width:900px;margin:0 auto">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-          <div>
-            <h1 style="margin:0;font-size:22px;font-weight:700;color:#111827">Leave Balance Report</h1>
-            <p style="margin:4px 0 0;font-size:13px;color:#6b7280">Year ${year} · Total entitlement: 21 days per employee</p>
+          <div style="display:flex;align-items:center;gap:12px">
+            <img src="${drivethruLogo}" style="height:48px;width:48px;object-fit:contain;border-radius:8px" alt="Drivethru"/>
+            <div>
+              <div style="font-size:18px;font-weight:700;color:#1565a8;line-height:1.2">Drivethru Pvt Ltd</div>
+              <div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.08em">Attendance Management System</div>
+            </div>
           </div>
-          <div style="text-align:right;font-size:12px;color:#9ca3af">
-            Generated: ${new Date().toLocaleDateString("en-GB", { day:"numeric", month:"long", year:"numeric" })}<br/>
-            ${dataToExport.length} employee${dataToExport.length !== 1 ? "s" : ""}${search ? " (filtered)" : ""}
+          <div style="text-align:right">
+            <div style="font-size:17px;font-weight:700;color:#111827">Leave Balance Report</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px">Year ${year} · Total entitlement: 21 days per employee</div>
+            <div style="font-size:11px;color:#9ca3af;margin-top:2px">
+              Generated: ${new Date().toLocaleDateString("en-GB", { day:"numeric", month:"long", year:"numeric" })} ·
+              ${dataToExport.length} employee${dataToExport.length !== 1 ? "s" : ""}${search ? " (filtered)" : ""}
+            </div>
           </div>
         </div>
-        <hr style="border:none;border-top:2px solid #3b82f6;margin:16px 0"/>
+        <hr style="border:none;border-top:2px solid #1565a8;margin:14px 0"/>
 
         <div style="display:flex;gap:16px;margin-bottom:20px">
           ${[
@@ -208,9 +217,16 @@ export default function LeaveBalances() {
           <tbody>${tableRows}</tbody>
         </table>
 
-        <p style="margin-top:24px;font-size:10px;color:#9ca3af;text-align:center">
-          Post Office Attendance Management System · Leave Balance Report ${year}
-        </p>
+        <div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between">
+          <p style="margin:0;font-size:10px;color:#9ca3af">
+            Drivethru Pvt Ltd · Attendance Management System · Leave Balance Report ${year}
+          </p>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:10px;color:#9ca3af">Powered by</span>
+            <img src="${liveuLogo}" style="height:18px;width:18px;object-fit:contain;border-radius:50%;opacity:.85" alt="Live U"/>
+            <span style="font-size:10px;font-weight:600;color:#6b7280">Live U Pvt Ltd</span>
+          </div>
+        </div>
       </div>`;
 
     const el = document.createElement("div");
