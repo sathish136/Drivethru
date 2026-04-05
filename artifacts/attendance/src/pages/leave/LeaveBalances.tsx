@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { PageHeader, Card, Button, Input, Label } from "@/components/ui";
 import {
   RefreshCw, AlertTriangle, X, Search, CheckCircle2,
-  CalendarDays, Users, Edit2, Save, RotateCcw, Download,
+  CalendarDays, Users, Edit2, Save, RotateCcw, Download, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -146,6 +146,91 @@ export default function LeaveBalances() {
     a.click();
     URL.revokeObjectURL(url);
   }
+
+  async function exportPDF() {
+    const dataToExport = search ? filtered : records;
+    const tableRows = dataToExport.map((rec, i) => {
+      const bal = getLeaveBalance(rec);
+      const used = getLeaveUsed(rec);
+      const rem = getLeaveRemaining(rec);
+      const remColor = rem < 0 ? "#dc2626" : rem < 5 ? "#d97706" : "#15803d";
+      const bg = i % 2 === 0 ? "#ffffff" : "#f9fafb";
+      return `
+        <tr style="background:${bg}">
+          <td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;font-family:monospace">${rec.employeeCode}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:12px">${rec.fullName}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#6b7280">${rec.department}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#6b7280">${rec.designation}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;text-align:center;font-weight:600">${bal.toFixed(1)}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;text-align:center;color:#6b7280">${used.toFixed(1)}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;text-align:center;font-weight:700;color:${remColor}">${rem.toFixed(1)}</td>
+        </tr>`;
+    }).join("");
+
+    const html = `
+      <div style="font-family:Arial,sans-serif;padding:32px;max-width:900px;margin:0 auto">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div>
+            <h1 style="margin:0;font-size:22px;font-weight:700;color:#111827">Leave Balance Report</h1>
+            <p style="margin:4px 0 0;font-size:13px;color:#6b7280">Year ${year} · Total entitlement: 21 days per employee</p>
+          </div>
+          <div style="text-align:right;font-size:12px;color:#9ca3af">
+            Generated: ${new Date().toLocaleDateString("en-GB", { day:"numeric", month:"long", year:"numeric" })}<br/>
+            ${dataToExport.length} employee${dataToExport.length !== 1 ? "s" : ""}${search ? " (filtered)" : ""}
+          </div>
+        </div>
+        <hr style="border:none;border-top:2px solid #3b82f6;margin:16px 0"/>
+
+        <div style="display:flex;gap:16px;margin-bottom:20px">
+          ${[
+            ["Total Employees", dataToExport.length, "#3b82f6"],
+            ["Avg Remaining", (dataToExport.reduce((s,r) => s + getLeaveRemaining(r), 0) / (dataToExport.length || 1)).toFixed(1) + " days", "#15803d"],
+            ["Avg Used", (dataToExport.reduce((s,r) => s + getLeaveUsed(r), 0) / (dataToExport.length || 1)).toFixed(1) + " days", "#9333ea"],
+          ].map(([label, value, color]) => `
+            <div style="flex:1;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px 16px">
+              <div style="font-size:20px;font-weight:700;color:${color}">${value}</div>
+              <div style="font-size:11px;color:#9ca3af;margin-top:2px">${label}</div>
+            </div>`).join("")}
+        </div>
+
+        <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+          <thead>
+            <tr style="background:#1e40af;color:#fff">
+              <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;letter-spacing:.5px">EMPLOYEE ID</th>
+              <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;letter-spacing:.5px">FULL NAME</th>
+              <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;letter-spacing:.5px">DEPARTMENT</th>
+              <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;letter-spacing:.5px">DESIGNATION</th>
+              <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;letter-spacing:.5px">TOTAL</th>
+              <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;letter-spacing:.5px">USED</th>
+              <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;letter-spacing:.5px">REMAINING</th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+
+        <p style="margin-top:24px;font-size:10px;color:#9ca3af;text-align:center">
+          Post Office Attendance Management System · Leave Balance Report ${year}
+        </p>
+      </div>`;
+
+    const el = document.createElement("div");
+    el.innerHTML = html;
+    document.body.appendChild(el);
+
+    const html2pdf = (await import("html2pdf.js")).default;
+    await html2pdf()
+      .set({
+        margin: 0,
+        filename: `leave-balances-${year}${search ? "-filtered" : ""}.pdf`,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
+      })
+      .from(el)
+      .save();
+
+    document.body.removeChild(el);
+  }
   const avgRemaining = records.length
     ? (records.reduce((s, r) => s + getLeaveRemaining(r), 0) / records.length).toFixed(1)
     : "0";
@@ -198,7 +283,15 @@ export default function LeaveBalances() {
           className="gap-2 shrink-0 bg-green-600 hover:bg-green-700 text-white"
         >
           <Download className="w-4 h-4" />
-          Export Report
+          Export CSV
+        </Button>
+        <Button
+          onClick={exportPDF}
+          disabled={records.length === 0}
+          className="gap-2 shrink-0 bg-rose-600 hover:bg-rose-700 text-white"
+        >
+          <FileText className="w-4 h-4" />
+          Export PDF
         </Button>
       </div>
 
