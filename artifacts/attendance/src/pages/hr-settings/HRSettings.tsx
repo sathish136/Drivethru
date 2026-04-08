@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { PageHeader, Card, Button, Input, Label, Select } from "@/components/ui";
 import {
-  Plus, Trash2, Save, RefreshCw, Check, AlertTriangle, X, Edit2, Users, Settings, Sparkles,
+  Plus, Trash2, Save, RefreshCw, Check, AlertTriangle, X, Edit2, Users, Sparkles,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -29,51 +29,37 @@ interface DeptShiftRule {
   minPresentHours: number | null;
   remarks: string;
   notes: string;
-  /**
-   * Fixed clock time (HH:MM, 24-hr) after which OT starts.
-   * Used for Kitchen ("20:30") and Night Watcher ("05:00").
-   * When set, overrides the hours-based otAfterHours calculation.
-   */
   otStartTime: string | null;
-  /**
-   * Night Watcher policy: hours to deduct per missed hourly punch.
-   * Policy: "if they forgot punch a hr then deduct 1 or 2 hrs from their 3hrs OT."
-   * Typically set to 1 or 2. null = not applicable.
-   */
   nightWatcherMissedPunchDeductHours: number | null;
+  saturdayShiftHours: number | null;
+  sundayStartTime: string | null;
 }
 
 interface Department { id: number; name: string; isActive: boolean; }
 interface ShiftOption  { id: number; name: string; startTime1: string; endTime1: string; isActive: boolean; }
 
 const BLANK_RULE: DeptShiftRule = {
-  id: "", department: "", shift: "", minHours: 9, maxHours: 9,
+  id: "", department: "", shift: "", minHours: 9, maxHours: null,
   otEligible: true, otAfterHours: 9.5, lateGraceMinutes: 15,
-  // Policy: "Last check out 5 minutes grace periods" — earlyExitGraceMinutes = 0
-  // so the system adds the flat 5-min grace without extra padding.
   earlyExitGraceMinutes: 0,
   lunchMinHours: 1, lunchMaxHours: 1,
   flexible: false, multipleLogin: false,
   otMultiplier: 1.5, offdayOtMultiplier: 1.5,
-  holidayOtMultiplier: 1.5, weeklyLeaveDays: 1.5, halfDayHours: 5,
+  holidayOtMultiplier: 1.5, weeklyLeaveDays: 1, halfDayHours: 5,
   minPresentHours: 8,
-  remarks: "",
-  notes: "",
+  remarks: "", notes: "",
   otStartTime: null,
   nightWatcherMissedPunchDeductHours: null,
+  saturdayShiftHours: 5,
+  sundayStartTime: null,
 };
-
-const COLS = [
-  "Department", "Shift", "Start Time", "End Time", "Min h", "Break h", "OT?", "OT After",
-  "Late Grace", "Exit Grace", "Flex", "Multi", "Wk Leave", "Half-day h", "Present h", "Holiday OT", "Offday OT", "OT ×", "Staff", "Remarks", "Notes", "",
-];
 
 function fmtTimeMins(totalMins: number): string {
   const h = Math.floor(totalMins / 60) % 24;
   const m = totalMins % 60;
   const period = h >= 12 ? "pm" : "am";
   const displayH = h > 12 ? h - 12 : (h === 0 ? 12 : h);
-  return m > 0 ? `${displayH}.${String(m).padStart(2, "0")} ${period}` : `${displayH} ${period}`;
+  return m > 0 ? `${displayH}:${String(m).padStart(2, "0")} ${period}` : `${displayH} ${period}`;
 }
 
 function generateRemarks(rule: DeptShiftRule, shiftOptions: ShiftOption[]): string {
@@ -86,7 +72,6 @@ function generateRemarks(rule: DeptShiftRule, shiftOptions: ShiftOption[]): stri
 
   const shift = shiftOptions.find(s => s.name.toLowerCase() === rule.shift.toLowerCase());
   const shiftStart = shift?.startTime1 ?? null;
-
   const parts: string[] = [];
 
   if (!rule.otEligible && (!rule.lateGraceMinutes || rule.lateGraceMinutes === 0)) {
@@ -108,7 +93,6 @@ function generateRemarks(rule: DeptShiftRule, shiftOptions: ShiftOption[]): stri
   if (!rule.otEligible) {
     parts.push("No OT");
   } else if (rule.otStartTime) {
-    // Time-based OT (Kitchen / Night Watcher policy)
     const [oh, om] = rule.otStartTime.split(":").map(Number);
     const label = fmtTimeMins(oh * 60 + om);
     parts.push(`OT after ${label}`);
@@ -124,6 +108,25 @@ function generateRemarks(rule: DeptShiftRule, shiftOptions: ShiftOption[]): stri
   }
 
   return parts.join(" / ");
+}
+
+function otRuleLabel(rule: DeptShiftRule, shiftOptions: ShiftOption[]): string {
+  if (!rule.otEligible) return "No OT";
+  if (rule.flexible && rule.otAfterHours != null) return `>${rule.otAfterHours}h total`;
+  if (rule.otStartTime) {
+    const [h, m] = rule.otStartTime.split(":").map(Number);
+    return `After ${fmtTimeMins(h * 60 + m)} (clock)`;
+  }
+  if (rule.otAfterHours != null) {
+    const shift = shiftOptions.find(s => s.name.toLowerCase() === rule.shift.toLowerCase());
+    if (shift?.startTime1) {
+      const [sh, sm] = shift.startTime1.split(":").map(Number);
+      const otMins = sh * 60 + sm + Math.round(rule.otAfterHours * 60);
+      return `After ${fmtTimeMins(otMins)}`;
+    }
+    return `After ${rule.otAfterHours}h`;
+  }
+  return "—";
 }
 
 function clientFindRule(rules: DeptShiftRule[], department: string, shiftName?: string | null) {
@@ -146,21 +149,19 @@ function clientFindRule(rules: DeptShiftRule[], department: string, shiftName?: 
 }
 
 export default function HRSettings() {
-  const [rules, setRules]           = useState<DeptShiftRule[]>([]);
+  const [rules, setRules]             = useState<DeptShiftRule[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [shiftOptions, setShiftOptions] = useState<ShiftOption[]>([]);
-  const [employees, setEmployees]   = useState<any[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [saving, setSaving]         = useState(false);
-  const [saved, setSaved]           = useState(false);
-  const [error, setError]           = useState<string | null>(null);
+  const [employees, setEmployees]     = useState<any[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [saving, setSaving]           = useState(false);
+  const [saved, setSaved]             = useState(false);
+  const [error, setError]             = useState<string | null>(null);
 
-
-
-  const [showModal, setShowModal]   = useState(false);
-  const [modalMode, setModalMode]   = useState<"add" | "edit">("add");
-  const [editing, setEditing]       = useState<DeptShiftRule>(BLANK_RULE);
-  const [staffModal, setStaffModal] = useState<{ rule: DeptShiftRule; emps: any[] } | null>(null);
+  const [showModal, setShowModal]     = useState(false);
+  const [modalMode, setModalMode]     = useState<"add" | "edit">("add");
+  const [editing, setEditing]         = useState<DeptShiftRule>(BLANK_RULE);
+  const [staffModal, setStaffModal]   = useState<{ rule: DeptShiftRule; emps: any[] } | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -209,6 +210,8 @@ export default function HRSettings() {
       otStartTime: null,
       nightWatcherMissedPunchDeductHours: null,
       earlyExitGraceMinutes: 0,
+      saturdayShiftHours: null,
+      sundayStartTime: null,
       ...rule,
     });
     setModalMode("edit");
@@ -236,13 +239,6 @@ export default function HRSettings() {
     setEditing(s => ({ ...s, [k]: v }));
   }
 
-  function lunchLabel(r: DeptShiftRule) {
-    if (r.lunchMinHours == null) return "—";
-    if (r.lunchMaxHours != null && r.lunchMaxHours !== r.lunchMinHours)
-      return `${r.lunchMinHours}–${r.lunchMaxHours}`;
-    return `${r.lunchMinHours}`;
-  }
-
   function getMatchedEmployees(rule: DeptShiftRule): any[] {
     return employees.filter(emp => {
       const shiftName = shiftOptions.find(s => s.id === Number(emp.shiftId))?.name ?? null;
@@ -254,10 +250,16 @@ export default function HRSettings() {
     setStaffModal({ rule, emps: getMatchedEmployees(rule) });
   }
 
-  function getShiftTimes(shiftName: string): { start: string; end: string } {
+  function getShiftTimes(shiftName: string): string {
     const s = shiftOptions.find(o => o.name.toLowerCase() === shiftName.toLowerCase());
-    if (!s || !s.startTime1) return { start: "—", end: "—" };
-    return { start: s.startTime1, end: s.endTime1 };
+    if (!s || !s.startTime1) return "—";
+    const fmt = (t: string) => {
+      const [h, m] = t.split(":").map(Number);
+      const p = h >= 12 ? "pm" : "am";
+      const dh = h > 12 ? h - 12 : (h === 0 ? 12 : h);
+      return m > 0 ? `${dh}:${String(m).padStart(2,"0")}${p}` : `${dh}${p}`;
+    };
+    return `${fmt(s.startTime1)} – ${fmt(s.endTime1)}`;
   }
 
   const YesNo = ({ v, yes = "bg-emerald-100 text-emerald-700", no = "bg-slate-100 text-slate-500" }: { v: boolean; yes?: string; no?: string }) => (
@@ -273,9 +275,8 @@ export default function HRSettings() {
     <div className="space-y-5 max-w-full">
       <PageHeader
         title="HR Settings"
-        description="Per-department attendance, overtime, and shift rules — used across attendance, reports, and payroll"
+        description="Attendance, overtime, and late deduction rules per department — based on company shift policy"
       />
-
 
       {error && (
         <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm bg-red-50 text-red-700 border border-red-200">
@@ -290,8 +291,8 @@ export default function HRSettings() {
           <div>
             <p className="font-semibold">Setup required before adding rules:</p>
             <ul className="mt-1 list-disc list-inside text-xs space-y-0.5">
-              {noDepts  && <li>No departments found — please add departments first (Settings → Departments)</li>}
-              {noShifts && <li>No shifts found — please configure shifts first (Settings → Shifts)</li>}
+              {noDepts  && <li>No departments found — add departments first</li>}
+              {noShifts && <li>No shifts found — configure shifts first</li>}
             </ul>
           </div>
         </div>
@@ -302,7 +303,7 @@ export default function HRSettings() {
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-violet-600" />
             <span className="text-sm font-bold">Department Shift Rules</span>
-            <span className="text-xs text-muted-foreground ml-1">— attendance, OT &amp; payroll rules per department+shift</span>
+            <span className="text-xs text-muted-foreground ml-1">— attendance, OT &amp; late deduction rules per department</span>
           </div>
           <div className="flex items-center gap-3">
             {saving && <span className="text-xs text-muted-foreground flex items-center gap-1"><RefreshCw className="w-3 h-3 animate-spin" />Saving…</span>}
@@ -324,81 +325,62 @@ export default function HRSettings() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs min-w-[1300px]">
+            <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
-                  {COLS.map(h => (
+                  {["Department","Shift","Schedule","Late Grace","OT Rule","Flexible","OT Eligible","Sat. Hrs","Staff","Remarks",""].map(h => (
                     <th key={h} className="text-left px-3 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {rules.map((rule, i) => {
-                  const times = getShiftTimes(rule.shift);
-                  return (
+                {rules.map((rule, i) => (
                   <tr key={rule.id} className={`border-b border-border/50 hover:bg-muted/30 transition-colors ${i % 2 !== 0 ? "bg-muted/10" : ""}`}>
-                    <td className="px-3 py-2.5 font-medium text-foreground whitespace-nowrap">{rule.department}</td>
+                    <td className="px-3 py-2.5 font-semibold text-foreground whitespace-nowrap">{rule.department}</td>
                     <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{rule.shift}</td>
-                    <td className="px-3 py-2.5 text-center font-mono text-xs">
-                      {rule.flexible ? <span className="text-muted-foreground">—</span> : times.start}
+                    <td className="px-3 py-2.5 font-mono text-xs whitespace-nowrap">
+                      {rule.flexible
+                        ? <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">Flexible</span>
+                        : getShiftTimes(rule.shift)}
                     </td>
-                    <td className="px-3 py-2.5 text-center font-mono text-xs">
-                      {rule.flexible ? <span className="text-muted-foreground">—</span> : times.end}
+                    <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                      {rule.flexible || !rule.lateGraceMinutes
+                        ? <span className="text-muted-foreground">None</span>
+                        : <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-semibold">{rule.lateGraceMinutes} min</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-center">{rule.minHours || <span className="text-muted-foreground">—</span>}</td>
-                    <td className="px-3 py-2.5 text-center">{lunchLabel(rule)}</td>
-                    <td className="px-3 py-2.5 text-center"><YesNo v={rule.otEligible} /></td>
-                    <td className="px-3 py-2.5 text-center">
-                      {rule.otAfterHours != null ? `${rule.otAfterHours}h` : <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      {rule.lateGraceMinutes != null ? `${rule.lateGraceMinutes} min` : <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      {rule.earlyExitGraceMinutes != null ? `${rule.earlyExitGraceMinutes} min` : <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td className="px-3 py-2.5 text-center"><YesNo v={rule.flexible} yes="bg-blue-100 text-blue-700" /></td>
-                    <td className="px-3 py-2.5 text-center"><YesNo v={rule.multipleLogin} yes="bg-blue-100 text-blue-700" /></td>
-                    <td className="px-3 py-2.5 text-center">
-                      {rule.weeklyLeaveDays != null ? `${rule.weeklyLeaveDays}d` : <span className="text-muted-foreground">—</span>}
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                        !rule.otEligible ? "bg-slate-100 text-slate-500" : "bg-orange-50 text-orange-700"
+                      }`}>
+                        {otRuleLabel(rule, shiftOptions)}
+                      </span>
                     </td>
                     <td className="px-3 py-2.5 text-center">
-                      {rule.halfDayHours != null ? `${rule.halfDayHours}h` : <span className="text-muted-foreground">—</span>}
+                      <YesNo v={rule.flexible} yes="bg-blue-100 text-blue-700" />
                     </td>
                     <td className="px-3 py-2.5 text-center">
-                      {rule.minPresentHours != null ? `${rule.minPresentHours}h` : <span className="text-muted-foreground">—</span>}
+                      <YesNo v={rule.otEligible} />
                     </td>
                     <td className="px-3 py-2.5 text-center">
-                      {rule.holidayOtMultiplier != null ? `${rule.holidayOtMultiplier}×` : <span className="text-muted-foreground">—</span>}
+                      {(rule as any).saturdayShiftHours != null
+                        ? <span className="font-mono">{(rule as any).saturdayShiftHours}h</span>
+                        : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="px-3 py-2.5 text-center">
-                      {rule.offdayOtMultiplier != null ? `${rule.offdayOtMultiplier}×` : <span className="text-muted-foreground">—</span>}
+                      <button
+                        onClick={() => openStaffModal(rule)}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors hover:bg-primary/15 bg-primary/10 text-primary"
+                      >
+                        <Users className="w-2.5 h-2.5" />{getMatchedEmployees(rule).length}
+                      </button>
                     </td>
-                    <td className="px-3 py-2.5 text-center">
-                      {rule.otMultiplier != null ? `${rule.otMultiplier}×` : <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      {(() => {
-                        const count = getMatchedEmployees(rule).length;
-                        return (
-                          <button
-                            onClick={() => openStaffModal(rule)}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors hover:bg-primary/15
-                              bg-primary/10 text-primary"
-                          >
-                            <Users className="w-2.5 h-2.5" />{count}
-                          </button>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-3 py-2.5 max-w-[200px]">
+                    <td className="px-3 py-2.5 max-w-[240px]">
                       {rule.remarks ? (
                         <span className="text-[10px] leading-snug text-indigo-700 bg-indigo-50 px-2 py-1 rounded block truncate" title={rule.remarks}>
                           {rule.remarks}
                         </span>
                       ) : <span className="text-muted-foreground text-[10px]">—</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-muted-foreground max-w-[120px] truncate">{rule.notes || "—"}</td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1">
                         <button onClick={() => openEdit(rule)} className="p-1.5 rounded hover:bg-primary/10 text-primary transition-colors">
@@ -410,11 +392,10 @@ export default function HRSettings() {
                       </div>
                     </td>
                   </tr>
-                  );
-                })}
+                ))}
                 {rules.length === 0 && (
                   <tr>
-                    <td colSpan={23} className="px-3 py-10 text-center text-muted-foreground text-xs">
+                    <td colSpan={11} className="px-3 py-10 text-center text-muted-foreground text-xs">
                       No rules yet.{" "}
                       {noDepts || noShifts
                         ? "Add departments and shifts first, then click Add Rule."
@@ -428,28 +409,26 @@ export default function HRSettings() {
         )}
       </Card>
 
-      {/* ── Legend ── */}
-      <Card className="p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Settings className="w-3.5 h-3.5 text-muted-foreground" />
-          <span className="text-xs font-semibold text-muted-foreground">Column Legend</span>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-1 text-xs text-muted-foreground">
-          <span><b>Start / End Time</b> — shift working hours from the shift table</span>
-          <span><b>Min h</b> — minimum hours per day for full pay</span>
-          <span><b>Break h</b> — lunch/break hours deducted from total</span>
-          <span><b>OT?</b> — overtime eligible</span>
-          <span><b>OT After</b> — OT kicks in after these hours</span>
-          <span><b>Grace</b> — late grace period (minutes)</span>
-          <span><b>Flex</b> — flexible schedule (no fixed start/end)</span>
-          <span><b>Multi</b> — multiple check-in/out sessions allowed</span>
-          <span><b>Wk Leave</b> — weekly leave days entitlement</span>
-          <span><b>Half-day h</b> — hours threshold for half-day</span>
-          <span><b>Holiday OT</b> — holiday worked rate multiplier</span>
-          <span><b>Offday OT</b> — off-day worked rate multiplier</span>
-          <span><b>OT ×</b> — regular overtime rate multiplier</span>
-          <span><b>Staff</b> — active employees assigned to this rule (click to view)</span>
-          <span><b>Remarks</b> — policy text auto-assigned to matched employees in reports</span>
+      {/* ── Policy Notes ── */}
+      <Card className="p-4 bg-indigo-50/50 border-indigo-200/60">
+        <p className="text-xs font-semibold text-indigo-800 mb-2">Global Policy Rules (apply to all shifts)</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-indigo-700">
+          <div className="bg-white/70 rounded-lg px-3 py-2 border border-indigo-100">
+            <p className="font-semibold">OT Calculation</p>
+            <p className="text-[11px] mt-0.5 text-muted-foreground">After 30 min past shift end</p>
+          </div>
+          <div className="bg-white/70 rounded-lg px-3 py-2 border border-indigo-100">
+            <p className="font-semibold">Late Calculation</p>
+            <p className="text-[11px] mt-0.5 text-muted-foreground">After 15 min from shift start</p>
+          </div>
+          <div className="bg-white/70 rounded-lg px-3 py-2 border border-indigo-100">
+            <p className="font-semibold">Lunch Grace</p>
+            <p className="text-[11px] mt-0.5 text-muted-foreground">+10 min on allocated lunch</p>
+          </div>
+          <div className="bg-white/70 rounded-lg px-3 py-2 border border-indigo-100">
+            <p className="font-semibold">Checkout Grace</p>
+            <p className="text-[11px] mt-0.5 text-muted-foreground">5 min on last checkout</p>
+          </div>
         </div>
       </Card>
 
@@ -458,30 +437,28 @@ export default function HRSettings() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-card rounded-2xl shadow-2xl w-full max-w-2xl border border-border flex flex-col max-h-[92vh]">
 
-            {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center">
                   <Users className="w-4 h-4 text-violet-600" />
                 </div>
                 <div>
                   <p className="font-semibold text-sm leading-tight">{modalMode === "add" ? "Add" : "Edit"} Department Rule</p>
-                  <p className="text-[11px] text-muted-foreground leading-tight">Configure attendance & payroll rules for a department shift</p>
+                  <p className="text-[11px] text-muted-foreground leading-tight">Configure attendance & OT rules for a department</p>
                 </div>
               </div>
-              <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Body */}
             <div className="overflow-y-auto flex-1 px-6 py-5 space-y-6">
 
-              {/* Section: Identification */}
+              {/* Department & Shift */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-1 h-4 rounded-full bg-violet-500" />
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Identification</span>
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Department & Shift</span>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -490,7 +467,6 @@ export default function HRSettings() {
                       <option value="">— Select department —</option>
                       {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
                     </Select>
-                    {departments.length === 0 && <p className="text-[10px] text-amber-600 mt-1">No departments configured yet.</p>}
                   </div>
                   <div>
                     <Label className="text-xs font-medium mb-1.5 block">Shift <span className="text-red-500">*</span></Label>
@@ -498,136 +474,98 @@ export default function HRSettings() {
                       <option value="">— Select shift —</option>
                       {shiftOptions.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                     </Select>
-                    {shiftOptions.length === 0 && <p className="text-[10px] text-amber-600 mt-1">No shifts configured yet.</p>}
                   </div>
                 </div>
               </div>
 
-              {/* Section: Working Hours */}
+              {/* Late & Attendance */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
-                  <div className="w-1 h-4 rounded-full bg-blue-500" />
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Working Hours</span>
+                  <div className="w-1 h-4 rounded-full bg-amber-500" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Late & Attendance</span>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label className="text-xs font-medium mb-1.5 block">Min Hours / Day</Label>
-                    <Input type="number" step="0.5" min="0"
-                      value={editing.minHours}
-                      onChange={e => setE("minHours", parseFloat(e.target.value) || 0)} />
-                  </div>
-                  <div>
-                    <Label className="text-xs font-medium mb-1.5 block">Max Hours / Day</Label>
-                    <Input type="number" step="0.5" min="0"
-                      value={editing.maxHours ?? ""}
-                      onChange={e => setE("maxHours", e.target.value === "" ? null : parseFloat(e.target.value))}
-                      placeholder="Unlimited" />
+                    <Label className="text-xs font-medium mb-1.5 block">Flexible Hours</Label>
+                    <Select value={editing.flexible ? "yes" : "no"} onChange={e => setE("flexible", e.target.value === "yes")}>
+                      <option value="no">No — fixed start/end time</option>
+                      <option value="yes">Yes — flexible schedule</option>
+                    </Select>
+                    <p className="text-[10px] text-muted-foreground mt-1">Flexible employees are never marked late</p>
                   </div>
                   <div>
                     <Label className="text-xs font-medium mb-1.5 block">Late Arrival Grace (min)</Label>
                     <Input type="number" step="1" min="0"
                       value={editing.lateGraceMinutes ?? ""}
                       onChange={e => setE("lateGraceMinutes", e.target.value === "" ? null : parseInt(e.target.value))}
-                      placeholder="No grace" />
-                    <p className="text-[10px] text-muted-foreground mt-1">Allows late clock-in without penalty</p>
+                      placeholder="e.g. 15" />
+                    <p className="text-[10px] text-muted-foreground mt-1">0 for flexible / no grace</p>
                   </div>
                   <div>
-                    <Label className="text-xs font-medium mb-1.5 block">Early Exit Grace (min)</Label>
-                    <Input type="number" step="1" min="0"
-                      value={editing.earlyExitGraceMinutes ?? ""}
-                      onChange={e => setE("earlyExitGraceMinutes", e.target.value === "" ? null : parseInt(e.target.value))}
-                      placeholder="Same as late grace" />
-                    <p className="text-[10px] text-muted-foreground mt-1">Applied to min-present threshold</p>
+                    <Label className="text-xs font-medium mb-1.5 block">Saturday Shift Hours</Label>
+                    <Input type="number" step="0.5" min="0"
+                      value={(editing as any).saturdayShiftHours ?? ""}
+                      onChange={e => setE("saturdayShiftHours" as any, e.target.value === "" ? null : parseFloat(e.target.value))}
+                      placeholder="e.g. 5 (8am–1pm)" />
+                    <p className="text-[10px] text-muted-foreground mt-1">Hours for Saturday shift (e.g. 5 for 8am–1pm)</p>
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4 mt-4">
                   <div>
-                    <Label className="text-xs font-medium mb-1.5 block">Lunch Break Min (hrs)</Label>
+                    <Label className="text-xs font-medium mb-1.5 block">Sunday Start Time</Label>
+                    <Input type="time"
+                      value={(editing as any).sundayStartTime ?? ""}
+                      onChange={e => setE("sundayStartTime" as any, e.target.value === "" ? null : e.target.value)}
+                      placeholder="HH:MM" />
+                    <p className="text-[10px] text-muted-foreground mt-1">If Sunday start differs (e.g. Kitchen: 08:00 vs 07:00)</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">Lunch Break (hrs)</Label>
                     <Input type="number" step="0.5" min="0"
                       value={editing.lunchMinHours ?? ""}
                       onChange={e => setE("lunchMinHours", e.target.value === "" ? null : parseFloat(e.target.value))}
-                      placeholder="—" />
+                      placeholder="1" />
+                    <p className="text-[10px] text-muted-foreground mt-1">Deducted from total hours daily</p>
                   </div>
                   <div>
-                    <Label className="text-xs font-medium mb-1.5 block">Lunch Break Max (hrs)</Label>
+                    <Label className="text-xs font-medium mb-1.5 block">Half-Day Threshold (hrs)</Label>
                     <Input type="number" step="0.5" min="0"
-                      value={editing.lunchMaxHours ?? ""}
-                      onChange={e => setE("lunchMaxHours", e.target.value === "" ? null : parseFloat(e.target.value))}
-                      placeholder="Same as min" />
+                      value={editing.halfDayHours ?? ""}
+                      onChange={e => setE("halfDayHours", e.target.value === "" ? null : parseFloat(e.target.value))}
+                      placeholder="5" />
+                    <p className="text-[10px] text-muted-foreground mt-1">Below this → marked absent</p>
                   </div>
                 </div>
               </div>
 
-              {/* Section: Overtime */}
+              {/* Overtime */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-1 h-4 rounded-full bg-orange-500" />
                   <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Overtime</span>
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-xs font-medium mb-1.5 block">OT Eligible</Label>
                     <Select value={editing.otEligible ? "yes" : "no"} onChange={e => setE("otEligible", e.target.value === "yes")}>
                       <option value="yes">Yes</option>
-                      <option value="no">No</option>
+                      <option value="no">No — exempt from OT</option>
                     </Select>
                   </div>
                   <div>
-                    <Label className="text-xs font-medium mb-1.5 block">OT Starts After (hrs)</Label>
+                    <Label className="text-xs font-medium mb-1.5 block">OT Starts After (hrs total)</Label>
                     <Input type="number" step="0.5" min="0"
                       value={editing.otAfterHours ?? ""}
                       onChange={e => setE("otAfterHours", e.target.value === "" ? null : parseFloat(e.target.value))}
-                      placeholder="N/A" />
+                      placeholder="e.g. 9.5 → OT after 5:30pm" />
+                    <p className="text-[10px] text-muted-foreground mt-1">For Regular / Receptionist / Flexible shifts</p>
                   </div>
-                  <div>
-                    <Label className="text-xs font-medium mb-1.5 block">OT Rate Multiplier</Label>
-                    <Input type="number" step="0.1" min="0"
-                      value={editing.otMultiplier ?? ""}
-                      onChange={e => setE("otMultiplier", e.target.value === "" ? null : parseFloat(e.target.value))}
-                      placeholder="N/A" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4 mt-4">
-                  <div>
-                    <Label className="text-xs font-medium mb-1.5 block">Off-Day OT Multiplier</Label>
-                    <Input type="number" step="0.1" min="0"
-                      value={editing.offdayOtMultiplier ?? ""}
-                      onChange={e => setE("offdayOtMultiplier", e.target.value === "" ? null : parseFloat(e.target.value))}
-                      placeholder="Use global" />
-                  </div>
-                  <div>
-                    <Label className="text-xs font-medium mb-1.5 block">Holiday OT Multiplier</Label>
-                    <Input type="number" step="0.1" min="0"
-                      value={editing.holidayOtMultiplier ?? ""}
-                      onChange={e => setE("holidayOtMultiplier", e.target.value === "" ? null : parseFloat(e.target.value))}
-                      placeholder="Use global" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Section: Time-Based OT (Kitchen / Night Watcher policy) */}
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-1 h-4 rounded-full bg-red-500" />
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Time-Based OT Override</span>
-                </div>
-                <p className="text-[10px] text-muted-foreground mb-3">
-                  Use this for Kitchen ("OT after 8:30 pm") and Night Watcher ("OT from 5:00 am").
-                  When set, this <b>overrides</b> the hours-based "OT Starts After" above.
-                  Leave blank for Regular / Receptionist / Flexible shifts.
-                </p>
-                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-xs font-medium mb-1.5 block">OT Start Clock Time</Label>
                     <Input
                       type="time"
                       value={editing.otStartTime ?? ""}
                       onChange={e => setE("otStartTime", e.target.value === "" ? null : e.target.value)}
-                      placeholder="HH:MM"
                     />
-                    <p className="text-[10px] text-muted-foreground mt-1">
-                      Kitchen: 20:30 &nbsp;·&nbsp; Night Watcher: 05:00
-                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-1">Kitchen: 20:30 · Night Watcher: 05:00. Overrides hours-based OT.</p>
                   </div>
                   <div>
                     <Label className="text-xs font-medium mb-1.5 block">Missed-Punch Deduction (hrs)</Label>
@@ -637,76 +575,30 @@ export default function HRSettings() {
                       onChange={e => setE("nightWatcherMissedPunchDeductHours", e.target.value === "" ? null : parseFloat(e.target.value))}
                       placeholder="e.g. 1 or 2"
                     />
-                    <p className="text-[10px] text-muted-foreground mt-1">
-                      Night Watcher only — hrs deducted from OT per missed hourly punch
-                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-1">Night Watcher only — hrs deducted per missed hourly punch</p>
                   </div>
-                </div>
-              </div>
-
-              {/* Section: Attendance Rules */}
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-1 h-4 rounded-full bg-emerald-500" />
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Attendance Rules</span>
-                </div>
-                <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <Label className="text-xs font-medium mb-1.5 block">Weekly Leave Days</Label>
-                    <Input type="number" step="0.5" min="0"
-                      value={editing.weeklyLeaveDays ?? ""}
-                      onChange={e => setE("weeklyLeaveDays", e.target.value === "" ? null : parseFloat(e.target.value))}
+                    <Label className="text-xs font-medium mb-1.5 block">OT Rate Multiplier</Label>
+                    <Input type="number" step="0.1" min="0"
+                      value={editing.otMultiplier ?? ""}
+                      onChange={e => setE("otMultiplier", e.target.value === "" ? null : parseFloat(e.target.value))}
                       placeholder="1.5" />
-                    <p className="text-[10px] text-muted-foreground mt-1">0 for night shift</p>
                   </div>
                   <div>
-                    <Label className="text-xs font-medium mb-1.5 block">Half-Day Threshold (hrs)</Label>
-                    <Input type="number" step="0.5" min="0"
-                      value={editing.halfDayHours ?? ""}
-                      onChange={e => setE("halfDayHours", e.target.value === "" ? null : parseFloat(e.target.value))}
-                      placeholder="5" />
-                    <p className="text-[10px] text-muted-foreground mt-1">Below this → absent</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs font-medium mb-1.5 block">Min Present Hours</Label>
-                    <Input type="number" step="0.5" min="0"
-                      value={editing.minPresentHours ?? ""}
-                      onChange={e => setE("minPresentHours", e.target.value === "" ? null : parseFloat(e.target.value))}
-                      placeholder="8" />
-                    <p className="text-[10px] text-muted-foreground mt-1">Below this → half-day</p>
+                    <Label className="text-xs font-medium mb-1.5 block">Holiday / Off-Day OT Rate</Label>
+                    <Input type="number" step="0.1" min="0"
+                      value={editing.holidayOtMultiplier ?? ""}
+                      onChange={e => {
+                        const v = e.target.value === "" ? null : parseFloat(e.target.value);
+                        setE("holidayOtMultiplier", v);
+                        setE("offdayOtMultiplier", v);
+                      }}
+                      placeholder="1.5" />
                   </div>
                 </div>
               </div>
 
-              {/* Section: Options */}
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-1 h-4 rounded-full bg-slate-400" />
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Options</span>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-xs font-medium mb-1.5 block">Flexible Hours</Label>
-                    <Select value={editing.flexible ? "yes" : "no"} onChange={e => setE("flexible", e.target.value === "yes")}>
-                      <option value="no">No — fixed start/end</option>
-                      <option value="yes">Yes — flexible schedule</option>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-xs font-medium mb-1.5 block">Multiple Check-ins Allowed</Label>
-                    <Select value={editing.multipleLogin ? "yes" : "no"} onChange={e => setE("multipleLogin", e.target.value === "yes")}>
-                      <option value="no">No</option>
-                      <option value="yes">Yes</option>
-                    </Select>
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <Label className="text-xs font-medium mb-1.5 block">Notes</Label>
-                  <Input value={editing.notes} onChange={e => setE("notes", e.target.value)} placeholder="Any additional notes about this rule…" />
-                </div>
-              </div>
-
-              {/* Section: Remarks Policy */}
+              {/* Remarks */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-1 h-4 rounded-full bg-indigo-500" />
@@ -725,21 +617,19 @@ export default function HRSettings() {
                     </button>
                   </div>
                   <textarea
-                    className="w-full min-h-[72px] px-3 py-2 text-xs rounded-lg border border-border bg-background resize-y focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"
+                    className="w-full min-h-[64px] px-3 py-2 text-xs rounded-lg border border-border bg-background resize-y focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"
                     value={editing.remarks}
                     onChange={e => setE("remarks", e.target.value)}
-                    placeholder="e.g. Late deduction after 8.15 am / OT after 5.30pm — leave blank for no remarks"
+                    placeholder="e.g. Late deduction after 8.15am / OT after 5.30pm"
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    This text is shown in reports and auto-assigned to employees matched to this rule.
-                    Click <b>Auto-generate</b> to fill from the rule settings above.
+                    Shown in attendance reports. Click <b>Auto-generate</b> to fill from settings above.
                   </p>
                 </div>
               </div>
 
             </div>
 
-            {/* Footer */}
             <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border shrink-0 bg-muted/30 rounded-b-2xl">
               <Button variant="outline" className="text-xs h-9 px-4" onClick={() => setShowModal(false)}>Cancel</Button>
               <Button
