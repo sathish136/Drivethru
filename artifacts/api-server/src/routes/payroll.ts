@@ -465,24 +465,33 @@ router.post("/generate", async (req, res) => {
              *   Kitchen:      "add 3 hr OT after 8:30 pm"  → otStartTime = "20:30"
              *   Night Watcher:"actual off time 8am, add 3hrs OT" → otStartTime = "05:00"
              *
-             * OT = max(0, lastCheckout − otStartTime).
-             * For night shifts that cross midnight the checkout may be a small
-             * HH:MM value (e.g. "07:30") even though it is on the next calendar
-             * day; calcTimeBasedOtHours handles the 24-hour offset automatically.
+             * Saturday Kitchen exception: they work 8am–1pm (5 hrs).  OT on Saturday
+             * is hours-based (any extra beyond the 5-hr shift), capped at 1 h.
              * ─────────────────────────────────────────────────────────────────── */
-            const lastCheckout = rec.outTime2 ?? rec.outTime1;
-            let ot = calcTimeBasedOtHours(lastCheckout, rule.otStartTime, isNightShift);
+            const recDayOfWeek = new Date(rec.date + "T00:00:00Z").getUTCDay();
+            const recIsSat = recDayOfWeek === 6;
+            let ot = 0;
 
-            /* Night Watcher hourly-punch deduction
-             * Policy: "if they forgot punch a hr then deduct 1 or 2 hrs from their 3hrs OT"
-             * Each missing hourly punch reduces OT by nightWatcherMissedPunchDeductHours. */
-            if (ot > 0 && rule.nightWatcherMissedPunchDeductHours != null) {
-              const punchDeduct = calcNightWatcherPunchDeduction(
-                rec,
-                scheduledShiftHours,
-                rule.nightWatcherMissedPunchDeductHours,
-              );
-              ot = Math.max(0, ot - punchDeduct);
+            if (recIsSat && rule.saturdayShiftHours != null) {
+              // Saturday short-shift OT: hours beyond (saturdayShiftHours + 0.5h grace), cap 1h
+              const satOtAfter = rule.saturdayShiftHours + 0.5;
+              ot = Math.min(1, Math.max(0, rawHrs - satOtAfter));
+            } else {
+              const lastCheckout = rec.outTime2 ?? rec.outTime1;
+              ot = calcTimeBasedOtHours(lastCheckout, rule.otStartTime, isNightShift);
+              // Night Watcher: cap at 3h, apply missed-punch deduction
+              if (rule.nightWatcherMissedPunchDeductHours != null) {
+                if (ot > 0) {
+                  const punchDeduct = calcNightWatcherPunchDeduction(
+                    rec, scheduledShiftHours, rule.nightWatcherMissedPunchDeductHours,
+                  );
+                  ot = Math.max(0, ot - punchDeduct);
+                }
+                ot = Math.min(3, ot);
+              } else {
+                // Kitchen weekdays: cap at 3h
+                ot = Math.min(3, ot);
+              }
             }
 
             if (ot > 0) {

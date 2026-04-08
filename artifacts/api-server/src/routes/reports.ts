@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { attendanceRecords, employees, branches, shifts } from "@workspace/db/schema";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 import { getDaysInMonth, today } from "../lib/helpers.js";
-import { loadDeptRules, findRule, timeToMins, calcLunchLateMinutes, lateCutoffMins, calcOtHours, DeptShiftRule } from "../lib/hr-rules.js";
+import { loadDeptRules, findRule, timeToMins, calcLunchLateMinutes, lateCutoffMins, calcOtHours, calcTimeBasedOtHours, calcNightWatcherPunchDeduction, isNightShiftRecord, DeptShiftRule } from "../lib/hr-rules.js";
 
 const router = Router();
 
@@ -90,6 +90,73 @@ function mergeNightShiftRecords<T extends {
   }
 
   return result;
+}
+
+/* ─── OT calculation helper ─────────────────────────────────────────────── */
+
+/**
+ * Compute overtime hours for a single attendance record using the correct
+ * method based on the rule's configuration:
+ *
+ *  1. Time-based OT (rule.otStartTime set): Kitchen shift OT after 8:30 pm,
+ *     Night Watcher OT after 5 am.  Saturday Kitchen capped at 1 h.
+ *  2. Night-shift hours-based (fallback): total − scheduled, capped at 3 h.
+ *  3. Standard hours-based: calcOtHours.
+ */
+function computeRecordOt(
+  rec: {
+    totalHours?: number | null;
+    inTime1?: string | null;
+    outTime1?: string | null;
+    inTime2?: string | null;
+    outTime2?: string | null;
+  },
+  empShift: { startTime1?: string | null; name?: string } | undefined,
+  rule: DeptShiftRule,
+  date: string,
+  earlyMinutes: number,
+): number {
+  if (!rule.otEligible) return 0;
+  if (rec.totalHours == null) return 0;
+
+  const dayOfWeek = new Date(date + "T00:00:00Z").getUTCDay();
+  const isSat = dayOfWeek === 6;
+  const isNight = isNightShiftRecord(empShift?.startTime1);
+  const lastCheckout = rec.outTime2 ?? rec.outTime1;
+
+  // ── Time-based OT (Kitchen after 8:30 pm, Night Watcher after 5 am) ───
+  if (rule.otStartTime) {
+    if (isSat && rule.saturdayShiftHours != null) {
+      // Saturday Kitchen: short shift (8 am–1 pm). OT capped at 1 h.
+      // Use hours-based OT relative to the Saturday shift length.
+      const satOtAfter = rule.saturdayShiftHours + 0.5;  // 5h + 30min grace = 5.5h
+      const satRawOt = Math.max(0, rec.totalHours - satOtAfter);
+      return Math.round(Math.min(1, satRawOt) * 100) / 100;
+    }
+
+    let ot = calcTimeBasedOtHours(lastCheckout, rule.otStartTime, isNight);
+
+    if (rule.nightWatcherMissedPunchDeductHours != null) {
+      // Night Watcher: deduct for missed hourly punches, cap at 3 h
+      const shiftHrs = rule.minHours ?? 9;
+      const deduction = calcNightWatcherPunchDeduction(rec, shiftHrs, rule.nightWatcherMissedPunchDeductHours);
+      ot = Math.max(0, ot - deduction);
+      ot = Math.min(3, ot);
+    } else {
+      // Kitchen weekdays: cap at 3 h
+      ot = Math.min(3, ot);
+    }
+    return Math.round(ot * 100) / 100;
+  }
+
+  // ── Night shift without otStartTime: hours-based, capped at 3 h ────────
+  if (isNight) {
+    const scheduled = rule.minHours ?? 9;
+    return Math.min(3, Math.round(Math.max(0, rec.totalHours - scheduled) * 100) / 100);
+  }
+
+  // ── Standard hours-based OT ─────────────────────────────────────────────
+  return calcOtHours(rec.totalHours, rule, earlyMinutes);
 }
 
 /* ─── Status & OT helpers ───────────────────────────────────────────────── */
@@ -253,17 +320,9 @@ router.get("/attendance", async (req, res) => {
         const rawEarly = r.rec.inTime1 ? shiftStartMins - timeToMins(r.rec.inTime1) : 0;
         const earlyMinutes = rawEarly > 0 && rawEarly < 240 ? rawEarly : 0;
 
-        let recalcOt = 0;
-        if (r.rec.totalHours != null && r.effectiveStatus !== "absent" && r.effectiveStatus !== "half_day") {
-          if (isNightShift(empShift)) {
-            // Night-shift OT: hours beyond scheduled minHours, capped at 3 h per policy
-            const scheduled = rule.minHours ?? 9;
-            const otHours = Math.max(0, r.rec.totalHours - scheduled);
-            recalcOt = Math.min(3, Math.round(otHours * 100) / 100);
-          } else {
-            recalcOt = calcOtHours(r.rec.totalHours, rule, earlyMinutes);
-          }
-        }
+        const recalcOt = (r.rec.totalHours != null && r.effectiveStatus !== "absent" && r.effectiveStatus !== "half_day")
+          ? computeRecordOt(r.rec, empShift, rule, r._date, earlyMinutes)
+          : 0;
 
         return {
           ...r.rec,
@@ -352,13 +411,8 @@ router.get("/monthly", async (req, res) => {
         totalWorkHours += r.totalHours || 0;
 
         if (r.totalHours != null && st !== "absent" && st !== "half_day") {
-          if (isNightShift(empShift)) {
-            const scheduled = rule.minHours ?? 9;
-            overtimeHours += Math.min(3, Math.max(0, r.totalHours - scheduled));
-          } else {
-            const earlyMins = r.inTime1 ? Math.max(0, shiftStartMins - timeToMins(r.inTime1)) : 0;
-            overtimeHours += calcOtHours(r.totalHours, rule, earlyMins);
-          }
+          const earlyMins = r.inTime1 ? Math.max(0, shiftStartMins - timeToMins(r.inTime1)) : 0;
+          overtimeHours += computeRecordOt(r, empShift, rule, r.date, earlyMins);
         }
 
         const ll = calcLunchLateMinutes(r.outTime1, r.inTime2, rule);
