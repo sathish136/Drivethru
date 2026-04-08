@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { Calendar as CalendarIcon, Clock, X, CalendarDays, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Calendar as CalendarIcon, Clock, X, AlertTriangle, CheckCircle2, ClipboardEdit } from "lucide-react";
 import { PageHeader, Card, Select } from "@/components/ui";
 import { useMonthlySheet } from "@/hooks/use-attendance";
 import { cn } from "@/lib/utils";
@@ -45,7 +45,232 @@ interface SelectedCell {
   currentLeaveType: string | null;
 }
 
-function LeaveEntryModal({
+function ManualAttendanceModal({
+  cell,
+  onClose,
+  onSuccess,
+}: {
+  cell: SelectedCell;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [status, setStatus] = useState<"present" | "late" | "half_day" | "absent">("present");
+  const [inTime1, setInTime1] = useState("");
+  const [outTime1, setOutTime1] = useState("");
+  const [inTime2, setInTime2] = useState("");
+  const [outTime2, setOutTime2] = useState("");
+  const [remarks, setRemarks] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const dateObj = new Date(cell.date + "T00:00:00");
+  const formattedDate = `${dateObj.getDate()} ${MONTHS[dateObj.getMonth()]} ${dateObj.getFullYear()} (${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dateObj.getDay()]})`;
+
+  const STATUS_OPTIONS = [
+    { value: "present", label: "Present", desc: "Full day, on time", color: "green" },
+    { value: "late", label: "Late", desc: "Arrived after grace period", color: "amber" },
+    { value: "half_day", label: "Half Day", desc: "Partial attendance", color: "yellow" },
+    { value: "absent", label: "Absent", desc: "No attendance recorded", color: "red" },
+  ] as const;
+
+  async function handleSubmit() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const body: any = { employeeId: cell.employeeId, date: cell.date, status, remarks: remarks || undefined };
+      if (inTime1) body.inTime1 = inTime1;
+      if (outTime1) body.outTime1 = outTime1;
+      if (inTime2) body.inTime2 = inTime2;
+      if (outTime2) body.outTime2 = outTime2;
+
+      const r = await fetch(apiUrl("/attendance/manual-entry"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setError(d.message || "Failed to save manual attendance");
+      } else {
+        setSuccess(true);
+        setTimeout(() => { onSuccess(); onClose(); }, 1200);
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    }
+    setSubmitting(false);
+  }
+
+  const colorMap = { green: { border: "border-green-500", bg: "bg-green-50", text: "text-green-700", dot: "border-green-500 bg-green-500" }, amber: { border: "border-amber-500", bg: "bg-amber-50", text: "text-amber-700", dot: "border-amber-500 bg-amber-500" }, yellow: { border: "border-yellow-500", bg: "bg-yellow-50", text: "text-yellow-700", dot: "border-yellow-500 bg-yellow-500" }, red: { border: "border-red-500", bg: "bg-red-50", text: "text-red-700", dot: "border-red-500 bg-red-500" } };
+
+  return (
+    <div className="px-6 py-5 space-y-4">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
+        <CalendarIcon className="w-4 h-4 text-blue-500 shrink-0" />
+        <span className="font-medium text-foreground">{formattedDate}</span>
+        <span className="ml-auto text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-semibold">Manual Override</span>
+      </div>
+
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Attendance Status</p>
+        <div className="grid grid-cols-2 gap-2">
+          {STATUS_OPTIONS.map(opt => {
+            const c = colorMap[opt.color];
+            const selected = status === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => setStatus(opt.value)}
+                className={cn(
+                  "flex items-center gap-2.5 px-3 py-2.5 rounded-xl border-2 text-sm font-medium transition-all text-left",
+                  selected ? `${c.border} ${c.bg} ${c.text}` : "border-border hover:border-muted-foreground/40 text-foreground"
+                )}
+              >
+                <div className={cn("w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center shrink-0",
+                  selected ? c.dot : "border-muted-foreground/50")}>
+                  {selected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                </div>
+                <div>
+                  <div className="font-semibold text-xs leading-tight">{opt.label}</div>
+                  <div className="text-[10px] text-muted-foreground leading-tight">{opt.desc}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {status !== "absent" && (
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Punch Times <span className="normal-case font-normal">(optional)</span></p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-muted-foreground font-medium block mb-1">In Time 1</label>
+              <input type="time" value={inTime1} onChange={e => setInTime1(e.target.value)}
+                className="w-full text-xs border border-border rounded-lg px-2 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground font-medium block mb-1">Out Time 1</label>
+              <input type="time" value={outTime1} onChange={e => setOutTime1(e.target.value)}
+                className="w-full text-xs border border-border rounded-lg px-2 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground font-medium block mb-1">In Time 2 <span className="text-muted-foreground/60">(2nd session)</span></label>
+              <input type="time" value={inTime2} onChange={e => setInTime2(e.target.value)}
+                className="w-full text-xs border border-border rounded-lg px-2 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground font-medium block mb-1">Out Time 2 <span className="text-muted-foreground/60">(2nd session)</span></label>
+              <input type="time" value={outTime2} onChange={e => setOutTime2(e.target.value)}
+                className="w-full text-xs border border-border rounded-lg px-2 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <label className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide block mb-1">Remarks <span className="normal-case font-normal">(optional)</span></label>
+        <textarea value={remarks} onChange={e => setRemarks(e.target.value)} rows={2} placeholder="e.g. Biometric not captured, site visit..."
+          className="w-full text-xs border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none" />
+      </div>
+
+      {error && (
+        <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-red-50 border border-red-200">
+          <X className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+          <p className="text-xs text-red-700">{error}</p>
+        </div>
+      )}
+      {success && (
+        <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-green-50 border border-green-200">
+          <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+          <p className="text-xs text-green-700 font-medium">Attendance saved successfully!</p>
+        </div>
+      )}
+
+      <div className="flex items-center gap-3 pt-1">
+        <button onClick={onClose} className="flex-1 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors">
+          Cancel
+        </button>
+        <button
+          onClick={handleSubmit}
+          disabled={submitting || success}
+          className={cn(
+            "flex-1 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all",
+            !submitting && !success ? "bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98]" : "bg-muted-foreground/30 cursor-not-allowed"
+          )}
+        >
+          {submitting ? "Saving…" : success ? "Saved!" : "Save Attendance"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CellActionModal({
+  cell,
+  year,
+  onClose,
+  onSuccess,
+}: {
+  cell: SelectedCell;
+  year: number;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [tab, setTab] = useState<"manual" | "leave">("manual");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-gradient-to-r from-indigo-50 to-blue-50">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
+              <ClipboardEdit className="w-4 h-4 text-indigo-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm text-foreground">Attendance Entry</p>
+              <p className="text-xs text-muted-foreground">{cell.employeeName}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+            <X className="w-4 h-4 text-muted-foreground" />
+          </button>
+        </div>
+
+        <div className="flex border-b border-border">
+          <button
+            onClick={() => setTab("manual")}
+            className={cn(
+              "flex-1 py-2.5 text-xs font-semibold transition-colors border-b-2",
+              tab === "manual" ? "border-indigo-500 text-indigo-600 bg-indigo-50/50" : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Manual Attendance
+          </button>
+          <button
+            onClick={() => setTab("leave")}
+            className={cn(
+              "flex-1 py-2.5 text-xs font-semibold transition-colors border-b-2",
+              tab === "leave" ? "border-blue-500 text-blue-600 bg-blue-50/50" : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Mark Leave
+          </button>
+        </div>
+
+        {tab === "manual" ? (
+          <ManualAttendanceModal cell={cell} onClose={onClose} onSuccess={onSuccess} />
+        ) : (
+          <LeaveEntryInner cell={cell} year={year} onClose={onClose} onSuccess={onSuccess} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LeaveEntryInner({
   cell,
   year,
   onClose,
@@ -102,25 +327,8 @@ function LeaveEntryModal({
   const casualOk = (balance?.casualRemaining ?? 0) >= 1;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-gradient-to-r from-blue-50 to-indigo-50">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
-              <CalendarDays className="w-4 h-4 text-blue-600" />
-            </div>
-            <div>
-              <p className="font-semibold text-sm text-foreground">Mark Leave Entry</p>
-              <p className="text-xs text-muted-foreground">{cell.employeeName}</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
-            <X className="w-4 h-4 text-muted-foreground" />
-          </button>
-        </div>
-
-        <div className="px-6 py-5 space-y-5">
+    <>
+    <div className="px-6 py-5 space-y-5">
           {/* Date */}
           <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
             <CalendarIcon className="w-4 h-4 text-blue-500 shrink-0" />
@@ -260,7 +468,6 @@ function LeaveEntryModal({
           )}
         </div>
 
-        {/* Footer */}
         <div className="px-6 py-4 border-t border-border flex items-center gap-3 bg-muted/20">
           <button onClick={onClose} className="flex-1 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors">
             Cancel
@@ -278,8 +485,7 @@ function LeaveEntryModal({
             {submitting ? "Saving…" : success ? "Saved!" : "Confirm Leave"}
           </button>
         </div>
-      </div>
-    </div>
+    </>
   );
 }
 
@@ -414,7 +620,7 @@ export default function MonthlySheet() {
   return (
     <div className="space-y-4">
       {selectedCell && (
-        <LeaveEntryModal
+        <CellActionModal
           cell={selectedCell}
           year={year}
           onClose={() => setSelectedCell(null)}
@@ -424,7 +630,7 @@ export default function MonthlySheet() {
 
       <PageHeader
         title="Monthly Attendance Sheet"
-        description="Click any day cell to mark leave. Grid shows in/out times, work hours, and OT per employee."
+        description="Click any day cell to manually set attendance or mark leave. Grid shows in/out times, work hours, and OT per employee."
         action={
           <div className="flex items-center gap-2">
             <ExcelIconButton onClick={handleExportExcel} />
@@ -448,8 +654,8 @@ export default function MonthlySheet() {
 
         <div className="ml-auto flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 text-blue-600 px-2 py-0.5 rounded font-medium">
-              Click a cell to mark leave
+            <span className="text-xs text-muted-foreground bg-indigo-50 border border-indigo-200 text-indigo-600 px-2 py-0.5 rounded font-medium">
+              Click a cell to set attendance or leave
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -526,11 +732,11 @@ export default function MonthlySheet() {
                           {showTimes ? (
                             <div
                               onClick={() => clickable && handleCellClick(row, day)}
-                              title={clickable ? "Click to mark leave" : undefined}
+                              title={clickable ? "Click to set attendance or leave" : undefined}
                               className={cn(
                                 "rounded px-0.5 py-0.5 flex flex-col items-center gap-0",
                                 cfg.bg,
-                                clickable && "cursor-pointer hover:ring-2 hover:ring-blue-400 hover:ring-offset-1 transition-all"
+                                clickable && "cursor-pointer hover:ring-2 hover:ring-indigo-400 hover:ring-offset-1 transition-all"
                               )}>
                               <span className={cn("text-[10px] font-bold leading-tight", cfg.text)}>{cfg.label}</span>
                               {entry?.leaveType && effectiveSt === "leave" && (
@@ -545,11 +751,11 @@ export default function MonthlySheet() {
                           ) : (
                             <div
                               onClick={() => clickable && handleCellClick(row, day)}
-                              title={clickable ? "Click to mark leave" : undefined}
+                              title={clickable ? "Click to set attendance or leave" : undefined}
                               className={cn(
                                 "w-7 h-7 mx-auto flex items-center justify-center rounded text-[10px] font-bold",
                                 cfg.bg, cfg.text,
-                                clickable && "cursor-pointer hover:ring-2 hover:ring-blue-400 hover:ring-offset-1 transition-all"
+                                clickable && "cursor-pointer hover:ring-2 hover:ring-indigo-400 hover:ring-offset-1 transition-all"
                               )}>
                               {cfg.label}
                             </div>

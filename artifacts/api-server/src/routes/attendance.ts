@@ -232,6 +232,68 @@ router.post("/punch", async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
 });
 
+/* ── Manual Attendance Entry (HR override for missed biometric) ── */
+router.post("/manual-entry", async (req, res) => {
+  try {
+    const { employeeId, date, status, inTime1, outTime1, inTime2, outTime2, remarks } = req.body as {
+      employeeId: number;
+      date: string;
+      status: "present" | "late" | "half_day" | "absent";
+      inTime1?: string;
+      outTime1?: string;
+      inTime2?: string;
+      outTime2?: string;
+      remarks?: string;
+    };
+
+    if (!employeeId || !date || !status) {
+      return res.status(400).json({ message: "employeeId, date, and status are required" });
+    }
+
+    const [emp] = await db.select().from(employees).where(eq(employees.id, employeeId));
+    if (!emp) return res.status(404).json({ message: "Employee not found" });
+
+    const workHours1 = calcWorkHours(inTime1 ?? null, outTime1 ?? null);
+    const workHours2 = calcWorkHours(inTime2 ?? null, outTime2 ?? null);
+    const totalHours = workHours1 + workHours2 || null;
+
+    const [existing] = await db.select().from(attendanceRecords)
+      .where(and(eq(attendanceRecords.employeeId, employeeId), eq(attendanceRecords.date, date)));
+
+    const payload: any = {
+      status,
+      inTime1: inTime1 || null,
+      outTime1: outTime1 || null,
+      workHours1: workHours1 || null,
+      inTime2: inTime2 || null,
+      outTime2: outTime2 || null,
+      workHours2: workHours2 || null,
+      totalHours,
+      leaveType: null,
+      source: "manual",
+      approvalStatus: "approved",
+      remarks: remarks || null,
+      updatedAt: new Date(),
+    };
+
+    if (existing) {
+      await db.update(attendanceRecords).set(payload).where(eq(attendanceRecords.id, existing.id));
+    } else {
+      await db.insert(attendanceRecords).values({
+        employeeId,
+        branchId: emp.branchId!,
+        date,
+        ...payload,
+      });
+    }
+
+    return res.json({ success: true, status });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Failed to save manual attendance" });
+  }
+});
+
 /* ── Mark Leave (manual entry with leave balance deduction) ── */
 router.post("/mark-leave", async (req, res) => {
   try {
