@@ -30,7 +30,7 @@ const EMP_TYPE_STYLE: Record<string, string> = {
   casual:    "bg-gray-100 text-gray-600",
 };
 
-const TABS = ["Employee List", "Payroll"] as const;
+const TABS = ["Employee List", "Departments", "Designations", "Payroll"] as const;
 type Tab = typeof TABS[number];
 
 const DEPT_LIST = ["Operations","Finance & Accounts","Human Resources","Information Technology","Postal Services","Customer Service","Administration","Logistics & Delivery"];
@@ -1091,6 +1091,182 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
   );
 }
 
+// ── Departments Tab ────────────────────────────────────────────────────────────
+function DepartmentsTab() {
+  const qc = useQueryClient();
+  const { data: depts, isLoading } = useGet(["departments"], "/departments");
+  const createD = useMut("POST", "/departments", ["departments"]);
+  const updateD = useMutation({
+    mutationFn: ({ id, data }: any) => fetch(apiUrl(`/departments/${id}`), {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
+    }).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["departments"] }),
+  });
+  const deleteD = useMutation({
+    mutationFn: (id: number) => fetch(apiUrl(`/departments/${id}`), { method: "DELETE" }).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["departments"] }),
+  });
+  const [form, setForm] = useState({ name:"", code:"", description:"" });
+  const [editId, setEditId] = useState<number|null>(null);
+  const [showForm, setShowForm] = useState(false);
+
+  function openEdit(d: any) { setForm({ name: d.name, code: d.code, description: d.description || "" }); setEditId(d.id); setShowForm(true); }
+  function openNew() { setForm({ name:"", code:"", description:"" }); setEditId(null); setShowForm(true); }
+  function handleSave() {
+    if (editId) updateD.mutate({ id: editId, data: form }, { onSuccess: () => setShowForm(false) });
+    else createD.mutate(form, { onSuccess: () => setShowForm(false) });
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <Button onClick={openNew} className="text-xs flex items-center gap-1.5 h-8 px-3"><Plus className="w-3.5 h-3.5" />Add Department</Button>
+      </div>
+      {showForm && (
+        <Card className="p-4 border-primary/20 bg-primary/5">
+          <p className="text-xs font-semibold mb-3">{editId ? "Edit Department" : "New Department"}</p>
+          <div className="grid grid-cols-3 gap-3">
+            <div><Label className="text-xs">Department Name</Label><Input placeholder="e.g. Operations" value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} /></div>
+            <div><Label className="text-xs">Code</Label><Input placeholder="OPS" value={form.code} onChange={e => setForm(f => ({...f, code: e.target.value.toUpperCase()}))} /></div>
+            <div><Label className="text-xs">Description</Label><Input placeholder="Short description" value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} /></div>
+          </div>
+          <div className="flex gap-2 justify-end mt-3">
+            <Button variant="outline" className="text-xs h-8" onClick={() => setShowForm(false)}>Cancel</Button>
+            <Button className="text-xs h-8" onClick={handleSave}>Save</Button>
+          </div>
+        </Card>
+      )}
+      <Card className="overflow-hidden">
+        {isLoading ? <p className="text-center py-8 text-sm text-muted-foreground">Loading...</p> : (
+          <table className="w-full text-xs">
+            <thead className="bg-muted/50">
+              <tr>{["Code","Department Name","Description","Status","Actions"].map(h => <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground">{h}</th>)}</tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {(Array.isArray(depts) ? depts : []).map((d: any) => (
+                <tr key={d.id} className="hover:bg-muted/30">
+                  <td className="px-3 py-2.5 font-mono font-medium text-primary">{d.code}</td>
+                  <td className="px-3 py-2.5 font-medium">{d.name}</td>
+                  <td className="px-3 py-2.5 text-muted-foreground">{d.description || "—"}</td>
+                  <td className="px-3 py-2.5">
+                    <span className={cn("px-2 py-0.5 rounded text-xs", d.isActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500")}>
+                      {d.isActive ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex gap-1">
+                      <button onClick={() => openEdit(d)} className="p-1.5 hover:bg-muted rounded"><Edit2 className="w-3 h-3" /></button>
+                      <button onClick={() => { if(confirm(`Delete "${d.name}"?`)) deleteD.mutate(d.id); }} className="p-1.5 hover:bg-red-100 text-red-500 rounded"><Trash2 className="w-3 h-3" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!(Array.isArray(depts) ? depts : []).length && <tr><td colSpan={5} className="text-center py-8 text-muted-foreground">No departments found.</td></tr>}
+            </tbody>
+          </table>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// ── Designations Tab ───────────────────────────────────────────────────────────
+function DesignationsTab() {
+  const qc = useQueryClient();
+  const { data: desigs, isLoading } = useGet(["designations"], "/designations");
+  const { data: depts } = useGet(["departments"], "/departments");
+  const createDes = useMut("POST", "/designations", ["designations"]);
+  const updateDes = useMutation({
+    mutationFn: ({ id, data }: any) => fetch(apiUrl(`/designations/${id}`), {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
+    }).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["designations"] }),
+  });
+  const deleteDes = useMutation({
+    mutationFn: (id: number) => fetch(apiUrl(`/designations/${id}`), { method: "DELETE" }).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["designations"] }),
+  });
+  const [form, setForm] = useState({ name:"", code:"", departmentId:"", level:1, description:"" });
+  const [editId, setEditId] = useState<number|null>(null);
+  const [showForm, setShowForm] = useState(false);
+
+  const LEVEL_LABEL = ["","Staff","Officer","Supervisor","Manager","Head"];
+
+  function openEdit(d: any) { setForm({ name: d.name, code: d.code, departmentId: d.departmentId || "", level: d.level || 1, description: d.description || "" }); setEditId(d.id); setShowForm(true); }
+  function openNew() { setForm({ name:"", code:"", departmentId:"", level:1, description:"" }); setEditId(null); setShowForm(true); }
+  function handleSave() {
+    const payload = { ...form, departmentId: form.departmentId ? Number(form.departmentId) : null };
+    if (editId) updateDes.mutate({ id: editId, data: payload }, { onSuccess: () => setShowForm(false) });
+    else createDes.mutate(payload, { onSuccess: () => setShowForm(false) });
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <Button onClick={openNew} className="text-xs flex items-center gap-1.5 h-8 px-3"><Plus className="w-3.5 h-3.5" />Add Designation</Button>
+      </div>
+      {showForm && (
+        <Card className="p-4 border-primary/20 bg-primary/5">
+          <p className="text-xs font-semibold mb-3">{editId ? "Edit Designation" : "New Designation"}</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div><Label className="text-xs">Designation Name</Label><Input value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} /></div>
+            <div><Label className="text-xs">Code</Label><Input value={form.code} onChange={e => setForm(f => ({...f, code: e.target.value.toUpperCase()}))} /></div>
+            <div>
+              <Label className="text-xs">Department</Label>
+              <Select value={form.departmentId} onChange={e => setForm(f => ({...f, departmentId: e.target.value}))}>
+                <option value="">— Any —</option>
+                {(Array.isArray(depts) ? depts : []).map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Level</Label>
+              <Select value={form.level} onChange={e => setForm(f => ({...f, level: Number(e.target.value)}))}>
+                {[1,2,3,4,5].map(l => <option key={l} value={l}>{l} – {LEVEL_LABEL[l]}</option>)}
+              </Select>
+            </div>
+            <div className="col-span-2 md:col-span-4"><Label className="text-xs">Description</Label><Input value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} /></div>
+          </div>
+          <div className="flex gap-2 justify-end mt-3">
+            <Button variant="outline" className="text-xs h-8" onClick={() => setShowForm(false)}>Cancel</Button>
+            <Button className="text-xs h-8" onClick={handleSave}>Save</Button>
+          </div>
+        </Card>
+      )}
+      <Card className="overflow-hidden">
+        {isLoading ? <p className="text-center py-8 text-sm text-muted-foreground">Loading...</p> : (
+          <table className="w-full text-xs">
+            <thead className="bg-muted/50">
+              <tr>{["Code","Designation","Department","Level","Status","Actions"].map(h => <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground">{h}</th>)}</tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {(Array.isArray(desigs) ? desigs : []).map((d: any) => (
+                <tr key={d.id} className="hover:bg-muted/30">
+                  <td className="px-3 py-2.5 font-mono text-primary font-medium">{d.code}</td>
+                  <td className="px-3 py-2.5 font-medium">{d.name}</td>
+                  <td className="px-3 py-2.5 text-muted-foreground">{d.departmentName || "—"}</td>
+                  <td className="px-3 py-2.5"><span className="px-2 py-0.5 bg-muted rounded text-xs">{LEVEL_LABEL[d.level] || "Staff"}</span></td>
+                  <td className="px-3 py-2.5">
+                    <span className={cn("px-2 py-0.5 rounded text-xs", d.isActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500")}>
+                      {d.isActive ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex gap-1">
+                      <button onClick={() => openEdit(d)} className="p-1.5 hover:bg-muted rounded"><Edit2 className="w-3 h-3" /></button>
+                      <button onClick={() => { if(confirm(`Delete "${d.name}"?`)) deleteDes.mutate(d.id); }} className="p-1.5 hover:bg-red-100 text-red-500 rounded"><Trash2 className="w-3 h-3" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!(Array.isArray(desigs) ? desigs : []).length && <tr><td colSpan={6} className="text-center py-8 text-muted-foreground">No designations found.</td></tr>}
+            </tbody>
+          </table>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 // ── Salary scale (mirrors server) ──────────────────────────────────────────────
 const SALARY_SCALE: Record<string, number> = {
   "Postmaster General": 150000, "Deputy Postmaster General": 120000,
@@ -1539,6 +1715,8 @@ export default function Employees() {
                   : "text-muted-foreground hover:text-foreground hover:bg-background/50"
               )}>
               {t === "Employee List" && <Users className="w-3.5 h-3.5" />}
+              {t === "Departments" && <Building2 className="w-3.5 h-3.5" />}
+              {t === "Designations" && <Layers className="w-3.5 h-3.5" />}
               {t === "Payroll" && <BadgeIndianRupee className="w-3.5 h-3.5" />}
               {t}
               {t === "Employee List" && (
@@ -1689,6 +1867,8 @@ export default function Employees() {
         </>
       )}
 
+      {activeTab === "Departments" && <DepartmentsTab />}
+      {activeTab === "Designations" && <DesignationsTab />}
       {activeTab === "Payroll" && <PayrollTab />}
 
       {drawerOpen && (
