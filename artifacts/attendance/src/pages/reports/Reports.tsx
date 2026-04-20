@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useGetAttendanceReport, useGetMonthlyReport, useGetOvertimeReport, useListBranches, useListEmployees } from "@workspace/api-client-react";
 import { PageHeader, Card, Input, Select, Label } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { Users, Clock, Calendar, Banknote, FileText, ChevronDown, X, Eye, Printer } from "lucide-react";
+import { Users, Clock, Calendar, Banknote, FileText, ChevronDown, X, Eye } from "lucide-react";
 import drivethruLogo from "@/assets/drivethru-logo.png";
 import liveuLogo from "@/assets/liveu-logo.png";
 import html2pdf from "html2pdf.js";
@@ -254,6 +254,7 @@ function MultiEmployeeSelect({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -263,12 +264,22 @@ function MultiEmployeeSelect({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const filtered = useMemo(() =>
-    employees.filter(e =>
-      !search ||
-      (e.fullName || "").toLowerCase().includes(search.toLowerCase()) ||
-      (e.employeeId || "").toLowerCase().includes(search.toLowerCase())
-    ), [employees, search]);
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => searchInputRef.current?.focus(), 30);
+    }
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    if (!search) return employees;
+    const q = search.toLowerCase();
+    return employees.filter(e =>
+      (e.fullName || "").toLowerCase().includes(q) ||
+      (e.employeeId || "").toLowerCase().includes(q) ||
+      (e.firstName || "").toLowerCase().includes(q) ||
+      (e.lastName || "").toLowerCase().includes(q)
+    );
+  }, [employees, search]);
 
   const toggle = (id: string) => {
     onChange(selectedIds.includes(id) ? selectedIds.filter(i => i !== id) : [...selectedIds, id]);
@@ -315,11 +326,12 @@ function MultiEmployeeSelect({
         <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-card border border-border rounded-lg shadow-xl overflow-hidden" style={{ minWidth: "280px" }}>
           <div className="p-2 border-b border-border">
             <input
-              autoFocus
+              ref={searchInputRef}
               type="text"
               placeholder="Search by name or ID…"
               value={search}
               onChange={e => setSearch(e.target.value)}
+              onInput={e => setSearch((e.target as HTMLInputElement).value)}
               className="w-full px-2.5 py-1.5 text-sm rounded-md border border-border bg-background focus:outline-none focus:border-primary"
             />
           </div>
@@ -1434,8 +1446,6 @@ function IndividualReport() {
     return map[st] || "bg-gray-100 text-gray-600";
   }
 
-  const [generatingPdfs, setGeneratingPdfs] = useState(false);
-
   function handleExportExcel() {
     if (!selectedEmp || records.length === 0) return;
     const HEADERS = ["#","Date","Day","Status","Morning In","Lunch Out","Lunch In","End Out","Lunch Break","Total Hrs","Late","OT Hrs"];
@@ -1469,198 +1479,6 @@ function IndividualReport() {
     exportCsv(HEADERS, rows, `attendance-${selectedEmp.employeeId}-${safeMonth}.csv`);
   }
 
-  async function handleGenerateAllPdfs() {
-    if (empIds.length === 0) return;
-    setGeneratingPdfs(true);
-    try {
-      const period = `${getMonthName(month)} ${year}`;
-      const generated = new Date().toLocaleString("en-LK", { dateStyle: "long", timeStyle: "short" });
-      const pagesHtml: string[] = [];
-
-      for (const eid of empIds) {
-        const emp = employees.find((e: any) => String(e.id) === eid);
-        if (!emp) continue;
-
-        let recs: any[] = [];
-        try {
-          const token = localStorage.getItem("auth_token") || "";
-          const params = new URLSearchParams({ startDate, endDate, employeeId: eid });
-          const res = await fetch(`${BASE}/api/reports/attendance?${params}`, {
-            credentials: "include",
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (res.ok) {
-            const d = await res.json();
-            recs = (d.records || []).sort((a: any, b: any) => a.date.localeCompare(b.date));
-          } else {
-            console.error(`Attendance fetch failed for employee ${eid}: ${res.status} ${res.statusText}`);
-          }
-        } catch (err) { console.error("Fetch error for employee", eid, err); }
-
-        let present = 0, absent = 0, late = 0, halfDay = 0, leave = 0, holiday = 0, offDay = 0;
-        let totalHours = 0, totalOT = 0, totalLateMins = 0;
-        for (const r of recs) {
-          const st = r.status;
-          if (st === "present") present++;
-          else if (st === "absent") absent++;
-          else if (st === "late") { late++; present++; }
-          else if (st === "half_day") halfDay++;
-          else if (st === "leave") leave++;
-          else if (st === "holiday") holiday++;
-          else if (st === "off_day") offDay++;
-          totalHours += r.totalHours || 0;
-          totalOT += r.overtimeHours || 0;
-          totalLateMins += (r.morningLateMinutes || 0) + (r.lunchLateMinutes || 0);
-        }
-        const effectiveDays = daysInMonth - holiday - offDay;
-        const attPct = effectiveDays > 0 ? Math.round(((present + halfDay * 0.5) / effectiveDays) * 100) : 0;
-
-        const sumCardsHtml = [
-          { label:"Present", val:present, color:"#16a34a" },
-          { label:"Absent", val:absent, color:"#dc2626" },
-          { label:"Late Days", val:late, color:"#d97706" },
-          { label:"Half Day", val:halfDay, color:"#ca8a04" },
-          { label:"Leave", val:leave, color:"#9333ea" },
-          { label:"Holiday", val:holiday, color:"#6b7280" },
-          { label:"Day Off", val:offDay, color:"#7c3aed" },
-          { label:"Total Hours", val:`${Math.floor(totalHours)}:${String(Math.round((totalHours%1)*60)).padStart(2,"00")}`, color:"#0369a1" },
-          { label:"OT Hours", val:`${totalOT.toFixed(1)}h`, color:"#ea580c" },
-          { label:"Late (Total)", val:totalLateMins>0?(totalLateMins<60?`${totalLateMins}m`:fmtHM(totalLateMins)):"0m", color:"#dc2626" },
-          { label:"Att. %", val:`${attPct}%`, color:attPct>=90?"#16a34a":attPct>=75?"#ca8a04":"#dc2626" },
-        ].map(c => `<div style="padding:8px 14px;border-right:1px solid #e5e7eb;text-align:center;min-width:70px">
-          <div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;font-weight:600">${c.label}</div>
-          <div style="font-size:14px;font-weight:800;color:${c.color};margin-top:2px">${c.val}</div>
-        </div>`).join("");
-
-        const recMap = new Map(recs.map((r: any) => [r.date, r]));
-        let rowsHtml = "";
-        for (let d = 1; d <= daysInMonth; d++) {
-          const dateStr = `${year}-${String(month).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-          const dow = new Date(dateStr + "T00:00:00Z").getUTCDay();
-          const dayName = DAY_NAMES[dow];
-          const r = recMap.get(dateStr);
-          if (!r) {
-            rowsHtml += `<tr><td>${d}</td><td>${dayName}</td><td colspan="9" style="text-align:center;color:#ccc">—</td></tr>`;
-            continue;
-          }
-          const st = r.status;
-          const statusLabel = st==="late"?"PRESENT (LATE)":st==="half_day"?"HALF DAY":st==="off_day"?"DAY OFF":st.replace("_"," ").toUpperCase();
-          const stColorMap: Record<string,string> = {
-            present:"#dcfce7",late:"#fef3c7",absent:"#fee2e2",half_day:"#fefce8",
-            leave:"#f3e8ff",holiday:"#f3f4f6",off_day:"#ede9fe",
-          };
-          const bg = stColorMap[st] || "#f9fafb";
-          const lm = (r.morningLateMinutes || 0) + (r.lunchLateMinutes || 0);
-          const lateStr = lm > 0 ? (lm < 60 ? `${lm}m` : `${Math.floor(lm/60)}h${lm%60}m`) : "—";
-          const otStr = (r.overtimeHours || 0) > 0 ? `${r.overtimeHours.toFixed(1)}h` : "—";
-          const lbMins = (() => {
-            if (!r.outTime1 || !r.inTime2) return 0;
-            const [oh,om] = r.outTime1.split(":").map(Number);
-            const [ih,im] = r.inTime2.split(":").map(Number);
-            return Math.max(0,(ih*60+im)-(oh*60+om));
-          })();
-          rowsHtml += `<tr style="background:${bg}">
-            <td>${d}</td><td>${dayName}</td>
-            <td style="font-weight:700">${statusLabel}</td>
-            <td>${r.inTime1||"—"}</td><td>${r.outTime1||"—"}</td>
-            <td>${r.inTime2||"—"}</td><td>${r.outTime2||"—"}</td>
-            <td>${lbMins>0?fmtHM(lbMins):"—"}</td>
-            <td>${fmtTotal(r.totalHours)}</td>
-            <td>${lateStr}</td><td>${otStr}</td>
-          </tr>`;
-        }
-
-        pagesHtml.push(`<div class="report-wrap">
-<div class="header">
-  <div class="header-left">
-    <img src="${drivethruLogo}" class="header-logo" alt="Drivethru"/>
-    <div><div class="company">Drivethru Pvt Ltd</div><div class="company-sub">Attendance Management System</div></div>
-  </div>
-  <div class="header-right">
-    <div class="report-title">Individual Monthly Attendance Report</div>
-    <div class="report-date">Generated: ${generated}</div>
-  </div>
-</div>
-<div class="emp-card">
-  <div class="emp-field"><div class="emp-label">Employee Name</div><div class="emp-value">${emp.fullName||""}</div></div>
-  <div class="emp-field"><div class="emp-label">Employee ID</div><div class="emp-value">${emp.employeeId||""}</div></div>
-  <div class="emp-field"><div class="emp-label">Designation</div><div class="emp-value">${emp.designation||"—"}</div></div>
-  <div class="emp-field"><div class="emp-label">Department</div><div class="emp-value">${emp.department||"—"}</div></div>
-  <div class="emp-field"><div class="emp-label">Branch</div><div class="emp-value">${emp.branchName||emp.branch||"—"}</div></div>
-  <div class="emp-field"><div class="emp-label">Period</div><div class="emp-value">${period}</div></div>
-  <div class="emp-field"><div class="emp-label">Working Days</div><div class="emp-value">${daysInMonth}</div></div>
-</div>
-<div class="summary-bar">${sumCardsHtml}</div>
-<table><thead><tr>
-  <th>#</th><th>Day</th><th>Status</th>
-  <th>In 1</th><th>Out 1 (Lunch)</th><th>In 2</th><th>Out 2</th>
-  <th>Lunch Break</th><th>Total Hrs</th><th>Late</th><th>OT</th>
-</tr></thead><tbody>${rowsHtml}</tbody></table>
-<div class="footer">
-  <div class="footer-note">System-generated report. For internal use only. © ${new Date().getFullYear()} Drivethru Pvt Ltd</div>
-  <div class="footer-right">
-    <span style="font-size:9px;color:#9ca3af">Powered by</span>
-    <img src="${liveuLogo}" style="height:20px;object-fit:contain;opacity:.85" alt="Live U"/>
-    <span class="footer-liveu-name">Live U Pvt Ltd</span>
-  </div>
-</div>
-</div>`);
-      }
-
-      if (pagesHtml.length === 0) { alert("No data available for the selected employees."); return; }
-
-      const wrapper = document.createElement("div");
-      wrapper.style.cssText = "position:absolute;top:0;left:-9999px;width:1123px;background:#fff";
-      wrapper.innerHTML = `<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  div,span,td,th{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:10.5px}
-  .report-wrap{page-break-after:always}
-  .report-wrap:last-child{page-break-after:avoid}
-  .header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px 12px;border-bottom:3px solid #1565a8;background:#f5f8ff}
-  .header-left{display:flex;align-items:center;gap:12px}
-  .header-logo{width:46px;height:46px;object-fit:contain;border-radius:12px;background:#fff;padding:4px}
-  .company{font-size:18px;font-weight:700;color:#1565a8}
-  .company-sub{font-size:9.5px;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-top:1px}
-  .header-right{text-align:right}
-  .report-title{font-size:13px;font-weight:700;color:#1565a8}
-  .report-date{font-size:9px;color:#9ca3af;margin-top:3px}
-  .emp-card{display:flex;flex-wrap:wrap;background:#fff;border:1px solid #e5e7eb;border-radius:8px;margin:14px 24px;overflow:hidden}
-  .emp-field{padding:8px 16px;border-right:1px solid #f0f0f0;flex:1;min-width:130px}
-  .emp-label{font-size:8.5px;text-transform:uppercase;letter-spacing:.07em;color:#9ca3af;font-weight:600}
-  .emp-value{font-size:11.5px;font-weight:700;color:#111827;margin-top:2px}
-  .summary-bar{display:flex;flex-wrap:wrap;background:#f8faff;border:1px solid #e5e7eb;border-radius:8px;margin:0 24px 14px;overflow:hidden}
-  table{width:100%;border-collapse:collapse}
-  thead tr{background:#1565a8}
-  th{color:#fff;padding:7px 9px;text-align:left;font-size:8.5px;font-weight:600;white-space:nowrap;letter-spacing:.03em}
-  td{padding:5px 9px;font-size:9px;border-bottom:1px solid #f0f0f0;white-space:nowrap}
-  .footer{display:flex;align-items:center;justify-content:space-between;padding:10px 24px;border-top:1px solid #e5e7eb;background:#f5f8ff;margin-top:8px}
-  .footer-note{font-size:8.5px;color:#9ca3af}
-  .footer-right{display:flex;align-items:center;gap:6px}
-  .footer-liveu-name{font-size:9.5px;font-weight:700;color:#1565a8}
-  </style>${pagesHtml.join("")}`;
-      document.body.appendChild(wrapper);
-      const safeMonth = `${getMonthName(month)}-${year}`.replace(/\s+/g, "-");
-      const outFile = empIds.length === 1
-        ? `attendance-${employees.find((e: any) => String(e.id) === empIds[0])?.employeeId || "employee"}-${safeMonth}.pdf`
-        : `attendance-all-${empIds.length}-employees-${safeMonth}.pdf`;
-      try {
-        await html2pdf().set({
-          margin: 8,
-          filename: outFile,
-          image: { type: "jpeg", quality: 0.97 },
-          html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollX: 0, scrollY: 0 },
-          jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
-          pagebreak: { mode: ["css", "legacy"] },
-        }).from(wrapper).save();
-      } finally {
-        document.body.removeChild(wrapper);
-      }
-    } finally {
-      setGeneratingPdfs(false);
-    }
-  }
-
-  function handleGeneratePdf() { handleGenerateAllPdfs(); }
 
   const selectedEmps = useMemo(() => empIds.map(id => employees.find((e: any) => String(e.id) === id)).filter(Boolean), [employees, empIds]);
 
@@ -1671,7 +1489,6 @@ function IndividualReport() {
           <span className="text-sm font-semibold text-foreground">Individual Monthly Report</span>
           <div className="flex items-center gap-2">
             <ExcelIconButton onClick={handleExportExcel} />
-            <PdfIconButton onClick={handleGenerateAllPdfs} />
           </div>
         </div>
         <div className="p-4 space-y-4 overflow-visible relative">
@@ -1704,19 +1521,6 @@ function IndividualReport() {
                 )}
               >
                 <Eye className="w-4 h-4"/> View Report
-              </button>
-              <button
-                disabled={empIds.length === 0 || generatingPdfs}
-                onClick={handleGenerateAllPdfs}
-                className={cn(
-                  "flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap",
-                  empIds.length > 0 && !generatingPdfs
-                    ? "bg-[#E02B20] text-white hover:bg-[#C4241A] shadow-sm active:scale-95"
-                    : "bg-muted text-muted-foreground cursor-not-allowed"
-                )}
-              >
-                <Printer className="w-4 h-4"/>
-                {generatingPdfs ? `Generating… (${empIds.length})` : empIds.length > 1 ? `Generate ${empIds.length} PDFs` : "Generate PDF"}
               </button>
             </div>
           </div>
