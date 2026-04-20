@@ -37,6 +37,7 @@ import {
   Gift,
   CalendarOff,
   Fingerprint,
+  Calculator,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -97,6 +98,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Help",
     items: [
       { href: "/tutorial", label: "User Guide", icon: BookOpen },
+      { href: "/salary-breakdown", label: "Salary Calculation", icon: Calculator },
     ],
   },
 ];
