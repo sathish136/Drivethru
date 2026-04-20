@@ -33,6 +33,7 @@ interface DeptShiftRule {
   nightWatcherMissedPunchDeductHours: number | null;
   saturdayShiftHours: number | null;
   sundayStartTime: string | null;
+  nightWatcherPayroll: boolean;
 }
 
 interface Department { id: number; name: string; isActive: boolean; }
@@ -52,6 +53,7 @@ const BLANK_RULE: DeptShiftRule = {
   nightWatcherMissedPunchDeductHours: null,
   saturdayShiftHours: 5,
   sundayStartTime: null,
+  nightWatcherPayroll: false,
 };
 
 function fmtTimeMins(totalMins: number): string {
@@ -212,6 +214,7 @@ export default function HRSettings() {
       earlyExitGraceMinutes: 0,
       saturdayShiftHours: null,
       sundayStartTime: null,
+      nightWatcherPayroll: false,
       ...rule,
     });
     setModalMode("edit");
@@ -576,6 +579,16 @@ export default function HRSettings() {
                       placeholder="e.g. 1 or 2"
                     />
                     <p className="text-[10px] text-muted-foreground mt-1">Night Watcher only — hrs deducted per missed hourly punch</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium mb-1.5 block">Night Watcher Payroll Mode</Label>
+                    <Select value={editing.nightWatcherPayroll ? "yes" : "no"} onChange={e => setE("nightWatcherPayroll", e.target.value === "yes")}>
+                      <option value="no">No — standard payroll</option>
+                      <option value="yes">Yes — Night Watcher (15 shifts, 30-day basis)</option>
+                    </Select>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Daily rate = Basic÷30 · OT rate = Basic÷240 · EPF on salary-after-deduction only
+                    </p>
                   </div>
                   <div>
                     <Label className="text-xs font-medium mb-1.5 block">OT Rate Multiplier</Label>

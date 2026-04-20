@@ -56,6 +56,21 @@ export interface DeptShiftRule {
    * Set to null when not applicable.
    */
   nightWatcherMissedPunchDeductHours: number | null;
+  /**
+   * Night Watcher payroll calculation mode.
+   *
+   * When true, the payroll engine uses the special Night Watcher rules:
+   *  - Salary is calculated on a 30-day basis (dailyRate = basic / 30)
+   *  - Shift basis: employee works 15 shifts per month (scheduledShifts = 15)
+   *  - Worked shifts = PRESENT×1 + HALF_DAY×0.5  (ABSENT / no-record = 0)
+   *  - Leave days = scheduledShifts − workedShifts
+   *  - Salary after deduction = basic − (leaveDays × dailyRate)
+   *  - OT hourly rate = basic / 240  (not basic / workingDays×hoursPerDay)
+   *  - OT rate = hourlyRate × 1.5
+   *  - EPF/ETF contributions are applied ONLY on salary after deduction, NOT on OT
+   *  - Net salary = (salaryAfterDeduction + OT) − EPF Employee
+   */
+  nightWatcherPayroll: boolean;
 }
 
 export const DEFAULT_RULE: DeptShiftRule = {
@@ -87,6 +102,7 @@ export const DEFAULT_RULE: DeptShiftRule = {
   sundayStartTime: null,
   otStartTime: null,
   nightWatcherMissedPunchDeductHours: null,
+  nightWatcherPayroll: false,
 };
 
 /**

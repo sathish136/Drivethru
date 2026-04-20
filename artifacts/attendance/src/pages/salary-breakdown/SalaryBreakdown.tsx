@@ -13,6 +13,7 @@ import {
   CalendarOff,
   Star,
   AlertTriangle,
+  Moon,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -462,6 +463,91 @@ export default function SalaryBreakdown() {
           <div className="bg-blue-100 rounded-xl p-4 text-sm text-blue-800">
             <strong>OT Multiplier:</strong> Always <strong>1.5×</strong> the normal hourly rate.<br />
             <strong>OT Threshold:</strong> Configured per shift/department in HR Settings. Default is shift hours + 0.5 h buffer.
+          </div>
+        </div>
+      </Section>
+
+      {/* Night Watcher — Security Department */}
+      <Section title="Night Watcher (Security) — Special Payroll Rules" icon={Moon} color="text-indigo-600" bg="bg-indigo-50 border-indigo-200">
+        <div className="space-y-4">
+          <div className="bg-indigo-900 text-white rounded-xl p-4 text-sm">
+            <p className="text-xs font-semibold text-indigo-300 uppercase tracking-wider mb-3">Night Watcher Payroll Formula</p>
+            <div className="space-y-1.5 font-mono text-xs">
+              <p className="text-indigo-200">Shift: 8:00 PM → 8:00 AM (next day) · 15 shifts / month</p>
+              <div className="border-t border-indigo-700 my-2" />
+              <p><span className="text-yellow-300">Daily Rate</span>   = Monthly Basic ÷ 30</p>
+              <p><span className="text-yellow-300">Worked Shifts</span> = PRESENT × 1 + HALF DAY × 0.5</p>
+              <p><span className="text-yellow-300">Leave Days</span>    = 15 − Worked Shifts</p>
+              <p><span className="text-yellow-300">Leave Deduction</span>= Leave Days × Daily Rate</p>
+              <p><span className="text-green-300 font-bold">Salary After Deduction</span> = Basic − Leave Deduction</p>
+              <div className="border-t border-indigo-700 my-2" />
+              <p><span className="text-blue-300">OT Hourly Rate</span> = Monthly Basic ÷ 240</p>
+              <p><span className="text-blue-300">OT Rate</span>        = OT Hourly Rate × 1.5</p>
+              <p><span className="text-blue-300">OT Amount</span>      = OT Hours × OT Rate</p>
+              <div className="border-t border-indigo-700 my-2" />
+              <p><span className="text-emerald-300">Total Earnings</span>= Salary After Deduction + OT Amount</p>
+              <p className="text-indigo-300 text-[11px] mt-1">EPF / ETF are applied on Salary After Deduction ONLY — not on OT</p>
+              <p><span className="text-red-300">EPF Employee 8%</span>= Salary After Deduction × 8%</p>
+              <p><span className="text-red-300">EPF Employer 12%</span>= Salary After Deduction × 12%</p>
+              <p><span className="text-red-300">ETF 3%</span>         = Salary After Deduction × 3%</p>
+              <div className="border-t border-indigo-700 my-2" />
+              <p><span className="text-green-400 font-bold">Net Salary</span>     = Total Earnings − EPF Employee (8%)</p>
+            </div>
+          </div>
+
+          {/* Worked example matching the attached report */}
+          <div className="bg-white rounded-xl border border-indigo-200 overflow-hidden">
+            <div className="bg-indigo-50 px-4 py-2.5 border-b border-indigo-200">
+              <p className="text-xs font-bold text-indigo-800">Worked Example — Anura Manamperi · February 2026</p>
+              <p className="text-[11px] text-indigo-500">Basic: Rs.32,500 · Worked: 13 PRESENT + 1 HALF DAY · OT: 40.35 hrs</p>
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b">
+                  <th className="text-left px-4 py-2 text-gray-500 font-semibold text-xs">Section</th>
+                  <th className="text-left px-4 py-2 text-gray-500 font-semibold text-xs">Component</th>
+                  <th className="text-left px-4 py-2 text-gray-500 font-semibold text-xs">Formula</th>
+                  <th className="text-right px-4 py-2 text-gray-500 font-semibold text-xs">Amount (LKR)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { section: "BASIC", component: "Monthly Salary",         formula: "",                               amount: "32,500.00",   bold: false },
+                  { section: "",      component: "Per Day Salary",          formula: "32,500 ÷ 30",                    amount: "1,083.33",    bold: false },
+                  { section: "",      component: "Leave Days",              formula: "15 − 13.5 worked",               amount: "1.5",         bold: false },
+                  { section: "",      component: "Leave Deduction",         formula: "1.5 × 1,083.333",                amount: "1,625.00",    bold: false },
+                  { section: "",      component: "Salary After Deduction",  formula: "32,500 − 1,625",                 amount: "30,875.00",   bold: true  },
+                  { section: "OT",    component: "OT Hours",                formula: "",                               amount: "40.35",       bold: false },
+                  { section: "",      component: "Hourly Rate",             formula: "32,500 ÷ 240",                   amount: "135.42",      bold: false },
+                  { section: "",      component: "OT Rate (1.5×)",          formula: "135.42 × 1.5",                   amount: "203.13",      bold: false },
+                  { section: "",      component: "OT Amount",               formula: "40.35 × 203.13",                 amount: "8,196.30",    bold: true  },
+                  { section: "EARNINGS", component: "Salary + OT",         formula: "30,875 + 8,196.30",              amount: "39,071.09",   bold: true  },
+                  { section: "DEDUCTION", component: "EPF Employee (8%)",   formula: "30,875 × 8%",                   amount: "2,470.00",    bold: false },
+                  { section: "EMPLOYER",  component: "EPF Employer (12%)",  formula: "30,875 × 12%",                  amount: "3,705.00",    bold: false },
+                  { section: "",          component: "ETF (3%)",            formula: "30,875 × 3%",                   amount: "926.25",      bold: false },
+                  { section: "FINAL",     component: "Net Salary",          formula: "39,071.09 − 2,470",             amount: "36,601.09",   bold: true  },
+                ].map((r, i) => (
+                  <tr key={i} className={`border-b border-gray-100 last:border-0 ${r.bold ? "bg-indigo-50" : ""}`}>
+                    <td className="px-4 py-2 font-bold text-xs text-indigo-700">{r.section}</td>
+                    <td className={`px-4 py-2 text-xs ${r.bold ? "font-bold text-gray-900" : "text-gray-700"}`}>{r.component}</td>
+                    <td className="px-4 py-2 font-mono text-[11px] text-blue-600">{r.formula}</td>
+                    <td className={`px-4 py-2 text-right text-xs tabular-nums ${r.bold ? "font-bold text-gray-900" : "text-gray-700"}`}>{r.amount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800 space-y-1">
+            <p className="font-semibold">Key rules for Night Watcher payroll:</p>
+            <ul className="list-disc list-inside space-y-0.5 mt-1">
+              <li>Salary basis is always <strong>30 days</strong> — not actual working days in the month</li>
+              <li>OT basis is <strong>240 hours</strong> (30 days × 8 hrs) — not days × shift hours</li>
+              <li>No-record days are treated as <strong>off days</strong> (not absent) — only 15 shifts are scheduled</li>
+              <li>EPF / ETF apply on <strong>Salary After Deduction only</strong> — OT is excluded from the EPF base</li>
+              <li>ABSENT within the 15 shifts = Leave Day = salary deduction</li>
+              <li>HALF DAY counts as 0.5 worked shift → 0.5 leave days deducted</li>
+            </ul>
           </div>
         </div>
       </Section>

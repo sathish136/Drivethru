@@ -142,8 +142,15 @@ export default function PayslipPage() {
   const etf3  = row.etfEmployer || 0;
 
   const reqHrs     = row.reqHoursPerDay || 0;
-  const dailyRate  = row.workingDays > 0 ? row.basicSalary / row.workingDays : 0;
-  const hourlyRate = row.workingDays > 0 && reqHrs > 0 ? row.basicSalary / (row.workingDays * reqHrs) : 0;
+  /* Night Watcher detection: workingDays is stored as 15 (scheduled shifts) */
+  const isNightWatcher = row.workingDays === 15;
+  /* Night Watcher uses fixed 30-day salary basis and 240-hour OT basis */
+  const dailyRate  = isNightWatcher
+    ? row.basicSalary / 30
+    : (row.workingDays > 0 ? row.basicSalary / row.workingDays : 0);
+  const hourlyRate = isNightWatcher
+    ? row.basicSalary / 240
+    : (row.workingDays > 0 && reqHrs > 0 ? row.basicSalary / (row.workingDays * reqHrs) : 0);
   const minuteRate = hourlyRate / 60;
 
   /* Derive OT multiplier from stored values */
@@ -204,26 +211,46 @@ export default function PayslipPage() {
   const formulaRows: FormulaRow[] = [];
 
   /* Rates */
-  if (row.workingDays > 0) {
+  if (isNightWatcher) {
     formulaRows.push({
       label: "Daily Rate",
-      formula: `Rs.${row.basicSalary.toLocaleString()} ÷ ${row.workingDays} working days`,
-      result: `Rs.${dailyRate.toFixed(2)} / day`,
+      formula: `Rs.${row.basicSalary.toLocaleString()} ÷ 30 (30-day basis)`,
+      result: `Rs.${dailyRate.toFixed(3)} / day`,
       highlight: true,
     });
-  }
-  if (reqHrs > 0) {
     formulaRows.push({
-      label: "Hourly Rate",
-      formula: `Rs.${row.basicSalary.toLocaleString()} ÷ (${row.workingDays} days × ${reqHrs}h)`,
-      result: `Rs.${hourlyRate.toFixed(2)} / hr`,
+      label: "OT Hourly Rate",
+      formula: `Rs.${row.basicSalary.toLocaleString()} ÷ 240 hours`,
+      result: `Rs.${hourlyRate.toFixed(4)} / hr`,
     });
     formulaRows.push({
-      label: "Minute Rate",
-      formula: `Rs.${hourlyRate.toFixed(2)} ÷ 60 min`,
-      result: `Rs.${minuteRate.toFixed(4)} / min`,
+      label: "OT Rate (1.5×)",
+      formula: `Rs.${hourlyRate.toFixed(4)} × 1.5`,
+      result: `Rs.${(hourlyRate * 1.5).toFixed(2)} / hr`,
       highlight: true,
     });
+  } else {
+    if (row.workingDays > 0) {
+      formulaRows.push({
+        label: "Daily Rate",
+        formula: `Rs.${row.basicSalary.toLocaleString()} ÷ ${row.workingDays} working days`,
+        result: `Rs.${dailyRate.toFixed(2)} / day`,
+        highlight: true,
+      });
+    }
+    if (reqHrs > 0) {
+      formulaRows.push({
+        label: "Hourly Rate",
+        formula: `Rs.${row.basicSalary.toLocaleString()} ÷ (${row.workingDays} days × ${reqHrs}h)`,
+        result: `Rs.${hourlyRate.toFixed(2)} / hr`,
+      });
+      formulaRows.push({
+        label: "Minute Rate",
+        formula: `Rs.${hourlyRate.toFixed(2)} ÷ 60 min`,
+        result: `Rs.${minuteRate.toFixed(4)} / min`,
+        highlight: true,
+      });
+    }
   }
 
   /* Allowances */
@@ -242,12 +269,29 @@ export default function PayslipPage() {
 
   /* Deductions */
   if (noPayLeave > 0) {
-    formulaRows.push({
-      label: "Absence Deduction",
-      formula: `${row.absentDays} absent day${row.absentDays !== 1 ? "s" : ""} × Rs.${dailyRate.toFixed(2)} / day`,
-      result: `− Rs.${noPayLeave.toLocaleString()}`,
-      deduction: true,
-    });
+    if (isNightWatcher) {
+      const workedShifts = row.presentDays + row.halfDays * 0.5;
+      const leaveDaysNW  = Math.max(0, 15 - workedShifts);
+      formulaRows.push({
+        label: "Leave Deduction",
+        formula: `15 shifts − ${workedShifts} worked = ${leaveDaysNW} leave days × Rs.${dailyRate.toFixed(3)}`,
+        result: `− Rs.${noPayLeave.toLocaleString()}`,
+        deduction: true,
+      });
+      formulaRows.push({
+        label: "Salary After Deduction",
+        formula: `Rs.${row.basicSalary.toLocaleString()} − Rs.${noPayLeave.toLocaleString()}`,
+        result: `Rs.${totalForEPF.toLocaleString()}`,
+        highlight: true,
+      });
+    } else {
+      formulaRows.push({
+        label: "Absence Deduction",
+        formula: `${row.absentDays} absent day${row.absentDays !== 1 ? "s" : ""} × Rs.${dailyRate.toFixed(2)} / day`,
+        result: `− Rs.${noPayLeave.toLocaleString()}`,
+        deduction: true,
+      });
+    }
   }
   if (halfDayDed > 0) {
     formulaRows.push({
@@ -306,7 +350,9 @@ export default function PayslipPage() {
   if (epf8 > 0) {
     formulaRows.push({
       label: "EPF 8% (Employee)",
-      formula: `Rs.${row.grossSalary.toLocaleString()} × 8%`,
+      formula: isNightWatcher
+        ? `Rs.${totalForEPF.toLocaleString()} (salary after deduction) × 8%`
+        : `Rs.${row.grossSalary.toLocaleString()} × 8%`,
       result: `− Rs.${epf8.toLocaleString()}`,
       deduction: true,
       highlight: true,
@@ -315,14 +361,18 @@ export default function PayslipPage() {
   if (epf12 > 0) {
     formulaRows.push({
       label: "EPF 12% (Employer)",
-      formula: `Rs.${row.grossSalary.toLocaleString()} × 12%`,
+      formula: isNightWatcher
+        ? `Rs.${totalForEPF.toLocaleString()} (salary after deduction) × 12%`
+        : `Rs.${row.grossSalary.toLocaleString()} × 12%`,
       result: `Rs.${epf12.toLocaleString()} (employer cost)`,
     });
   }
   if (etf3 > 0) {
     formulaRows.push({
       label: "ETF 3% (Employer)",
-      formula: `Rs.${row.grossSalary.toLocaleString()} × 3%`,
+      formula: isNightWatcher
+        ? `Rs.${totalForEPF.toLocaleString()} (salary after deduction) × 3%`
+        : `Rs.${row.grossSalary.toLocaleString()} × 3%`,
       result: `Rs.${etf3.toLocaleString()} (employer cost)`,
       highlight: true,
     });

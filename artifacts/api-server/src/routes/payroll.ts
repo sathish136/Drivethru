@@ -367,33 +367,59 @@ router.post("/generate", async (req, res) => {
         etfEmployer = 0;
       }
 
-      const dailyRate   = basicSalary / empWdCount;
-      const hourlyRate  = basicSalary / (empWdCount * reqHoursPerDay);
+      /* ── Night Watcher payroll mode flag ── */
+      const isNightWatcherPayroll = rule.nightWatcherPayroll === true;
+
+      /* ── NIGHT WATCHER: fixed 30-day basis; 240-hour OT basis ── */
+      const NW_SCHEDULED_SHIFTS = 15;
+      const dailyRate   = isNightWatcherPayroll
+        ? basicSalary / 30
+        : basicSalary / empWdCount;
+      const hourlyRate  = isNightWatcherPayroll
+        ? basicSalary / 240
+        : basicSalary / (empWdCount * reqHoursPerDay);
       const minuteRate  = hourlyRate / 60;
 
-      /* ── Late deduction: (morning late + lunch return late) × minuteRate ── */
+      /* ── NIGHT WATCHER: shift-based leave deduction ── */
+      /* Worked shifts = PRESENT×1 + HALF_DAY×0.5 (no-record = off days, not absent) */
+      const nwWorkedShifts = isNightWatcherPayroll
+        ? presentDays + halfDaysCount * 0.5
+        : 0;
+      /* Leave days = scheduled shifts − worked shifts (includes explicit absents within 15 shifts) */
+      const nwLeaveDays = isNightWatcherPayroll
+        ? Math.max(0, NW_SCHEDULED_SHIFTS - nwWorkedShifts)
+        : 0;
+      /* Salary after deduction (Night Watcher specific) */
+      const nwLeaveDeduction = isNightWatcherPayroll
+        ? Math.round(nwLeaveDays * dailyRate * 1000) / 1000
+        : 0;
+      const nwSalaryAfterDeduction = isNightWatcherPayroll
+        ? Math.max(0, basicSalary - nwLeaveDeduction)
+        : 0;
+
+      /* ── STANDARD deductions (skipped for Night Watcher) ── */
       /* Morning late: minutes after cutoff for inTime1 */
-      const morningLateMinutes = lateRecs.reduce((sum, rec) => {
+      const morningLateMinutes = (!isNightWatcherPayroll) ? lateRecs.reduce((sum, rec) => {
         return sum + (timeToMins(rec.inTime1!) - lateCutoff);
-      }, 0);
+      }, 0) : 0;
       /* Lunch return late: minutes over allocated lunch for ALL present records */
-      const lunchLateMinutes = [...presentRecs, ...lateRecs].reduce((sum, rec) => {
+      const lunchLateMinutes = (!isNightWatcherPayroll) ? [...presentRecs, ...lateRecs].reduce((sum, rec) => {
         return sum + calcLunchLateMinutes(rec.outTime1, rec.inTime2, rule);
-      }, 0);
+      }, 0) : 0;
       const totalLateMinutes = morningLateMinutes + lunchLateMinutes;
       const lateDeduction = Math.round(morningLateMinutes * minuteRate);
       const lunchLateDeduction = Math.round(lunchLateMinutes * minuteRate);
 
       /* ── Absence deduction ─────────────────────────────── */
-      const absenceDeduction = Math.round(dailyRate * absentDays);
+      const absenceDeduction = isNightWatcherPayroll ? 0 : Math.round(dailyRate * absentDays);
 
       /* ── Half-day deduction ────────────────────────────── */
-      const halfDayDeduction = Math.round(halfDaysCount * (dailyRate / 2));
+      const halfDayDeduction = isNightWatcherPayroll ? 0 : Math.round(halfDaysCount * (dailyRate / 2));
 
       /* ── Incomplete hours deduction (rules-based) ───────── */
       let incompleteDeduction = 0;
       let totalIncompleteMinutes = 0;
-      if (!isFlexible) {
+      if (!isFlexible && !isNightWatcherPayroll) {
         for (const rec of [...presentRecs, ...halfDayRecs]) {
           const rawHrs = rec.totalHours ?? 0;
           if (rawHrs === 0) continue;
@@ -534,14 +560,26 @@ router.post("/generate", async (req, res) => {
                         : isOtEligible   ? regularOtPay
                         : 0;
 
-      const grossSalary = Math.round(
-        basicSalary + transportAllowance + lunchIncentive + housingAllowance + otherAllowances
-        + overtimePay + holidayOtPay + offDayOtPay
-        - absenceDeduction - lateDeduction - lunchLateDeduction - halfDayDeduction - incompleteDeduction
-      );
+      let grossSalary: number;
 
-      /* EPF / ETF always based on actual earned gross (not full basic) */
-      const epfBase = Math.max(0, grossSalary);
+      if (isNightWatcherPayroll) {
+        /* ── NIGHT WATCHER gross: salary after deduction + OT ── */
+        grossSalary = Math.round(nwSalaryAfterDeduction + overtimePay + holidayOtPay + offDayOtPay);
+      } else {
+        grossSalary = Math.round(
+          basicSalary + transportAllowance + lunchIncentive + housingAllowance + otherAllowances
+          + overtimePay + holidayOtPay + offDayOtPay
+          - absenceDeduction - lateDeduction - lunchLateDeduction - halfDayDeduction - incompleteDeduction
+        );
+      }
+
+      /* ── EPF / ETF ──
+       * Night Watcher: contributions on salary after deduction ONLY (not on OT)
+       * All others:    contributions on actual earned gross
+       */
+      const epfBase = isNightWatcherPayroll
+        ? Math.max(0, nwSalaryAfterDeduction)
+        : Math.max(0, grossSalary);
       if (structData) {
         epfEmployee = Math.round(epfBase * 0.08);
         epfEmployer = Math.round(epfBase * 0.12);
@@ -580,24 +618,31 @@ router.post("/generate", async (req, res) => {
       const totalDeductions = epfEmployee + apit + lateDeduction + lunchLateDeduction + absenceDeduction + halfDayDeduction + incompleteDeduction + otherDeductions + loanDeduction;
       const netSalary     = grossSalary - epfEmployee - apit - otherDeductions - loanDeduction;
 
+      /* ── For Night Watcher: map leave data to standard fields for storage/display ── */
+      const storedAbsenceDeduction = isNightWatcherPayroll ? Math.round(nwLeaveDeduction) : absenceDeduction;
+      const storedLeaveDays        = isNightWatcherPayroll ? nwLeaveDays : leaveDays;
+      const storedAbsentDays       = isNightWatcherPayroll ? Math.floor(nwLeaveDays) : absentDays;
+      const storedHalfDays         = isNightWatcherPayroll ? halfDaysCount : halfDaysCount;
+      const storedWorkingDays      = isNightWatcherPayroll ? NW_SCHEDULED_SHIFTS : Math.round(empWdCount);
+
       const record = {
         employeeId: emp.id,
         branchId: emp.branchId!,
         month,
         year,
-        workingDays: Math.round(empWdCount),
+        workingDays: storedWorkingDays,
         presentDays,
-        absentDays,
+        absentDays: storedAbsentDays,
         lateDays,
-        halfDays: halfDaysCount,
-        leaveDays,
+        halfDays: storedHalfDays,
+        leaveDays: storedLeaveDays,
         holidayDays,
         overtimeHours: Math.round(regularOtHours * 100) / 100,
         basicSalary,
-        transportAllowance,
-        lunchIncentive,
-        housingAllowance,
-        otherAllowances,
+        transportAllowance: isNightWatcherPayroll ? 0 : transportAllowance,
+        lunchIncentive: isNightWatcherPayroll ? 0 : lunchIncentive,
+        housingAllowance: isNightWatcherPayroll ? 0 : housingAllowance,
+        otherAllowances: isNightWatcherPayroll ? 0 : otherAllowances,
         overtimePay,
         holidayOtPay: holidayOtPay + offDayOtPay,
         grossSalary,
@@ -605,11 +650,11 @@ router.post("/generate", async (req, res) => {
         epfEmployer,
         etfEmployer,
         apit,
-        lateDeduction,
-        lunchLateDeduction,
-        absenceDeduction,
-        halfDayDeduction,
-        incompleteDeduction,
+        lateDeduction: isNightWatcherPayroll ? 0 : lateDeduction,
+        lunchLateDeduction: isNightWatcherPayroll ? 0 : lunchLateDeduction,
+        absenceDeduction: storedAbsenceDeduction,
+        halfDayDeduction: isNightWatcherPayroll ? 0 : halfDayDeduction,
+        incompleteDeduction: isNightWatcherPayroll ? 0 : incompleteDeduction,
         otherDeductions,
         loanDeduction,
         totalDeductions,
