@@ -1436,6 +1436,39 @@ function IndividualReport() {
 
   const [generatingPdfs, setGeneratingPdfs] = useState(false);
 
+  function handleExportExcel() {
+    if (!selectedEmp || records.length === 0) return;
+    const HEADERS = ["#","Date","Day","Status","Morning In","Lunch Out","Lunch In","End Out","Lunch Break","Total Hrs","Late","OT Hrs"];
+    const rows = Array.from({ length: daysInMonth }, (_, i) => {
+      const d = i + 1;
+      const dateStr = `${year}-${String(month).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+      const dow = new Date(dateStr + "T00:00:00Z").getUTCDay();
+      const dayName = DAY_NAMES[dow];
+      const r = records.find((x: any) => x.date === dateStr);
+      if (!r) return [d, dateStr, dayName, "No Record", "","","","","","","",""];
+      const st = r.status;
+      const statusLabel = st==="late"?"PRESENT (LATE)":st==="half_day"?"HALF DAY":st==="off_day"?"DAY OFF":st.replace("_"," ").toUpperCase();
+      const lm = (r.morningLateMinutes || 0) + (r.lunchLateMinutes || 0);
+      const lateStr = lm > 0 ? (lm < 60 ? `${lm}m` : fmtHM(lm)) : "";
+      const lbMins = (() => {
+        if (!r.outTime1 || !r.inTime2) return 0;
+        const [oh,om] = r.outTime1.split(":").map(Number);
+        const [ih,im] = r.inTime2.split(":").map(Number);
+        return Math.max(0,(ih*60+im)-(oh*60+om));
+      })();
+      return [
+        d, dateStr, dayName, statusLabel,
+        r.inTime1||"", r.outTime1||"", r.inTime2||"", r.outTime2||"",
+        lbMins > 0 ? fmtHM(lbMins) : "",
+        fmtTotal(r.totalHours),
+        lateStr,
+        (r.overtimeHours||0) > 0 ? (r.overtimeHours as number).toFixed(1) : "",
+      ];
+    });
+    const safeMonth = `${getMonthName(month)}-${year}`;
+    exportCsv(HEADERS, rows, `attendance-${selectedEmp.employeeId}-${safeMonth}.csv`);
+  }
+
   async function handleGenerateAllPdfs() {
     if (empIds.length === 0) return;
     setGeneratingPdfs(true);
@@ -1633,9 +1666,13 @@ function IndividualReport() {
 
   return (
     <div className="space-y-4">
-      <Card className="p-0">
-        <div className="px-4 py-3 border-b border-border bg-muted/30 rounded-t-xl">
+      <Card className="p-0 overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
           <span className="text-sm font-semibold text-foreground">Individual Monthly Report</span>
+          <div className="flex items-center gap-2">
+            <ExcelIconButton onClick={handleExportExcel} />
+            <PdfIconButton onClick={handleGenerateAllPdfs} />
+          </div>
         </div>
         <div className="p-4 space-y-4 overflow-visible relative">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-start">
