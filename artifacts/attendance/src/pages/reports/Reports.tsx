@@ -36,9 +36,11 @@ function useHrRules() {
   const [shifts, setShifts] = useState<{ id: number; name: string }[]>([]);
   useEffect(() => {
     const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+    const token = localStorage.getItem("auth_token") || "";
+    const authOpts = { credentials: "include" as const, headers: { Authorization: `Bearer ${token}` } };
     Promise.all([
-      fetch(`${BASE}/api/hr-settings`).then(r => r.json()),
-      fetch(`${BASE}/api/shifts`).then(r => r.json()),
+      fetch(`${BASE}/api/hr-settings`, authOpts).then(r => r.json()),
+      fetch(`${BASE}/api/shifts`, authOpts).then(r => r.json()),
     ]).then(([hrData, shiftsData]) => {
       if (Array.isArray(hrData.departmentRules)) setRules(hrData.departmentRules as DeptShiftRule[]);
       if (Array.isArray(shiftsData)) setShifts(shiftsData);
@@ -1059,7 +1061,11 @@ function PayrollReport() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(apiUrl(`/payroll?month=${dMonth}&year=${dYear}`))
+    const token = localStorage.getItem("auth_token") || "";
+    fetch(apiUrl(`/payroll?month=${dMonth}&year=${dYear}`), {
+      credentials: "include",
+      headers: { Authorization: `Bearer ${token}` },
+    })
       .then(r => r.json())
       .then(d => setData(Array.isArray(d) ? d : []))
       .catch(() => setData([]))
@@ -1444,13 +1450,19 @@ function IndividualReport() {
 
         let recs: any[] = [];
         try {
+          const token = localStorage.getItem("auth_token") || "";
           const params = new URLSearchParams({ startDate, endDate, employeeId: eid });
-          const res = await fetch(`${BASE}/api/reports/attendance?${params}`, { credentials: "include" });
+          const res = await fetch(`${BASE}/api/reports/attendance?${params}`, {
+            credentials: "include",
+            headers: { Authorization: `Bearer ${token}` },
+          });
           if (res.ok) {
             const d = await res.json();
             recs = (d.records || []).sort((a: any, b: any) => a.date.localeCompare(b.date));
+          } else {
+            console.error(`Attendance fetch failed for employee ${eid}: ${res.status} ${res.statusText}`);
           }
-        } catch { /* skip on error */ }
+        } catch (err) { console.error("Fetch error for employee", eid, err); }
 
         let present = 0, absent = 0, late = 0, halfDay = 0, leave = 0, holiday = 0, offDay = 0;
         let totalHours = 0, totalOT = 0, totalLateMins = 0;
