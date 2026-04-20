@@ -98,6 +98,7 @@ function mergeNightShiftRecords<T extends {
  * Compute overtime hours for a single attendance record using the correct
  * method based on the rule's configuration:
  *
+ *  0. Night Watcher payroll mode: OT = time after 05:00 checkout, capped 3 h.
  *  1. Time-based OT (rule.otStartTime set): Kitchen shift OT after 8:30 pm,
  *     Night Watcher OT after 5 am.  Saturday Kitchen capped at 1 h.
  *  2. Night-shift hours-based (fallback): total − scheduled, capped at 3 h.
@@ -116,8 +117,23 @@ function computeRecordOt(
   date: string,
   earlyMinutes: number,
 ): number {
-  if (!rule.otEligible) return 0;
   if (rec.totalHours == null) return 0;
+
+  // ── Night Watcher payroll mode: always use time-based OT from 05:00 ──────
+  if (rule.nightWatcherPayroll) {
+    const nwOtStart = rule.otStartTime ?? "05:00";
+    const lastCheckout = rec.outTime2 ?? rec.outTime1;
+    let ot = calcTimeBasedOtHours(lastCheckout, nwOtStart, true);
+    if (rule.nightWatcherMissedPunchDeductHours != null && ot > 0) {
+      const deduction = calcNightWatcherPunchDeduction(
+        rec, rule.minHours ?? 9, rule.nightWatcherMissedPunchDeductHours,
+      );
+      ot = Math.max(0, ot - deduction);
+    }
+    return Math.round(Math.min(3, ot) * 100) / 100;
+  }
+
+  if (!rule.otEligible) return 0;
 
   const dayOfWeek = new Date(date + "T00:00:00Z").getUTCDay();
   const isSat = dayOfWeek === 6;
