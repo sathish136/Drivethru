@@ -93,6 +93,12 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/settings",      label: "Settings",        icon: Cog         },
     ],
   },
+  {
+    label: "Help",
+    items: [
+      { href: "/tutorial", label: "User Guide", icon: BookOpen },
+    ],
+  },
 ];
 
 function getInitials(name: string) {

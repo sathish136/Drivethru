@@ -26,6 +26,7 @@ import LeaveEntry from "@/pages/leave/LeaveEntry";
 import Loans from "@/pages/loans/Loans";
 import Incentives from "@/pages/incentives/Incentives";
 import WeekOffs from "@/pages/weekoffs/WeekOffs";
+import Tutorial from "@/pages/tutorial/Tutorial";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -74,6 +75,7 @@ function Router() {
       <Route path="/loans"><ProtectedRoute component={Loans} /></Route>
       <Route path="/incentives"><ProtectedRoute component={Incentives} /></Route>
       <Route path="/weekoffs"><ProtectedRoute component={WeekOffs} /></Route>
+      <Route path="/tutorial"><ProtectedRoute component={Tutorial} /></Route>
       <Route component={NotFound} />
     </Switch>
   );
