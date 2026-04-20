@@ -1452,6 +1452,20 @@ function IndividualReport() {
     if (empIds.length === 0) return;
     setGeneratingPdfs(true);
     try {
+      async function toDataUrl(url: string): Promise<string> {
+        try {
+          const res = await fetch(url);
+          const blob = await res.blob();
+          return await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        } catch { return url; }
+      }
+      const [logoData, liveuData] = await Promise.all([toDataUrl(drivethruLogo), toDataUrl(liveuLogo)]);
+
       const period = `${getMonthName(month)} ${year}`;
       const generated = new Date().toLocaleString("en-LK", { dateStyle: "long", timeStyle: "short" });
       const pagesHtml: string[] = [];
@@ -1550,7 +1564,7 @@ function IndividualReport() {
         pagesHtml.push(`<div class="report-wrap">
 <div class="header">
   <div class="header-left">
-    <img src="${drivethruLogo}" class="header-logo" alt="Drivethru"/>
+    <img src="${logoData}" class="header-logo" alt="Drivethru"/>
     <div><div class="company">Drivethru Pvt Ltd</div><div class="company-sub">Attendance Management System</div></div>
   </div>
   <div class="header-right">
@@ -1577,7 +1591,7 @@ function IndividualReport() {
   <div class="footer-note">System-generated report. For internal use only. © ${new Date().getFullYear()} Drivethru Pvt Ltd</div>
   <div class="footer-right">
     <span style="font-size:9px;color:#9ca3af">Powered by</span>
-    <img src="${liveuLogo}" style="height:20px;object-fit:contain;opacity:.85" alt="Live U"/>
+    <img src="${liveuData}" style="height:20px;object-fit:contain;opacity:.85" alt="Live U"/>
     <span class="footer-liveu-name">Live U Pvt Ltd</span>
   </div>
 </div>
@@ -1586,11 +1600,10 @@ function IndividualReport() {
 
       if (pagesHtml.length === 0) { alert("No data available for the selected employees."); return; }
 
-      const wrapper = document.createElement("div");
-      wrapper.style.cssText = "position:fixed;top:0;left:0;width:1123px;background:#fff;z-index:99999;pointer-events:none;opacity:0.01";
-      wrapper.innerHTML = `<style>
+      const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Attendance Report</title><style>
+  @page{size:A4 landscape;margin:8mm}
   *{box-sizing:border-box;margin:0;padding:0}
-  div,span,td,th{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:10.5px}
+  body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;background:#fff;font-size:10.5px}
   .report-wrap{page-break-after:always}
   .report-wrap:last-child{page-break-after:avoid}
   .header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px 12px;border-bottom:3px solid #1565a8;background:#f5f8ff}
@@ -1608,33 +1621,26 @@ function IndividualReport() {
   .summary-bar{display:flex;flex-wrap:wrap;background:#f8faff;border:1px solid #e5e7eb;border-radius:8px;margin:0 24px 14px;overflow:hidden}
   table{width:100%;border-collapse:collapse}
   thead tr{background:#1565a8}
-  th{color:#fff;padding:7px 9px;text-align:left;font-size:8.5px;font-weight:600;white-space:nowrap;letter-spacing:.03em}
+  th{color:#fff;padding:7px 9px;text-align:left;font-size:8.5px;font-weight:600;white-space:nowrap;letter-spacing:.03em;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   td{padding:5px 9px;font-size:9px;border-bottom:1px solid #f0f0f0;white-space:nowrap}
+  tr{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .footer{display:flex;align-items:center;justify-content:space-between;padding:10px 24px;border-top:1px solid #e5e7eb;background:#f5f8ff;margin-top:8px}
   .footer-note{font-size:8.5px;color:#9ca3af}
   .footer-right{display:flex;align-items:center;gap:6px}
   .footer-liveu-name{font-size:9.5px;font-weight:700;color:#1565a8}
-  </style>${pagesHtml.join("")}`;
-      document.body.appendChild(wrapper);
-      await new Promise(r => setTimeout(r, 600));
-      wrapper.style.opacity = "1";
-      await new Promise(r => setTimeout(r, 200));
-      const safeMonth = `${getMonthName(month)}-${year}`.replace(/\s+/g, "-");
-      const outFile = empIds.length === 1
-        ? `attendance-${employees.find((e: any) => String(e.id) === empIds[0])?.employeeId || "employee"}-${safeMonth}.pdf`
-        : `attendance-all-${empIds.length}-employees-${safeMonth}.pdf`;
-      try {
-        await html2pdf().set({
-          margin: 8,
-          filename: outFile,
-          image: { type: "jpeg", quality: 0.97 },
-          html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollX: 0, scrollY: 0, windowWidth: 1123 },
-          jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
-          pagebreak: { mode: ["css", "legacy"] },
-        }).from(wrapper).save();
-      } finally {
-        document.body.removeChild(wrapper);
+  </style></head><body>${pagesHtml.join("")}</body></html>`;
+
+      const blob = new Blob([fullHtml], { type: "text/html" });
+      const blobUrl = URL.createObjectURL(blob);
+      const printWin = window.open(blobUrl, "_blank");
+      if (printWin) {
+        printWin.addEventListener("load", () => {
+          setTimeout(() => { printWin.print(); }, 500);
+        });
+      } else {
+        alert("Please allow popups for this site to generate the PDF report.");
       }
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
     } finally {
       setGeneratingPdfs(false);
     }
