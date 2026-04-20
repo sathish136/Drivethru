@@ -1587,7 +1587,7 @@ function IndividualReport() {
       if (pagesHtml.length === 0) { alert("No data available for the selected employees."); return; }
 
       const wrapper = document.createElement("div");
-      wrapper.style.cssText = "position:absolute;top:0;left:-9999px;width:1123px;background:#fff";
+      wrapper.style.cssText = "position:fixed;top:0;left:0;width:1123px;background:#fff;z-index:99999;pointer-events:none;opacity:0.01";
       wrapper.innerHTML = `<style>
   *{box-sizing:border-box;margin:0;padding:0}
   div,span,td,th{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:10.5px}
@@ -1616,6 +1616,9 @@ function IndividualReport() {
   .footer-liveu-name{font-size:9.5px;font-weight:700;color:#1565a8}
   </style>${pagesHtml.join("")}`;
       document.body.appendChild(wrapper);
+      await new Promise(r => setTimeout(r, 600));
+      wrapper.style.opacity = "1";
+      await new Promise(r => setTimeout(r, 200));
       const safeMonth = `${getMonthName(month)}-${year}`.replace(/\s+/g, "-");
       const outFile = empIds.length === 1
         ? `attendance-${employees.find((e: any) => String(e.id) === empIds[0])?.employeeId || "employee"}-${safeMonth}.pdf`
@@ -1625,7 +1628,7 @@ function IndividualReport() {
           margin: 8,
           filename: outFile,
           image: { type: "jpeg", quality: 0.97 },
-          html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollX: 0, scrollY: 0 },
+          html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollX: 0, scrollY: 0, windowWidth: 1123 },
           jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
           pagebreak: { mode: ["css", "legacy"] },
         }).from(wrapper).save();
