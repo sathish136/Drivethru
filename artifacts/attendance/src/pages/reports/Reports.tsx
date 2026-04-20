@@ -368,7 +368,13 @@ function MultiEmployeeSelect({
 
 /* ══════════════════════════════════════════════════════════ */
 export default function Reports() {
-  const [tab, setTab] = useState<Tab>("attendance");
+  const params = useMemo(() => new URLSearchParams(window.location.search), []);
+  const initialTab = (params.get("tab") as Tab) || "attendance";
+  const initialEmp = params.get("emp") || "";
+  const initialMonth = params.get("month") ? Number(params.get("month")) : undefined;
+  const initialYear  = params.get("year")  ? Number(params.get("year"))  : undefined;
+
+  const [tab, setTab] = useState<Tab>(initialTab);
   return (
     <div className="space-y-4">
       <PageHeader title="Reports" description="Detailed attendance, monthly, overtime and payroll reports." />
@@ -389,9 +395,9 @@ export default function Reports() {
         ))}
       </div>
       {tab==="attendance" && <AttendanceReport/>}
-      {tab==="monthly"    && <MonthlyReport/>}
+      {tab==="monthly"    && <MonthlyReport initialEmpName={initialEmp} initialMonth={initialMonth} initialYear={initialYear}/>}
       {tab==="individual" && <IndividualReport/>}
-      {tab==="overtime"   && <OvertimeReport/>}
+      {tab==="overtime"   && <OvertimeReport initialEmpName={initialEmp} initialMonth={initialMonth} initialYear={initialYear}/>}
       {tab==="payroll"    && <PayrollReport/>}
     </div>
   );
@@ -740,14 +746,14 @@ function AttendanceReport() {
 /* ══════════════════════════════════════════════════════════
    MONTHLY REPORT
 ══════════════════════════════════════════════════════════ */
-function MonthlyReport() {
+function MonthlyReport({ initialEmpName="", initialMonth, initialYear }: { initialEmpName?: string; initialMonth?: number; initialYear?: number }) {
   const now = new Date();
-  const [month, setMonth]           = useState(now.getMonth()+1);
-  const [year, setYear]             = useState(now.getFullYear());
+  const [month, setMonth]           = useState(initialMonth ?? now.getMonth()+1);
+  const [year, setYear]             = useState(initialYear  ?? now.getFullYear());
   const [branchId, setBranchId]     = useState("");
   const [empType, setEmpType]       = useState("");
   const [department, setDepartment] = useState("");
-  const [empName, setEmpName]       = useState("");
+  const [empName, setEmpName]       = useState(initialEmpName);
 
   const { rules: hrRules } = useHrRules();
   function getEmpRemarks(e: any): string {
@@ -920,13 +926,19 @@ function MonthlyReport() {
 /* ══════════════════════════════════════════════════════════
    OVERTIME REPORT
 ══════════════════════════════════════════════════════════ */
-function OvertimeReport() {
+function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { initialEmpName?: string; initialMonth?: number; initialYear?: number }) {
   const now = new Date();
-  const [startDate, setStartDate] = useState(new Date(now.getFullYear(),now.getMonth(),1).toISOString().split("T")[0]);
-  const [endDate, setEndDate]     = useState(now.toISOString().split("T")[0]);
+  const defStart = (initialMonth && initialYear)
+    ? `${initialYear}-${String(initialMonth).padStart(2,"0")}-01`
+    : new Date(now.getFullYear(),now.getMonth(),1).toISOString().split("T")[0];
+  const defEnd = (initialMonth && initialYear)
+    ? new Date(initialYear, initialMonth, 0).toISOString().split("T")[0]
+    : now.toISOString().split("T")[0];
+  const [startDate, setStartDate] = useState(defStart);
+  const [endDate, setEndDate]     = useState(defEnd);
   const [branchId, setBranchId]   = useState("");
   const [empType, setEmpType]     = useState("");
-  const [empName, setEmpName]     = useState("");
+  const [empName, setEmpName]     = useState(initialEmpName);
 
   const dStart  = useDebounce(startDate, 400);
   const dEnd    = useDebounce(endDate, 400);

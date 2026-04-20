@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Calendar as CalendarIcon, Clock, X, AlertTriangle, CheckCircle2, ClipboardEdit } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, X, AlertTriangle, CheckCircle2, ClipboardEdit, BarChart2, Timer } from "lucide-react";
 import { PageHeader, Card, Select } from "@/components/ui";
 import { useMonthlySheet } from "@/hooks/use-attendance";
 import { cn } from "@/lib/utils";
@@ -703,6 +703,7 @@ export default function MonthlySheet() {
                   <th className="px-2 py-2.5 bg-amber-50 text-amber-600 font-bold border-b border-border text-center min-w-[36px]">L</th>
                   <th className="px-3 py-2.5 bg-blue-50 text-blue-700 font-bold border-b border-border text-center min-w-[60px]">Total Hrs</th>
                   <th className="px-3 py-2.5 bg-orange-50 text-orange-700 font-bold border-b border-border text-center min-w-[56px]">OT Hrs</th>
+                  <th className="px-3 py-2.5 bg-indigo-50 text-indigo-700 font-bold border-b border-border text-center min-w-[80px]">Reports</th>
                 </tr>
               </thead>
               <tbody>
@@ -772,6 +773,24 @@ export default function MonthlySheet() {
                       row.overtimeHours > 0 ? "text-orange-600" : "text-muted-foreground"
                     )}>
                       {row.overtimeHours > 0 ? fmtHrs(row.overtimeHours) : "—"}
+                    </td>
+                    <td className="px-2 py-1.5 text-center bg-indigo-50/20">
+                      <div className="flex flex-col gap-1 items-center">
+                        <a
+                          href={`${BASE}/reports?tab=monthly&emp=${encodeURIComponent(row.employeeName)}&month=${month}&year=${year}`}
+                          title="View Monthly Report"
+                          className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors whitespace-nowrap"
+                        >
+                          <BarChart2 className="w-3 h-3" />Monthly
+                        </a>
+                        <a
+                          href={`${BASE}/reports?tab=overtime&emp=${encodeURIComponent(row.employeeName)}&month=${month}&year=${year}`}
+                          title="View OT Report"
+                          className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 hover:bg-orange-200 transition-colors whitespace-nowrap"
+                        >
+                          <Timer className="w-3 h-3" />OT
+                        </a>
+                      </div>
                     </td>
                   </tr>
                 ))}
