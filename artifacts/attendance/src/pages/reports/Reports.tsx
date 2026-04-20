@@ -104,7 +104,7 @@ async function printReport(opts: {
     `<div class="meta-item"><span class="meta-label">${m.label}</span><span class="meta-value">${m.value}</span></div>`
   ).join("");
   const wrapper = document.createElement("div");
-  wrapper.style.cssText = "position:fixed;top:-20000px;left:-20000px;width:1123px;background:#fff";
+  wrapper.style.cssText = "position:absolute;top:0;left:-9999px;width:1123px;background:#fff";
   wrapper.innerHTML = `<style>
   *{box-sizing:border-box;margin:0;padding:0}
   body,div{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;background:#fff;font-size:10.5px}
@@ -159,7 +159,7 @@ async function printReport(opts: {
       margin: 8,
       filename: filename || `${title.replace(/\s+/g, "-")}.pdf`,
       image: { type: "jpeg", quality: 0.97 },
-      html2canvas: { scale: 2, useCORS: true, logging: false },
+      html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollX: 0, scrollY: 0 },
       jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
     }).from(wrapper).save();
   } finally {
@@ -1577,7 +1577,7 @@ function IndividualReport() {
       if (pagesHtml.length === 0) { alert("No data available for the selected employees."); return; }
 
       const wrapper = document.createElement("div");
-      wrapper.style.cssText = "position:fixed;top:-20000px;left:-20000px;width:1123px;background:#fff";
+      wrapper.style.cssText = "position:absolute;top:0;left:-9999px;width:1123px;background:#fff";
       wrapper.innerHTML = `<style>
   *{box-sizing:border-box;margin:0;padding:0}
   div,span,td,th{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:10.5px}
@@ -1615,7 +1615,7 @@ function IndividualReport() {
           margin: 8,
           filename: outFile,
           image: { type: "jpeg", quality: 0.97 },
-          html2canvas: { scale: 2, useCORS: true, logging: false },
+          html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollX: 0, scrollY: 0 },
           jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
           pagebreak: { mode: ["css", "legacy"] },
         }).from(wrapper).save();
