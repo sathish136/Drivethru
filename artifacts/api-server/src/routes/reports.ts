@@ -351,6 +351,79 @@ router.get("/attendance", async (req, res) => {
 
     if (startDate) enriched = enriched.filter(r => r.rec.date >= (startDate as string));
     if (endDate) enriched = enriched.filter(r => r.rec.date <= (endDate as string));
+
+    /* ── Synthesize unworked Day-Off rows ──────────────────────────────
+       Attendance records only exist for days the employee actually punched.
+       Without this synthesis, rostered off-days where no one came in are
+       invisible to the report (Day Off summary stays at 0).  Generate a
+       virtual record for every (employee × date in range) combination that
+       is a rostered off-day AND has no real attendance row. */
+    if (startDate && endDate) {
+      const allEmps = await db.select({
+        id: employees.id, fullName: employees.fullName, employeeCode: employees.employeeId,
+        designation: employees.designation, department: employees.department,
+        branchId: employees.branchId, shiftId: employees.shiftId,
+      }).from(employees);
+      const branchRows = await db.select().from(branches);
+      const branchNameById = new Map(branchRows.map(b => [b.id, b.name]));
+
+      const seen = new Set(enriched.map(r => `${r.rec.employeeId}|${r.rec.date}`));
+      const dates: string[] = [];
+      const start = new Date(startDate as string + "T00:00:00Z");
+      const end = new Date(endDate as string + "T00:00:00Z");
+      for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+        dates.push(d.toISOString().slice(0, 10));
+      }
+
+      for (const emp of allEmps) {
+        const wo = empWeekoffById.get(emp.id);
+        if (!wo || !wo.offDays || wo.offDays.length === 0) continue;
+        const baseShift = emp.shiftId ? shiftMap.get(emp.shiftId) ?? undefined : undefined;
+        for (const date of dates) {
+          if (seen.has(`${emp.id}|${date}`)) continue;
+          const dow = new Date(date + "T00:00:00Z").getUTCDay();
+          if (!wo.offDays.includes(dow)) continue;
+
+          const empShift = baseShift ? resolveDayShift(baseShift, date, shiftsByName as any) : undefined;
+          const sr = processSalaryRow({
+            date,
+            shift: { name: empShift?.name, startTime: empShift?.startTime1, endTime: empShift?.endTime1 },
+            weekoff: wo,
+            rec: { date, inTime1: null, outTime1: null, inTime2: null, outTime2: null, totalHours: 0 },
+          });
+
+          enriched.push({
+            rec: {
+              id: -1,
+              employeeId: emp.id,
+              branchId: emp.branchId,
+              date,
+              status: "off_day",
+              leaveType: null,
+              inTime1: null, outTime1: null, workHours1: null,
+              inTime2: null, outTime2: null, workHours2: null,
+              totalHours: 0, overtimeHours: 0,
+              source: "system" as const,
+              approvalStatus: null, approvedBy: null, approvalNote: null,
+              remarks: null,
+              createdAt: new Date(), updatedAt: new Date(),
+            },
+            empName: emp.fullName,
+            empCode: emp.employeeCode,
+            empDesignation: emp.designation,
+            empDepartment: emp.department,
+            empShiftId: emp.shiftId,
+            branchName: branchNameById.get(emp.branchId) ?? "",
+            _rule: findRule(hrRules, emp.department || "", baseShift?.name),
+            _empShift: empShift,
+            _date: date,
+            _salaryRow: sr,
+            effectiveStatus: "off_day",
+          } as any);
+        }
+      }
+    }
+
     if (branchId) enriched = enriched.filter(r => r.rec.branchId === Number(branchId));
     if (employeeId) enriched = enriched.filter(r => r.rec.employeeId === Number(employeeId));
     if (status) enriched = enriched.filter(r => r.effectiveStatus === status);

@@ -321,9 +321,13 @@ export function processSalaryRow(opts: {
   //
   //   Week off:
   //     no punches          → DAY OFF (WEEK_OFF)
-  //     punches present     → WEEK_OFF_WORKED
-  const PRESENT_THRESHOLD_HRS = 7.75; // 7:45 grace
-  const HALFDAY_THRESHOLD_HRS = 4;
+  //     punches present     → classified by hours, weekOffWorked = true
+  //
+  // Thresholds compared in MINUTES to avoid floating-point drift —
+  // 7:45 = 465 min, 4:00 = 240 min.
+  const PRESENT_THRESHOLD_MINS = 7 * 60 + 45; // 465
+  const HALFDAY_THRESHOLD_MINS = 4 * 60;      // 240
+  const workedMinutes = Math.round(workedHoursRaw * 60);
 
   const punchCount =
     (rec?.inTime1 ? 1 : 0) +
@@ -347,11 +351,11 @@ export function processSalaryRow(opts: {
   } else if (punchCount === 1) {
     // Only one punch in the day — cannot compute hours → flag for review.
     dayType = "INVALID";
-  } else if (workedHoursRaw < HALFDAY_THRESHOLD_HRS) {
+  } else if (workedMinutes < HALFDAY_THRESHOLD_MINS) {
     dayType = "ABSENT";
   } else if (isHalfDayScheduled || category === "HALF_DAY") {
     dayType = "HALF_DAY";
-  } else if (workedHoursRaw < PRESENT_THRESHOLD_HRS) {
+  } else if (workedMinutes < PRESENT_THRESHOLD_MINS) {
     dayType = "HALF_DAY";
   } else {
     dayType = "WORKING_DAY";
@@ -488,20 +492,17 @@ function buildRemarks(args: {
   if (dayType === "WEEK_OFF") {
     return "Week Off - Not worked";
   }
+  // Note: weekOffWorked is intentionally NOT mixed into remarks — it is
+  // exposed as a structured field on the row.  Remarks stay human-readable.
   if (dayType === "ABSENT") {
-    return weekOffWorked
-      ? `${label} - Absent / Week Off - Worked`
-      : `${label} - Absent`;
+    return `${label} - Absent`;
   }
   if (dayType === "INVALID") {
-    parts.push(`${label} - Missing Punch - Need Review`);
-    if (weekOffWorked) parts.push("Week Off - Worked");
-    return parts.join(" / ");
+    return `${label} - Missing Punch - Need Review`;
   }
   if (dayType === "HALF_DAY") {
     parts.push(`${label} - Half Day Completed`);
     if (lateMinutes > 0) parts.push(`Late by ${fmtDuration(lateMinutes)}`);
-    if (weekOffWorked) parts.push("Week Off - Worked");
     return parts.join(" / ");
   }
 
@@ -542,7 +543,6 @@ function buildRemarks(args: {
 
   if (graceApplied.lunch) parts.push("Lunch grace applied");
   if (graceApplied.checkout) parts.push("Checkout grace applied");
-  if (weekOffWorked) parts.push("Week Off - Worked");
 
   return parts.join(" / ");
 }
