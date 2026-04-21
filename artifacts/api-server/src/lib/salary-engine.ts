@@ -492,17 +492,20 @@ function buildRemarks(args: {
   if (dayType === "WEEK_OFF") {
     return "Week Off - Not worked";
   }
-  // Note: weekOffWorked is intentionally NOT mixed into remarks — it is
-  // exposed as a structured field on the row.  Remarks stay human-readable.
   if (dayType === "ABSENT") {
-    return `${label} - Absent`;
+    return weekOffWorked
+      ? `${label} - Absent / Week Off - Worked`
+      : `${label} - Absent`;
   }
   if (dayType === "INVALID") {
-    return `${label} - Missing Punch - Need Review`;
+    return weekOffWorked
+      ? `${label} - Missing Punch - Need Review / Week Off - Worked`
+      : `${label} - Missing Punch - Need Review`;
   }
   if (dayType === "HALF_DAY") {
     parts.push(`${label} - Half Day Completed`);
     if (lateMinutes > 0) parts.push(`Late by ${fmtDuration(lateMinutes)}`);
+    if (weekOffWorked) parts.push("Week Off - Worked");
     return parts.join(" / ");
   }
 
@@ -543,6 +546,7 @@ function buildRemarks(args: {
 
   if (graceApplied.lunch) parts.push("Lunch grace applied");
   if (graceApplied.checkout) parts.push("Checkout grace applied");
+  if (weekOffWorked) parts.push("Week Off - Worked");
 
   return parts.join(" / ");
 }
