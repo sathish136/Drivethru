@@ -2,19 +2,10 @@ import { pgTable, serial, text, integer, boolean, timestamp, real } from "drizzl
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export type ShiftCategory =
-  | "REGULAR"
-  | "RECEPTION"
-  | "NIGHT"
-  | "KITCHEN"
-  | "FLEXIBLE"
-  | "HALF_DAY";
-
 export const shifts = pgTable("shifts", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   type: text("type").notNull().$type<"normal" | "split">(),
-  category: text("category").notNull().$type<ShiftCategory>().default("REGULAR"),
   startTime1: text("start_time1").notNull(),
   endTime1: text("end_time1").notNull(),
   startTime2: text("start_time2"),
