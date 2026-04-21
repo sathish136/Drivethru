@@ -597,7 +597,8 @@ function AttendanceReport() {
       return;
     }
     const singleEmp = new Set(filtered.map((r: any) => r.employeeId)).size === 1;
-    if (singleEmp) {
+    const isNightWatcher = singleEmp && /night\s*watcher/i.test(String(filtered[0]?.shiftName || ""));
+    if (singleEmp && isNightWatcher) {
       const firstRec: any = filtered[0];
       const policyRows = buildNightWatcherPolicyRows();
       if (!policyRows.length) {
@@ -686,7 +687,8 @@ function AttendanceReport() {
       return;
     }
     const singleEmp = new Set(filtered.map((r: any) => r.employeeId)).size === 1;
-    if (singleEmp) {
+    const isNightWatcher = singleEmp && /night\s*watcher/i.test(String(filtered[0]?.shiftName || ""));
+    if (singleEmp && isNightWatcher) {
       const rows = buildNightWatcherPolicyRows().map((r) => {
         // Force Excel to keep date text format and avoid "#####".
         const copied = [...r];
