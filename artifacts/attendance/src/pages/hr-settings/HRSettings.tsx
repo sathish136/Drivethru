@@ -41,6 +41,8 @@ interface ShiftOption  { id: number; name: string; startTime1: string; endTime1:
 
 const BLANK_RULE: DeptShiftRule = {
   id: "", department: "", shift: "", minHours: 9, maxHours: null,
+  // Regular Shift policy defaults: 8:00–17:00 with 15-min late grace
+  // (late deduction after 8:15 am) and OT after 5:30 pm.
   otEligible: true, otAfterHours: 9.5, lateGraceMinutes: 15,
   earlyExitGraceMinutes: 0,
   lunchMinHours: 1, lunchMaxHours: 1,
@@ -49,7 +51,7 @@ const BLANK_RULE: DeptShiftRule = {
   holidayOtMultiplier: 1.5, weeklyLeaveDays: 1, halfDayHours: 5,
   minPresentHours: 8,
   remarks: "", notes: "",
-  otStartTime: null,
+  otStartTime: "17:30",
   nightWatcherMissedPunchDeductHours: null,
   saturdayShiftHours: 5,
   sundayStartTime: null,

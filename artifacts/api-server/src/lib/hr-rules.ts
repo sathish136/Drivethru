@@ -81,6 +81,9 @@ export const DEFAULT_RULE: DeptShiftRule = {
   maxHours: 9,
   otEligible: true,
   otAfterHours: 9.5,
+  // Regular Shift policy: late deduction after 8:15 am (08:00 + 15 min grace)
+  // and OT after 5:30 pm (otStartTime "17:30" engages time-based OT branch).
+  // otStartTime takes precedence; otAfterHours is kept for legacy fallback only.
   lateGraceMinutes: 15,
   // Policy note: "Last check out 5 minutes grace periods"
   // earlyExitGraceMinutes = 0 so the +5 constant in computeEffectiveStatus
@@ -100,10 +103,32 @@ export const DEFAULT_RULE: DeptShiftRule = {
   notes: "Default fallback rule",
   saturdayShiftHours: null,
   sundayStartTime: null,
-  otStartTime: null,
+  otStartTime: "17:30",
   nightWatcherMissedPunchDeductHours: null,
   nightWatcherPayroll: false,
 };
+
+/**
+ * Apply built-in shift policy defaults to a rule.
+ *
+ * Regular Shift (08:00 – 17:00) policy:
+ *   • Late deduction after 8:15 am  → lateGraceMinutes = 15
+ *   • OT begins after 5:30 pm        → otStartTime = "17:30"
+ *
+ * These defaults only fill in fields the saved rule has left blank, so
+ * any HR-configured overrides win.
+ */
+export function applyShiftDefaults(rule: DeptShiftRule, shiftName?: string | null): DeptShiftRule {
+  const s = (shiftName ?? rule.shift ?? "").toLowerCase().trim();
+  const isRegular = s === "regular" || s === "regular shift";
+  if (!isRegular) return rule;
+  return {
+    ...rule,
+    lateGraceMinutes: rule.lateGraceMinutes ?? 15,
+    otStartTime: rule.otStartTime ?? "17:30",
+    otEligible: rule.otEligible !== false,
+  };
+}
 
 /**
  * Load department shift rules from the hr_settings table.
@@ -145,21 +170,21 @@ export function findRule(
       r => r.department.toLowerCase().trim() === dept &&
            r.shift.toLowerCase().trim() === shift,
     );
-    if (both) return both;
+    if (both) return applyShiftDefaults(both, shiftName);
   }
 
   // 2. Exact dept match (first one found)
   const exactDept = rules.find(r => r.department.toLowerCase().trim() === dept);
-  if (exactDept) return exactDept;
+  if (exactDept) return applyShiftDefaults(exactDept, shiftName);
 
   // 3. Partial match
   const partial = rules.find(r => {
     const rd = r.department.toLowerCase().trim();
     return dept.includes(rd) || rd.includes(dept);
   });
-  if (partial) return partial;
+  if (partial) return applyShiftDefaults(partial, shiftName);
 
-  return DEFAULT_RULE;
+  return applyShiftDefaults(DEFAULT_RULE, shiftName);
 }
 
 /** Convert "HH:MM" string to total minutes since midnight */
@@ -286,7 +311,10 @@ export function computeEffectiveStatus(
   if ((st === "present" || st === "late") && rec.totalHours != null) {
     const halfDayHrs    = rule.halfDayHours ?? 5;
     const minPresentHrs = rule.minPresentHours ?? 8;
-    const earlyExitGraceHrs = ((rule.earlyExitGraceMinutes ?? rule.lateGraceMinutes ?? 15) + 5) / 60;
+    // Night Watcher policy: apply only configured Late Grace (no extra +5 min checkout grace)
+    const extraCheckoutGraceMinutes = rule.nightWatcherPayroll ? 0 : 5;
+    const earlyExitGraceHrs =
+      ((rule.earlyExitGraceMinutes ?? rule.lateGraceMinutes ?? 15) + extraCheckoutGraceMinutes) / 60;
 
     const effectiveHalfDayHrs = (isSaturday && rule.saturdayShiftHours != null)
       ? rule.saturdayShiftHours / 2
@@ -375,7 +403,11 @@ export function calcNightWatcherPunchDeduction(
   shiftScheduledHours: number,
   deductHoursPerMissedPunch: number,
 ): number {
-  const expectedPunches = Math.ceil(shiftScheduledHours);
+  // Attendance records in this app store up to 4 punch points for a day
+  // (in1/out1/in2/out2). If we use shift hours (e.g. 9-12) as expected punches,
+  // deductions always exceed possible captured punches and OT becomes zero.
+  // So for this data model, expected punches are capped to 4 slots.
+  const expectedPunches = Math.min(4, Math.max(1, Math.ceil(shiftScheduledHours)));
 
   // Count how many time-stamp slots are actually recorded for this day
   const recordedPunches = [rec.inTime1, rec.outTime1, rec.inTime2, rec.outTime2]
@@ -383,6 +415,72 @@ export function calcNightWatcherPunchDeduction(
 
   const missed = Math.max(0, expectedPunches - recordedPunches);
   return Math.round(missed * deductHoursPerMissedPunch * 100) / 100;
+}
+
+/**
+ * Night Watcher OT policy (discrete hours only).
+ *
+ * Rules:
+ *  - OT window is 05:00 -> 08:00
+ *  - Base OT is determined from final off punch in whole hours (1/2/3)
+ *  - If final out is near/after 08:00 (default >= 07:50), base OT = 3
+ *  - Validate hourly checkpoints 05:00, 06:00, 07:00
+ *  - Deduct 1 hour per missing required checkpoint
+ *  - Final OT is clamped to {0,1,2,3}
+ */
+export function calcNightWatcherPolicyOtHours(
+  rec: {
+    inTime1?: string | null;
+    outTime1?: string | null;
+    inTime2?: string | null;
+    outTime2?: string | null;
+  },
+  options?: {
+    otStartTime?: string;          // default "05:00"
+    otEndTime?: string;            // default "08:00"
+    nearEndGraceMinutes?: number;  // default 10 (>= 07:50 treated as 08:00)
+  },
+): number {
+  const otStart = options?.otStartTime ?? "05:00";
+  const otEnd = options?.otEndTime ?? "08:00";
+  const nearEndGraceMinutes = options?.nearEndGraceMinutes ?? 10;
+
+  const finalOut = rec.outTime2 ?? rec.outTime1;
+  if (!finalOut) return 0;
+
+  const startMins = timeToMins(otStart); // 05:00
+  const endMins = timeToMins(otEnd);     // 08:00
+  const nearEndCutoff = endMins - nearEndGraceMinutes;
+
+  let outMins = timeToMins(finalOut);
+  // Night-shift crossover for after-midnight times
+  if (outMins < startMins) outMins += 24 * 60;
+
+  let baseOt = 0;
+  if (outMins >= nearEndCutoff) baseOt = 3;
+  else if (outMins >= startMins + 120) baseOt = 2; // >= 07:00
+  else if (outMins >= startMins + 60)  baseOt = 1; // >= 06:00
+
+  if (baseOt <= 0) return 0;
+
+  const rawPunches = [rec.inTime1, rec.outTime1, rec.inTime2, rec.outTime2]
+    .filter((t): t is string => !!t && t.trim() !== "");
+  const normalizedPunchMins = rawPunches.map((t) => {
+    let mins = timeToMins(t);
+    if (mins < startMins) mins += 24 * 60;
+    return mins;
+  });
+
+  const checkpoints = [startMins, startMins + 60, startMins + 120]; // 05,06,07
+  let missing = 0;
+  for (let i = 0; i < baseOt; i++) {
+    const cp = checkpoints[i];
+    const hasPunch = normalizedPunchMins.some((p) => p >= cp && p < cp + 60);
+    if (!hasPunch) missing++;
+  }
+
+  const finalOt = Math.max(0, baseOt - missing);
+  return Math.min(3, Math.max(0, Math.round(finalOt)));
 }
 
 /**

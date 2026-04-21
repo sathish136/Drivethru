@@ -497,9 +497,12 @@ export default function SalaryBreakdown() {
 
           {/* Worked example matching the attached report */}
           <div className="bg-white rounded-xl border border-indigo-200 overflow-hidden">
-            <div className="bg-indigo-50 px-4 py-2.5 border-b border-indigo-200">
-              <p className="text-xs font-bold text-indigo-800">Worked Example — Anura Manamperi · February 2026</p>
-              <p className="text-[11px] text-indigo-500">Basic: Rs.32,500 · Worked: 13 PRESENT + 1 HALF DAY · OT: 40.35 hrs</p>
+          <div className="bg-indigo-50 px-4 py-2.5 border-b border-indigo-200">
+            <p className="text-xs font-bold text-indigo-800">Worked Example (Illustration Only) — Anura Manamperi · February 2026</p>
+            <p className="text-[11px] text-indigo-500">Sample values: Basic Rs.32,500 · Worked 13 PRESENT + 1 HALF DAY · OT 40.35 hrs</p>
+            <p className="text-[11px] text-indigo-600 mt-1 font-medium">
+              Actual payroll is always calculated from each employee&apos;s assigned salary structure and policy.
+            </p>
             </div>
             <table className="w-full text-sm">
               <thead>
@@ -513,15 +516,15 @@ export default function SalaryBreakdown() {
               <tbody>
                 {[
                   { section: "BASIC", component: "Monthly Salary",         formula: "",                               amount: "32,500.00",   bold: false },
-                  { section: "",      component: "Per Day Salary",          formula: "32,500 ÷ 30",                    amount: "1,083.33",    bold: false },
+                  { section: "",      component: "Daily Rate",              formula: "32,500 ÷ 30",                    amount: "1,083.33",    bold: false },
                   { section: "",      component: "Leave Days",              formula: "15 − 13.5 worked",               amount: "1.5",         bold: false },
                   { section: "",      component: "Leave Deduction",         formula: "1.5 × 1,083.333",                amount: "1,625.00",    bold: false },
                   { section: "",      component: "Salary After Deduction",  formula: "32,500 − 1,625",                 amount: "30,875.00",   bold: true  },
                   { section: "OT",    component: "OT Hours",                formula: "",                               amount: "40.35",       bold: false },
                   { section: "",      component: "Hourly Rate",             formula: "32,500 ÷ 240",                   amount: "135.42",      bold: false },
                   { section: "",      component: "OT Rate (1.5×)",          formula: "135.42 × 1.5",                   amount: "203.13",      bold: false },
-                  { section: "",      component: "OT Amount",               formula: "40.35 × 203.13",                 amount: "8,196.30",    bold: true  },
-                  { section: "EARNINGS", component: "Salary + OT",         formula: "30,875 + 8,196.30",              amount: "39,071.09",   bold: true  },
+                  { section: "",      component: "OT Amount",               formula: "40.35 × 203.13",                 amount: "8,196.09",    bold: true  },
+                  { section: "EARNINGS", component: "Total Earnings",      formula: "30,875.00 + 8,196.09",           amount: "39,071.09",   bold: true  },
                   { section: "DEDUCTION", component: "EPF Employee (8%)",   formula: "30,875 × 8%",                   amount: "2,470.00",    bold: false },
                   { section: "EMPLOYER",  component: "EPF Employer (12%)",  formula: "30,875 × 12%",                  amount: "3,705.00",    bold: false },
                   { section: "",          component: "ETF (3%)",            formula: "30,875 × 3%",                   amount: "926.25",      bold: false },

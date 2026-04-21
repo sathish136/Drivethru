@@ -40,6 +40,10 @@ Dark sidebar, clean white content area
 7. **Branch Management** - 3-level hierarchy (Head Office → Regional → Sub-branch)
 8. **Payroll Settings** - Statutory contributions, OT multipliers per type (regular, off-day, poya, public holiday), off-season mode, housing tiers, allowances
 9. **HR Settings** - Work time policy, OT grace, deduplication, OT-exempt designations, department rules, lunch rules
+
+### Shift Policies (built-in defaults applied via `applyShiftDefaults` in `lib/hr-rules.ts`)
+- **Regular Shift** (08:00 – 17:00) — late deduction after 8:15 am (15-min grace), OT after 5:30 pm (time-based via `otStartTime: "17:30"`).
+- **Night Watcher Shift** — discrete OT policy (3/2/1/0 hours) in 05:00–08:00 window; payroll uses 30-day basis with 15 scheduled shifts.
 10. **Leave Balances** - Annual & casual leave tracking, 1.5 days/week accrual, manual override (`/leave-balances`)
 11. **Reports** - Attendance, monthly, overtime reports
 12. **Biometric Devices** - ZKTeco ZK Push ADMS setup, device management, push logs

@@ -9,7 +9,7 @@ import { eq, and, inArray } from "drizzle-orm";
 import {
   loadDeptRules, findRule, effectiveHours, calcOtHours, lateCutoffMins,
   timeToMins, calcLunchLateMinutes, calcTimeBasedOtHours,
-  calcNightWatcherPunchDeduction, isNightShiftRecord,
+  isNightShiftRecord, calcNightWatcherPolicyOtHours,
 } from "../lib/hr-rules.js";
 
 const STATUTORY_NAMES = ["EPF – Employee", "EPF – Employer", "ETF"];
@@ -505,17 +505,14 @@ router.post("/generate", async (req, res) => {
             } else {
               const lastCheckout = rec.outTime2 ?? rec.outTime1;
               ot = calcTimeBasedOtHours(lastCheckout, rule.otStartTime, isNightShift);
-              // Night Watcher: cap at 3h, apply missed-punch deduction
-              if (rule.nightWatcherMissedPunchDeductHours != null) {
-                if (ot > 0) {
-                  const punchDeduct = calcNightWatcherPunchDeduction(
-                    rec, scheduledShiftHours, rule.nightWatcherMissedPunchDeductHours,
-                  );
-                  ot = Math.max(0, ot - punchDeduct);
-                }
-                ot = Math.min(3, ot);
+              if (isNightWatcherPayroll) {
+                // Night Watcher final OT policy: discrete hours only (3/2/1/0).
+                ot = calcNightWatcherPolicyOtHours(rec, {
+                  otStartTime: "05:00",
+                  otEndTime: "08:00",
+                  nearEndGraceMinutes: 10,
+                });
               } else {
-                // Kitchen weekdays: cap at 3h
                 ot = Math.min(3, ot);
               }
             }

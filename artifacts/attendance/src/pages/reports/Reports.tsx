@@ -5,7 +5,6 @@ import { cn } from "@/lib/utils";
 import { Users, Clock, Calendar, Banknote, FileText, ChevronDown, X, Eye, Printer } from "lucide-react";
 import drivethruLogo from "@/assets/drivethru-logo.png";
 import liveuLogo from "@/assets/liveu-logo.png";
-import html2pdf from "html2pdf.js";
 
 interface DeptShiftRule {
   id: string; department: string; shift: string;
@@ -100,17 +99,26 @@ async function printReport(opts: {
   filename?: string;
 }) {
   const { title, meta, tableHtml, filename } = opts;
+  if (!tableHtml || tableHtml.trim().length === 0) {
+    throw new Error("Report table is empty.");
+  }
   const metaHtml = meta.map(m =>
     `<div class="meta-item"><span class="meta-label">${m.label}</span><span class="meta-value">${m.value}</span></div>`
   ).join("");
-  const wrapper = document.createElement("div");
-  wrapper.style.cssText = "position:absolute;top:0;left:-9999px;width:1123px;background:#fff";
-  wrapper.innerHTML = `<style>
+  const drivethruLogoUrl = /^https?:\/\//.test(drivethruLogo)
+    ? drivethruLogo
+    : `${window.location.origin}${drivethruLogo}`;
+  const liveuLogoUrl = /^https?:\/\//.test(liveuLogo)
+    ? liveuLogo
+    : `${window.location.origin}${liveuLogo}`;
+  const safeTitle = (filename || title || "report").replace(/[\\/:*?"<>|]+/g, "-");
+  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${safeTitle}</title><style>
+  @page{size:A4 landscape;margin:8mm}
   *{box-sizing:border-box;margin:0;padding:0}
-  body,div{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;background:#fff;font-size:10.5px}
+  body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;background:#fff;font-size:10.5px}
   .header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px 12px;border-bottom:3px solid #1565a8;background:#f5f8ff}
   .header-left{display:flex;align-items:center;gap:12px}
-  .header-logo{width:46px;height:46px;object-fit:contain;border-radius:12px;background:#fff;padding:4px;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+  .header-logo{width:46px;height:46px;object-fit:contain;border-radius:12px;background:#fff;padding:4px}
   .company{font-size:18px;font-weight:700;color:#1565a8;line-height:1.15}
   .company-sub{font-size:9.5px;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-top:1px}
   .header-right{text-align:right}
@@ -132,10 +140,10 @@ async function printReport(opts: {
   .footer-powered{font-size:9px;color:#9ca3af}
   .footer-liveu{height:20px;object-fit:contain;opacity:.85}
   .footer-liveu-name{font-size:9.5px;font-weight:700;color:#1565a8;letter-spacing:.02em}
-  </style>
+  </style></head><body>
   <div class="header">
     <div class="header-left">
-      <img src="${drivethruLogo}" class="header-logo" alt="Drivethru"/>
+      <img src="${drivethruLogoUrl}" class="header-logo" alt="Drivethru"/>
       <div><div class="company">Drivethru Pvt Ltd</div><div class="company-sub">Attendance Management System</div></div>
     </div>
     <div class="header-right">
@@ -149,21 +157,24 @@ async function printReport(opts: {
     <div class="footer-note">System-generated report. For internal use only. © ${new Date().getFullYear()} Drivethru Pvt Ltd</div>
     <div class="footer-right">
       <span class="footer-powered">Powered by</span>
-      <img src="${liveuLogo}" class="footer-liveu" alt="Live U Pvt Ltd"/>
+      <img src="${liveuLogoUrl}" class="footer-liveu" alt="Live U Pvt Ltd"/>
       <span class="footer-liveu-name">Live U Pvt Ltd</span>
     </div>
-  </div>`;
-  document.body.appendChild(wrapper);
+  </div></body></html>`;
   try {
-    await html2pdf().set({
-      margin: 8,
-      filename: filename || `${title.replace(/\s+/g, "-")}.pdf`,
-      image: { type: "jpeg", quality: 0.97 },
-      html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollX: 0, scrollY: 0 },
-      jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
-    }).from(wrapper).save();
-  } finally {
-    document.body.removeChild(wrapper);
+    const blob = new Blob([fullHtml], { type: "text/html" });
+    if (blob.size <= 0) throw new Error("Generated report HTML is empty.");
+    const blobUrl = URL.createObjectURL(blob);
+    const printWin = window.open(blobUrl, "_blank");
+    if (!printWin) throw new Error("Popup blocked while opening print preview.");
+    printWin.addEventListener("load", () => {
+      setTimeout(() => printWin.print(), 400);
+    });
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  } catch (err) {
+    console.error("PDF export failed:", err);
+    alert("PDF export failed. Please try again after filtering valid records.");
+    throw err;
   }
 }
 
@@ -451,6 +462,19 @@ function AttendanceReport() {
   ), [data, empType, department, empName]);
 
   const HEADERS = ["Date","Emp ID","Employee","Department","Branch","Designation","Status","In 1","Out 1 (Lunch)","In 2 (After Lunch)","Out 2","Lunch Break","Total Hrs","Late","OT Hrs","Remarks"];
+  const NIGHT_WATCHER_POLICY_HEADERS = [
+    "Date",
+    "Day",
+    "Status",
+    "Shift",
+    "Morning In",
+    "Morning Out",
+    "Afternoon In",
+    "Actual Off Punch",
+    "Current Total",
+    "Policy OT by Off Time",
+    "Policy Remark",
+  ];
 
   function calcMins(inT: string|null, outT: string|null): number {
     if (!inT || !outT) return 0;
@@ -473,8 +497,91 @@ function AttendanceReport() {
     const [ih,im] = r.inTime2.split(":").map(Number);
     return Math.max(0,(ih*60+im)-(oh*60+om));
   }
+  function toDdMmYyyy(dateStr: string): string {
+    const [y, m, d] = dateStr.split("-");
+    return `${d}-${m}-${y}`;
+  }
+  function otHoursToPolicy(otHours: number): string {
+    if (!otHours || otHours <= 0) return "—";
+    // Night Watcher final OT is discrete only: 0h,1h,2h,3h.
+    const discrete = Math.max(0, Math.min(3, Math.round(otHours)));
+    return `${discrete}:00 hrs`;
+  }
+  function policyRemark(status: string, otHours: number): string {
+    if (status === "no_record") return "No punch data";
+    if (status === "half_day") return "Half day record; needs manual check against normal night shift policy";
+    if (status === "absent") return "Absent/invalid against policy shift; manual review needed";
+    if (otHours <= 0) return "No OT eligible by off time";
+    const discrete = Math.max(0, Math.min(3, Math.round(otHours)));
+    if (discrete >= 3) return "All hourly checkpoints satisfied (05:00/06:00/07:00)";
+    return `${discrete}:00 hrs after missed hourly checkpoint deduction`;
+  }
+  function buildNightWatcherPolicyRows() {
+    if (!filtered.length) return [] as (string | number)[][];
+    const first = filtered[0];
+    const shift = first.shiftName || "—";
+    const mapByDate = new Map(filtered.map((r: any) => [r.date, r]));
+    const [sy, sm, sd] = dStart.split("-").map(Number);
+    const [ey, em, ed] = dEnd.split("-").map(Number);
+    const start = new Date(Date.UTC(sy, sm - 1, sd));
+    const end = new Date(Date.UTC(ey, em - 1, ed));
+    const rows: (string | number)[][] = [];
+    for (let dt = new Date(start); dt <= end; dt.setUTCDate(dt.getUTCDate() + 1)) {
+      const dateStr = dt.toISOString().slice(0, 10);
+      const day = DAY_NAMES[dt.getUTCDay()];
+      const r = mapByDate.get(dateStr);
+      if (!r) {
+        rows.push([toDdMmYyyy(dateStr), day, "No record", shift, "—", "—", "—", "—", "—", "—", policyRemark("no_record", 0)]);
+        continue;
+      }
+      const st = r.status;
+      const statusLabel = st === "late" ? "PRESENT" : st === "half_day" ? "HALF DAY" : st === "off_day" ? "DAY OFF" : st.replace("_", " ").toUpperCase();
+      const offPunch = r.outTime2 || r.outTime1 || "—";
+      rows.push([
+        toDdMmYyyy(dateStr),
+        day,
+        statusLabel,
+        r.shiftName || shift,
+        r.inTime1 || "—",
+        r.outTime1 || "—",
+        r.inTime2 || "—",
+        offPunch,
+        fmtTotal(r.totalHours),
+        otHoursToPolicy(r.overtimeHours || 0),
+        policyRemark(st, r.overtimeHours || 0),
+      ]);
+    }
+    return rows;
+  }
 
   const handleExport = async () => {
+    if (!filtered.length) {
+      alert("No records found for selected filters. Nothing to export.");
+      return;
+    }
+    const singleEmp = new Set(filtered.map((r: any) => r.employeeId)).size === 1;
+    if (singleEmp) {
+      const firstRec: any = filtered[0];
+      const policyRows = buildNightWatcherPolicyRows();
+      if (!policyRows.length) {
+        alert("No policy rows available for export.");
+        return;
+      }
+      const theadPolicy = `<tr>${NIGHT_WATCHER_POLICY_HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
+      const tbodyPolicy = policyRows.map((row) => `<tr>${row.map((c) => `<td>${String(c)}</td>`).join("")}</tr>`).join("");
+      await printReport({
+        title: "Attendance Report (Policy Format)",
+        meta: [
+          { label: "Period", value: `${dStart} – ${dEnd}` },
+          { label: "Employee", value: firstRec?.employeeName || "—" },
+          { label: "Emp ID", value: firstRec?.employeeCode || "—" },
+          { label: "Department", value: firstRec?.department || "—" },
+          { label: "Branch", value: firstRec?.branchName || "—" },
+        ],
+        tableHtml: `<table><thead>${theadPolicy}</thead><tbody>${tbodyPolicy}</tbody></table>`,
+      });
+      return;
+    }
     const present  = filtered.filter((r: any) => r.status === "present" || r.status === "late").length;
     const absent   = filtered.filter((r: any) => r.status === "absent").length;
     const late     = filtered.filter((r: any) => r.status === "late").length;
@@ -537,6 +644,21 @@ function AttendanceReport() {
   };
 
   const handleExportExcel = () => {
+    if (!filtered.length) {
+      alert("No records found for selected filters. Nothing to export.");
+      return;
+    }
+    const singleEmp = new Set(filtered.map((r: any) => r.employeeId)).size === 1;
+    if (singleEmp) {
+      const rows = buildNightWatcherPolicyRows().map((r) => {
+        // Force Excel to keep date text format and avoid "#####".
+        const copied = [...r];
+        copied[0] = `'${String(copied[0])}`;
+        return copied;
+      });
+      exportCsv(NIGHT_WATCHER_POLICY_HEADERS, rows, `attendance-policy-${dStart}-${dEnd}.csv`);
+      return;
+    }
     const rows = filtered.map((r: any) => {
       const s1m = calcMins(r.inTime1, r.outTime1);
       const s2m = calcMins(r.inTime2, r.outTime2);
@@ -1407,7 +1529,7 @@ function IndividualReport() {
 
   const { data, isLoading } = useGetAttendanceReport(
     { startDate, endDate, employeeId: activeEmpId ? Number(activeEmpId) : undefined },
-    { query: { enabled: !!activeEmpId && showReport } }
+    { enabled: !!activeEmpId && showReport } as any
   );
 
   const records: any[] = useMemo(() => (data?.records || []).sort((a: any, b: any) => a.date.localeCompare(b.date)), [data]);

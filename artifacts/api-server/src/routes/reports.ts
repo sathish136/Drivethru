@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { attendanceRecords, employees, branches, shifts } from "@workspace/db/schema";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 import { getDaysInMonth, today } from "../lib/helpers.js";
-import { loadDeptRules, findRule, timeToMins, calcLunchLateMinutes, lateCutoffMins, calcOtHours, calcTimeBasedOtHours, calcNightWatcherPunchDeduction, isNightShiftRecord, DeptShiftRule } from "../lib/hr-rules.js";
+import { loadDeptRules, findRule, timeToMins, calcLunchLateMinutes, lateCutoffMins, calcOtHours, calcTimeBasedOtHours, isNightShiftRecord, DeptShiftRule, calcNightWatcherPolicyOtHours } from "../lib/hr-rules.js";
 
 const router = Router();
 
@@ -121,16 +121,12 @@ function computeRecordOt(
 
   // ── Night Watcher payroll mode: always use time-based OT from 05:00 ──────
   if (rule.nightWatcherPayroll) {
-    const nwOtStart = rule.otStartTime ?? "05:00";
-    const lastCheckout = rec.outTime2 ?? rec.outTime1;
-    let ot = calcTimeBasedOtHours(lastCheckout, nwOtStart, true);
-    if (rule.nightWatcherMissedPunchDeductHours != null && ot > 0) {
-      const deduction = calcNightWatcherPunchDeduction(
-        rec, rule.minHours ?? 9, rule.nightWatcherMissedPunchDeductHours,
-      );
-      ot = Math.max(0, ot - deduction);
-    }
-    return Math.round(Math.min(3, ot) * 100) / 100;
+    // Night Watcher final OT policy: discrete hours (3/2/1/0), no decimal OT.
+    return calcNightWatcherPolicyOtHours(rec, {
+      otStartTime: "05:00",
+      otEndTime: "08:00",
+      nearEndGraceMinutes: 10,
+    });
   }
 
   if (!rule.otEligible) return 0;
@@ -152,15 +148,15 @@ function computeRecordOt(
 
     let ot = calcTimeBasedOtHours(lastCheckout, rule.otStartTime, isNight);
 
+    // Keep cap for time-based OT.
+    ot = Math.min(3, ot);
+    // If this rule is Night Watcher-like (hourly deduction configured), apply discrete policy OT.
     if (rule.nightWatcherMissedPunchDeductHours != null) {
-      // Night Watcher: deduct for missed hourly punches, cap at 3 h
-      const shiftHrs = rule.minHours ?? 9;
-      const deduction = calcNightWatcherPunchDeduction(rec, shiftHrs, rule.nightWatcherMissedPunchDeductHours);
-      ot = Math.max(0, ot - deduction);
-      ot = Math.min(3, ot);
-    } else {
-      // Kitchen weekdays: cap at 3 h
-      ot = Math.min(3, ot);
+      return calcNightWatcherPolicyOtHours(rec, {
+        otStartTime: "05:00",
+        otEndTime: "08:00",
+        nearEndGraceMinutes: 10,
+      });
     }
     return Math.round(ot * 100) / 100;
   }
@@ -218,8 +214,10 @@ function getEffectiveStatus(
   if ((st === "present" || st === "late") && rec.totalHours != null) {
     const halfDayHrs = rule.halfDayHours ?? 5;
     const minPresentHrs = rule.minPresentHours ?? 8;
-    // Add 5-minute policy checkout grace on top of the rule's own early-exit grace
-    const earlyExitGraceHrs = ((rule.earlyExitGraceMinutes ?? rule.lateGraceMinutes ?? 15) + 5) / 60;
+    // Night Watcher policy: apply only configured Late Grace (no extra +5 min checkout grace)
+    const extraCheckoutGraceMinutes = rule.nightWatcherPayroll ? 0 : 5;
+    const earlyExitGraceHrs =
+      ((rule.earlyExitGraceMinutes ?? rule.lateGraceMinutes ?? 15) + extraCheckoutGraceMinutes) / 60;
 
     // Saturday short-shift: if the rule declares a shorter Saturday schedule,
     // treat that as the full day (present threshold = saturdayShiftHours - grace).
