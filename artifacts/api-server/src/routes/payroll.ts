@@ -11,6 +11,7 @@ import {
   timeToMins, calcLunchLateMinutes, calcTimeBasedOtHours,
   isNightShiftRecord, calcNightWatcherPolicyOtHours,
 } from "../lib/hr-rules.js";
+import { processSalaryRow, type WeekOffInfo } from "../lib/salary-engine.js";
 
 const STATUTORY_NAMES = ["EPF – Employee", "EPF – Employer", "ETF"];
 
@@ -294,6 +295,37 @@ router.post("/generate", async (req, res) => {
       /* Late cutoff based on shift start + rule grace period */
       const lateCutoff = lateCutoffMins(rule, shiftStart1);
 
+      /* ── Salary-engine row cache (per-record policy results) ──
+       * Drives morning-late minutes and OT hours from the approved shift policy
+       * (Regular / Reception / Kitchen / Flexible / Night Watcher / Week-off).
+       * Single source of truth shared with /api/reports/attendance. */
+      const empWeekoffInfo: WeekOffInfo | null =
+        (empOffDays.length > 0 || empHalfDays.length > 0)
+          ? { offDays: empOffDays, halfDays: empHalfDays }
+          : null;
+      const empShiftInfo = { name: empShiftName, startTime: shiftStart1, endTime: shiftEnd1 };
+      const salaryRowByDate = new Map<string, ReturnType<typeof processSalaryRow>>();
+      const salaryRowFor = (rec: typeof empAtt[number]) => {
+        const cached = salaryRowByDate.get(rec.date);
+        if (cached) return cached;
+        const sr = processSalaryRow({
+          date: rec.date,
+          shift: empShiftInfo,
+          weekoff: empWeekoffInfo,
+          rec: {
+            date: rec.date,
+            inTime1:  rec.inTime1,
+            outTime1: rec.outTime1,
+            inTime2:  rec.inTime2,
+            outTime2: rec.outTime2,
+            totalHours: rec.totalHours,
+            leaveType: (rec as any).leaveType ?? null,
+          },
+        });
+        salaryRowByDate.set(rec.date, sr);
+        return sr;
+      };
+
       const presentRecs    = empAtt.filter(a => a.status === "present" || a.status === "late");
       const absentRecs     = empAtt.filter(a => a.status === "absent");
       const leaveRecs      = empAtt.filter(a => a.status === "leave");
@@ -398,10 +430,10 @@ router.post("/generate", async (req, res) => {
         : 0;
 
       /* ── STANDARD deductions (skipped for Night Watcher) ── */
-      /* Morning late: minutes after cutoff for inTime1 */
-      const morningLateMinutes = (!isNightWatcherPayroll) ? lateRecs.reduce((sum, rec) => {
-        return sum + (timeToMins(rec.inTime1!) - lateCutoff);
-      }, 0) : 0;
+      /* Morning late: per-record from the salary engine (policy-driven cutoff) */
+      const morningLateMinutes = (!isNightWatcherPayroll)
+        ? presentRecs.reduce((sum, rec) => sum + salaryRowFor(rec).lateMinutes, 0)
+        : 0;
       /* Lunch return late: minutes over allocated lunch for ALL present records */
       const lunchLateMinutes = (!isNightWatcherPayroll) ? [...presentRecs, ...lateRecs].reduce((sum, rec) => {
         return sum + calcLunchLateMinutes(rec.outTime1, rec.inTime2, rule);
@@ -482,66 +514,18 @@ router.post("/generate", async (req, res) => {
           if (rawHrs > 0) offDayOtPay += Math.round(dailyRate * ruleOffdayOtMult);
 
         } else if (!recInOffSeason && isOtEligible) {
-          /* ── Regular-day OT — two branches depending on rule configuration ── */
-
-          if (rule.otStartTime) {
-            /* ── BRANCH A: TIME-BASED OT (Kitchen Shift / Night Watcher) ────────
-             *
-             * Policy:
-             *   Kitchen:      "add 3 hr OT after 8:30 pm"  → otStartTime = "20:30"
-             *   Night Watcher:"actual off time 8am, add 3hrs OT" → otStartTime = "05:00"
-             *
-             * Saturday Kitchen exception: they work 8am–1pm (5 hrs).  OT on Saturday
-             * is hours-based (any extra beyond the 5-hr shift), capped at 1 h.
-             * ─────────────────────────────────────────────────────────────────── */
-            const recDayOfWeek = new Date(rec.date + "T00:00:00Z").getUTCDay();
-            const recIsSat = recDayOfWeek === 6;
-            let ot = 0;
-
-            if (recIsSat && rule.saturdayShiftHours != null) {
-              // Saturday short-shift OT: hours beyond (saturdayShiftHours + 0.5h grace), cap 1h
-              const satOtAfter = rule.saturdayShiftHours + 0.5;
-              ot = Math.min(1, Math.max(0, rawHrs - satOtAfter));
-            } else {
-              const lastCheckout = rec.outTime2 ?? rec.outTime1;
-              ot = calcTimeBasedOtHours(lastCheckout, rule.otStartTime, isNightShift);
-              if (isNightWatcherPayroll) {
-                // Night Watcher final OT policy: discrete hours only (3/2/1/0).
-                ot = calcNightWatcherPolicyOtHours(rec, {
-                  otStartTime: "05:00",
-                  otEndTime: "08:00",
-                  nearEndGraceMinutes: 10,
-                });
-              } else {
-                ot = Math.min(3, ot);
-              }
-            }
-
-            if (ot > 0) {
-              regularOtHours += ot;
-              regularOtPay   += Math.round(ot * hourlyRate * ruleOtMult);
-            }
-          } else {
-            /* ── BRANCH B: HOURS-BASED OT (Regular / Flexible / Receptionist) ───
-             *
-             * Policy:
-             *   "OT calculation after 30 minutes"
-             *   Example: shift 8am–5pm, out at 5:45pm → OT = 15 min.
-             *   → otAfterHours = 9.5 (9 shift-hrs + 0.5 hr buffer before OT kicks in)
-             *
-             *   Flexible staff: OT if total hours > 9.5 hrs (otAfterHours = 9.5).
-             *   Receptionist: shift 8:30–5:30 (9 hrs) + 30 min buffer = OT after 6 pm.
-             *
-             * - Exclude early sign-in (time before shift start) per policy.
-             * ─────────────────────────────────────────────────────────────────── */
-            const earlyMins = (rec.inTime1 && shiftStart1 && timeToMins(rec.inTime1) < timeToMins(shiftStart1))
-              ? timeToMins(shiftStart1) - timeToMins(rec.inTime1)
-              : 0;
-            const ot = calcOtHours(rawHrs, rule, earlyMins);
-            if (ot > 0) {
-              regularOtHours += ot;
-              regularOtPay   += Math.round(ot * hourlyRate * ruleOtMult);
-            }
+          /* ── Regular-day OT from the salary-engine policy ──
+           * The engine implements the approved per-shift rules:
+           *   Regular     OT after 17:30, 30-min threshold
+           *   Reception   OT after 18:00, 30-min threshold
+           *   Kitchen     OT after 20:30 (Saturday short-shift handled in engine)
+           *   Flexible    OT only when worked > 9 hrs 30 mins
+           *   Night       Discrete 0/1/2/3 hrs based on hourly punch validation
+           */
+          const ot = salaryRowFor(rec).otHours;
+          if (ot > 0) {
+            regularOtHours += ot;
+            regularOtPay   += Math.round(ot * hourlyRate * ruleOtMult);
           }
         }
       }

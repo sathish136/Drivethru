@@ -1,0 +1,93 @@
+Current attendance app output does NOT fully match the approved shift policy. Fix the payroll and report logic using the existing Shift Name as the only policy driver.
+
+Use this mapping:
+- "Regular Shift" => Regular policy
+- "Receptionist Shift" => Reception policy
+- "Kitchen Shift" and day variants => Kitchen policy
+- "Flexible Shift" => Flexible policy
+- "Night Watcher Shift" => Night policy
+
+Implement these rules exactly:
+
+1. Regular Shift
+- Shift: 08:00 to 17:00
+- Late only after 08:15
+- OT only after 17:30
+- OT counts only after 30-minute threshold
+
+2. Receptionist Shift
+- Shift: 08:30 to 17:30
+- Late only after 08:45
+- OT only after 18:00
+- OT counts only after 30-minute threshold
+
+3. Kitchen Shift
+- Use assigned shift timing by day from shift policy
+- Late only after 15 minutes from assigned start
+- Apply kitchen OT rule after 20:30 as per policy
+- Do not use generic regular-shift OT logic
+- Support Sunday / half-day / special day timing variations
+
+4. Flexible Shift
+- No late deduction
+- OT only if worked hours exceed 9 hours 30 minutes
+- Do not create lunch-based or AM-based late for flexible shift
+
+5. Night Watcher Shift
+- Base shift: 20:00 to 05:00
+- Actual off time allowed until 08:00
+- Default OT = 3 hours
+- Validate hourly punch continuity across the night
+- If 1 hourly block is missed, deduct 1 hour OT
+- If 2 or more hourly blocks are missed, deduct 2 hours OT
+- Never return inconsistent totals like 22:01 hrs or 26:33 hrs for a single shift row
+
+6. Week Off
+- Read employee-specific weekly off from policy/master data
+- Mark rows as WEEK_OFF or WEEK_OFF_WORKED
+- Do not leave day-off logic unused
+
+7. Common grace rules
+- Late grace = 15 minutes
+- OT threshold = 30 minutes
+- Lunch-out adjustment = +10 minutes
+- Last checkout grace = +5 minutes
+- Apply these before final late/OT output
+
+8. Half-day logic
+- Validate against assigned shift/day schedule
+- Do not mark near full-day worked rows as HALF_DAY without rule-based validation
+
+9. Report output must include:
+- Employee
+- Date
+- Shift Name
+- Shift Time
+- Week Off Status
+- First In
+- Last Out
+- Worked Hours
+- Late Minutes
+- OT Hours
+- Day Type
+- Remarks
+
+10. Remarks must be dynamic and payroll-friendly, for example:
+- Regular Shift - Late by 12 mins
+- Regular Shift - OT 1 hr 15 mins
+- Receptionist Shift - Within grace
+- Flexible Shift - No late deduction
+- Flexible Shift - OT applied after 9.30 hrs
+- Kitchen Shift - 3 hrs OT applied after 8.30 PM
+- Night Watcher Shift - 3 hrs OT added
+- Night Watcher Shift - 1 hr OT deducted due to missed hourly punch
+- Week Off - Worked
+- Week Off - Not worked
+- Half Day - Completed
+
+Do not keep static remarks like:
+- "Late deduction after 8.15am / OT after 5.30pm"
+- "Apply late deduction after 15 minutes if late / add 3 h"
+
+Final requirement:
+Make the attendance report payroll-ready and ensure salary run uses these corrected rules, not the current generic/static behavior.

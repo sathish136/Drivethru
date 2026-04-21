@@ -1,9 +1,23 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { attendanceRecords, employees, branches, shifts } from "@workspace/db/schema";
+import { attendanceRecords, employees, branches, shifts, weekoffSchedules } from "@workspace/db/schema";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 import { getDaysInMonth, today } from "../lib/helpers.js";
 import { loadDeptRules, findRule, timeToMins, calcLunchLateMinutes, lateCutoffMins, calcOtHours, calcTimeBasedOtHours, isNightShiftRecord, DeptShiftRule, calcNightWatcherPolicyOtHours } from "../lib/hr-rules.js";
+import { processSalaryRow, type WeekOffInfo, type DayType } from "../lib/salary-engine.js";
+
+/**
+ * Map salary-engine DayType into the front-end status string used across
+ * the existing attendance UI ("present" | "absent" | "late" | "half_day" | …).
+ */
+function dayTypeToStatus(dayType: DayType, lateMinutes: number): string {
+  if (dayType === "WEEK_OFF")        return "off_day";
+  if (dayType === "WEEK_OFF_WORKED") return "present";
+  if (dayType === "ABSENT")          return "absent";
+  if (dayType === "HALF_DAY")        return "half_day";
+  // WORKING_DAY
+  return lateMinutes > 0 ? "late" : "present";
+}
 
 const router = Router();
 
@@ -258,6 +272,25 @@ router.get("/attendance", async (req, res) => {
     const shiftMap = new Map(allShifts.map(s => [s.id, s]));
     const hrRules = await loadDeptRules();
 
+    /* Load week-off schedules and join via employees.weekoffScheduleId so the
+       salary engine can decide WEEK_OFF / WEEK_OFF_WORKED dynamically. */
+    const allWeekoffs = await db.select().from(weekoffSchedules);
+    const weekoffMap = new Map<number, WeekOffInfo>(
+      allWeekoffs.map(w => [w.id, {
+        offDays:  JSON.parse(w.offDays)  as number[],
+        halfDays: JSON.parse(w.halfDays) as number[],
+      }])
+    );
+    const empWeekoffById = new Map<number, WeekOffInfo | null>();
+    {
+      const rows = await db.select({
+        id: employees.id, weekoffScheduleId: employees.weekoffScheduleId,
+      }).from(employees);
+      for (const r of rows) {
+        empWeekoffById.set(r.id, r.weekoffScheduleId ? weekoffMap.get(r.weekoffScheduleId) ?? null : null);
+      }
+    }
+
     // Merge overnight (evening + morning) records for night-shift employees
     const getShift = (shiftId: number | null | undefined) =>
       shiftId ? shiftMap.get(shiftId) : undefined;
@@ -276,12 +309,38 @@ router.get("/attendance", async (req, res) => {
       const empShift = r.empShiftId ? shiftMap.get(r.empShiftId) ?? undefined : undefined;
       const rule = findRule(hrRules, r.empDepartment || "", empShift?.name);
       const date = r.rec.date;            // "YYYY-MM-DD"
+      const empWeekoff = empWeekoffById.get(r.rec.employeeId) ?? null;
+
+      // Run the policy-driven salary engine for THIS row.
+      const sr = processSalaryRow({
+        date,
+        shift: { name: empShift?.name, startTime: empShift?.startTime1, endTime: empShift?.endTime1 },
+        weekoff: empWeekoff,
+        rec: {
+          date,
+          inTime1:  r.rec.inTime1,
+          outTime1: r.rec.outTime1,
+          inTime2:  r.rec.inTime2,
+          outTime2: r.rec.outTime2,
+          totalHours: r.rec.totalHours,
+          leaveType: (r.rec as any).leaveType ?? null,
+        },
+      });
+
+      // Preserve "leave" as authoritative when present.
+      const status = r.rec.status === "leave"
+        ? "leave"
+        : r.rec.status === "holiday"
+          ? "holiday"
+          : dayTypeToStatus(sr.dayType, sr.lateMinutes);
+
       return {
         ...r,
         _rule: rule,
         _empShift: empShift,
         _date: date,
-        effectiveStatus: getEffectiveStatus(r.rec, empShift, r.empDepartment, rule, date),
+        _salaryRow: sr,
+        effectiveStatus: status,
       };
     });
 
@@ -311,32 +370,10 @@ router.get("/attendance", async (req, res) => {
       records: enriched.map(r => {
         const rule = r._rule;
         const empShift = r._empShift;
-
-        // Choose Sunday-specific start time for late calculation when applicable
-        const dayOfWeek = new Date(r._date + "T00:00:00Z").getUTCDay();
-        const effectiveStartTime =
-          (dayOfWeek === 0 && rule.sundayStartTime) ? rule.sundayStartTime : empShift?.startTime1;
-        const lateCutoff = lateCutoffMins(rule, effectiveStartTime);
-
-        // Morning late minutes — zero for flexible shifts; tracked even for half_day records
-        const morningLateMinutes =
-          (!rule.flexible &&
-           (r.effectiveStatus === "late" || r.effectiveStatus === "half_day") &&
-           r.rec.inTime1)
-            ? Math.max(0, timeToMins(r.rec.inTime1) - lateCutoff)
-            : 0;
+        const sr = r._salaryRow;
 
         // Lunch late — uses 10-min grace (built into calcLunchLateMinutes)
         const lunchLateMinutes = calcLunchLateMinutes(r.rec.outTime1, r.rec.inTime2, rule);
-
-        // OT calculation
-        const shiftStartMins = empShift?.startTime1 ? timeToMins(empShift.startTime1) : 8 * 60;
-        const rawEarly = r.rec.inTime1 ? shiftStartMins - timeToMins(r.rec.inTime1) : 0;
-        const earlyMinutes = rawEarly > 0 && rawEarly < 240 ? rawEarly : 0;
-
-        const recalcOt = (r.rec.totalHours != null && r.effectiveStatus !== "absent" && r.effectiveStatus !== "half_day")
-          ? computeRecordOt(r.rec, empShift, rule, r._date, earlyMinutes)
-          : 0;
 
         return {
           ...r.rec,
@@ -346,11 +383,20 @@ router.get("/attendance", async (req, res) => {
           designation: r.empDesignation || "",
           department: r.empDepartment || "",
           branchName: r.branchName || "",
-          shiftName: empShift?.name ?? null,
+          shiftName: empShift?.name ?? sr.shiftName ?? null,
           createdAt: r.rec.createdAt.toISOString(),
-          morningLateMinutes,
+          /* Policy-driven values from the salary engine (single source of truth) */
+          morningLateMinutes: sr.lateMinutes,
           lunchLateMinutes,
-          overtimeHours: recalcOt,
+          overtimeHours: sr.otHours,
+          remarks: sr.remarks,
+          /* Extra payroll-friendly fields exposed for the reports/payslip UI */
+          shiftCategory: sr.shiftCategory,
+          shiftCategoryLabel: sr.shiftCategoryLabel,
+          shiftTime: sr.shiftTime,
+          weekOffStatus: sr.weekOffStatus,
+          dayType: sr.dayType,
+          workedHoursLabel: sr.workedHoursLabel,
         };
       }),
     });
@@ -376,6 +422,14 @@ router.get("/monthly", async (req, res) => {
     const shiftMap = new Map(allShifts.map(s => [s.id, s]));
     const hrRules = await loadDeptRules();
 
+    const allWeekoffs = await db.select().from(weekoffSchedules);
+    const weekoffMap = new Map<number, WeekOffInfo>(
+      allWeekoffs.map(w => [w.id, {
+        offDays:  JSON.parse(w.offDays)  as number[],
+        halfDays: JSON.parse(w.halfDays) as number[],
+      }])
+    );
+
     const filtered = branchId ? allEmp.filter(r => r.emp.branchId === Number(branchId)) : allEmp;
     const records = await db.select().from(attendanceRecords)
       .where(and(gte(attendanceRecords.date, startDate), lte(attendanceRecords.date, endDate)));
@@ -391,13 +445,12 @@ router.get("/monthly", async (req, res) => {
     const empSummaries = filtered.map(({ emp, branchName }) => {
       const empShift = emp.shiftId ? shiftMap.get(emp.shiftId) : undefined;
       const rule = findRule(hrRules, emp.department || "", empShift?.name);
-      const lateCutoff = lateCutoffMins(rule, empShift?.startTime1);
-      const shiftStartMins = empShift?.startTime1 ? timeToMins(empShift.startTime1) : 8 * 60;
+      const empWeekoff: WeekOffInfo | null =
+        emp.weekoffScheduleId ? weekoffMap.get(emp.weekoffScheduleId) ?? null : null;
 
       // Merge overnight records for night-shift employees
       let recs = rawByEmp.get(emp.id) || [];
       if (isNightShift(empShift)) {
-        // Use the same merging logic via a wrapper
         const wrapped = recs.map(r => ({ rec: r }));
         const merged = mergeNightShiftRecords(wrapped);
         recs = merged.map(x => x.rec);
@@ -408,14 +461,30 @@ router.get("/monthly", async (req, res) => {
       let lunchLateDays = 0, totalMorningLateMinutes = 0, totalLunchLateMinutes = 0;
 
       for (const r of recs) {
-        const st = getEffectiveStatus(r, empShift, emp.department, rule);
+        // Salary engine = single source of truth
+        const sr = processSalaryRow({
+          date: r.date,
+          shift: { name: empShift?.name, startTime: empShift?.startTime1, endTime: empShift?.endTime1 },
+          weekoff: empWeekoff,
+          rec: {
+            date: r.date,
+            inTime1:  r.inTime1,
+            outTime1: r.outTime1,
+            inTime2:  r.inTime2,
+            outTime2: r.outTime2,
+            totalHours: r.totalHours,
+            leaveType: (r as any).leaveType ?? null,
+          },
+        });
+        const st = r.status === "leave"   ? "leave"
+                 : r.status === "holiday" ? "holiday"
+                 : dayTypeToStatus(sr.dayType, sr.lateMinutes);
+
         if (st === "present") presentDays++;
         else if (st === "absent") absentDays++;
         else if (st === "late") {
           lateDays++; presentDays++;
-          if (!rule.flexible && r.inTime1) {
-            totalMorningLateMinutes += Math.max(0, timeToMins(r.inTime1) - lateCutoff);
-          }
+          totalMorningLateMinutes += sr.lateMinutes;
         }
         else if (st === "half_day") halfDays++;
         else if (st === "leave") leaveDays++;
@@ -423,11 +492,7 @@ router.get("/monthly", async (req, res) => {
         else if (st === "off_day") offDays++;
 
         totalWorkHours += r.totalHours || 0;
-
-        if (r.totalHours != null && st !== "absent" && st !== "half_day") {
-          const earlyMins = r.inTime1 ? Math.max(0, shiftStartMins - timeToMins(r.inTime1)) : 0;
-          overtimeHours += computeRecordOt(r, empShift, rule, r.date, earlyMins);
-        }
+        overtimeHours += sr.otHours;
 
         const ll = calcLunchLateMinutes(r.outTime1, r.inTime2, rule);
         if (ll > 0) { lunchLateDays++; totalLunchLateMinutes += ll; }

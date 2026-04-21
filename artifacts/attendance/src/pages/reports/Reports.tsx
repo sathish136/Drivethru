@@ -473,6 +473,7 @@ function AttendanceReport() {
   });
 
   function getRemarks(r: any): string {
+    if (typeof r.remarks === "string" && r.remarks.trim()) return r.remarks;
     const shiftName = r.shiftName
       ?? shiftOptions.find((s: any) => s.id === Number(r.shiftId))?.name
       ?? null;
@@ -1578,6 +1579,7 @@ function IndividualReport() {
   const records: any[] = useMemo(() => (data?.records || []).sort((a: any, b: any) => a.date.localeCompare(b.date)), [data]);
 
   function getRemarks(r: any): string {
+    if (typeof r.remarks === "string" && r.remarks.trim()) return r.remarks;
     const shiftName = r.shiftName ?? shiftOptions.find((s: any) => s.id === Number(r.shiftId))?.name ?? null;
     const rule = clientFindRule(hrRules, r.department ?? "", shiftName);
     return rule?.remarks ?? "";
