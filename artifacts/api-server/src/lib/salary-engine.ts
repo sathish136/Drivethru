@@ -293,21 +293,7 @@ export function processSalaryRow(opts: {
   const workedHoursRaw = rec?.totalHours ?? 0;
   const workedHours = Math.round(workedHoursRaw * 100) / 100;
 
-  /* ── Day-type classification (spec-driven) ────────────────────────── */
-  // Has any meaningful work happened today?
-  const hasWork = workedHoursRaw > 0.25 || !!firstIn;
-
-  // Missing-punch detection per spec rule #2:
-  //   "Missing OUT / incomplete punches → INVALID / NEED REVIEW"
-  // Trigger when there's a check-in but no final check-out at all, or when
-  // the second session is half-open (inTime2 without outTime2).
-  // NOTE: many employees record only one in/out pair (no lunch split) — that
-  // is NOT a missing punch.
-  const hasMissingPunch =
-    (!!firstIn && !lastOut) ||
-    (!!rec?.inTime2 && !rec?.outTime2);
-
-  // Effective shift duration in hours (used by half-day & full-day thresholds).
+  // Effective shift duration in hours (used by OT completion guard).
   const shiftDurationHours = (() => {
     if (category === "FLEXIBLE" || category === "NIGHT") return 9;
     if (!startTime || !endTime || startTime === "—" || endTime === "—") return 9;
@@ -316,35 +302,47 @@ export function processSalaryRow(opts: {
     const span = e > s ? e - s : (24 * 60 - s) + e;
     return Math.max(1, span / 60);
   })();
-  // Spec — absolute hour bands applied to ALL shifts (including FLEXIBLE):
-  //   total_hours == 0    → ABSENT
-  //   total_hours <  4    → ABSENT
-  //   4 ≤ hours <  8      → HALF DAY
-  //   hours ≥ 8           → PRESENT
+
+  /* ── Day-type classification (FINAL clean logic) ──────────────────── */
+  // Punch count drives the structural decision; hours drive the band.
+  //   0 punches             → DAY OFF (rostered) or ABSENT
+  //   1 punch only          → INVALID (Missing Punch)
+  //   ≥ 2 punches           → calculate hours, classify by absolute bands
   //
-  // INVALID is reserved for missing-punch records with < 4 hrs work;
-  // anything ≥ 4 hrs is still classified normally and the row is flagged
-  // with a "Need Review" note so HR can fix the punch later.
-  const absoluteFullHrs = 8;
-  const absoluteHalfHrs = 4;
+  //   Hour bands (apply to ALL shifts incl. Flexible):
+  //     0 hrs               → ABSENT
+  //     < 4 hrs             → ABSENT
+  //     4 hrs ≤ h < 7:45    → HALF DAY
+  //     ≥ 7:45 hrs          → PRESENT      (15-min grace below 8:00)
+  //
+  //   Week off:
+  //     no punches          → DAY OFF (WEEK_OFF)
+  //     punches present     → WEEK_OFF_WORKED
+  const PRESENT_THRESHOLD_HRS = 7.75; // 7:45 grace
+  const HALFDAY_THRESHOLD_HRS = 4;
+
+  const punchCount =
+    (rec?.inTime1 ? 1 : 0) +
+    (rec?.outTime1 ? 1 : 0) +
+    (rec?.inTime2 ? 1 : 0) +
+    (rec?.outTime2 ? 1 : 0);
 
   let dayType: DayType;
   if (rec?.leaveType) {
     // Leaves out of scope here — surface as ABSENT so leave routes handle them.
     dayType = "ABSENT";
   } else if (isOff) {
-    dayType = hasWork ? "WEEK_OFF_WORKED" : "WEEK_OFF";
-  } else if (workedHoursRaw <= 0 && !firstIn) {
+    dayType = punchCount > 0 ? "WEEK_OFF_WORKED" : "WEEK_OFF";
+  } else if (punchCount === 0) {
     dayType = "ABSENT";
-  } else if (hasMissingPunch && workedHoursRaw < absoluteHalfHrs) {
-    // Missing punch AND not enough work to classify → flag for review.
+  } else if (punchCount === 1) {
+    // Only one punch in the day — cannot compute hours → flag for review.
     dayType = "INVALID";
-  } else if (workedHoursRaw < absoluteHalfHrs) {
+  } else if (workedHoursRaw < HALFDAY_THRESHOLD_HRS) {
     dayType = "ABSENT";
   } else if (isHalfDayScheduled || category === "HALF_DAY") {
-    // Scheduled half-day shift: showing up at all = HALF DAY completed.
     dayType = "HALF_DAY";
-  } else if (workedHoursRaw < absoluteFullHrs) {
+  } else if (workedHoursRaw < PRESENT_THRESHOLD_HRS) {
     dayType = "HALF_DAY";
   } else {
     dayType = "WORKING_DAY";
@@ -374,23 +372,10 @@ export function processSalaryRow(opts: {
     }
   }
 
-  // Spec validation rule: "No extreme late (3+ hrs) unless correct shift."
-  // A late > 3 hrs almost certainly means the employee's assigned shift
-  // didn't match the actual shift worked that day — flag as INVALID for
-  // review instead of dumping a misleading huge late number into payroll.
+  // Cap implausibly large late numbers (likely wrong shift assignment) so
+  // payroll never sees a 4-hour "late" charge — but DO NOT change dayType.
   if (lateMinutes > 180) {
-    dayType = "INVALID";
     lateMinutes = 0;
-  }
-
-  // Spec rule: INVALID is reserved for low-hours missing-punch rows.
-  // If a row was flagged INVALID (e.g. by the > 3-hr late guard above) but the
-  // employee actually clocked ≥ 4 hrs, reclassify normally and add a soft
-  // "Need Review" note so HR can fix the underlying punch/shift later.
-  let needReview = hasMissingPunch && workedHoursRaw >= absoluteHalfHrs;
-  if (dayType === "INVALID" && workedHoursRaw >= absoluteHalfHrs) {
-    dayType = workedHoursRaw >= absoluteFullHrs ? "WORKING_DAY" : "HALF_DAY";
-    needReview = true;
   }
 
   /* ── OT hours ─────────────────────────────────────────────────────── */
@@ -453,7 +438,7 @@ export function processSalaryRow(opts: {
 
   /* ── Dynamic remarks ──────────────────────────────────────────────── */
   const remarks = buildRemarks({
-    category, dayType, lateMinutes, otHours, graceApplied, night: nightTrace, needReview,
+    category, dayType, lateMinutes, otHours, graceApplied, night: nightTrace,
   });
 
   return {
@@ -482,9 +467,8 @@ function buildRemarks(args: {
   otHours: number;
   graceApplied: { lunch: boolean; checkout: boolean };
   night: { missedBlocks: number; deductedHours: number } | null;
-  needReview?: boolean;
 }): string {
-  const { category, dayType, lateMinutes, otHours, graceApplied, night, needReview } = args;
+  const { category, dayType, lateMinutes, otHours, graceApplied, night } = args;
   const label = categoryLabel(category);
   const parts: string[] = [];
 
@@ -501,7 +485,7 @@ function buildRemarks(args: {
     return `${label} - Absent`;
   }
   if (dayType === "INVALID") {
-    return `${label} - Invalid / Need Review (missing punch or shift mismatch)`;
+    return `${label} - Missing Punch - Need Review`;
   }
   if (dayType === "HALF_DAY") {
     parts.push(`${label} - Half Day Completed`);
@@ -546,7 +530,6 @@ function buildRemarks(args: {
 
   if (graceApplied.lunch) parts.push("Lunch grace applied");
   if (graceApplied.checkout) parts.push("Checkout grace applied");
-  if (needReview) parts.push("Need Review (missing punch)");
 
   return parts.join(" / ");
 }
