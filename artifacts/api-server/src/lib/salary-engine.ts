@@ -397,6 +397,16 @@ export function processSalaryRow(opts: {
     lateMinutes = 0;
   }
 
+  // Spec rule: "If total_hours ≥ 8 hrs AND missing punch → PRESENT + Need Review"
+  // Also: "9+ hrs should never remain INVALID."
+  // If we flagged INVALID but the employee actually clocked a full day's work,
+  // promote them to a working day and surface a soft "Need Review" note.
+  let needReview = false;
+  if (dayType === "INVALID" && workedHoursRaw >= 8) {
+    dayType = "WORKING_DAY";
+    needReview = true;
+  }
+
   /* ── OT hours ─────────────────────────────────────────────────────── */
   let otHours = 0;
   let nightTrace: { missedBlocks: number; deductedHours: number } | null = null;
@@ -457,7 +467,7 @@ export function processSalaryRow(opts: {
 
   /* ── Dynamic remarks ──────────────────────────────────────────────── */
   const remarks = buildRemarks({
-    category, dayType, lateMinutes, otHours, graceApplied, night: nightTrace,
+    category, dayType, lateMinutes, otHours, graceApplied, night: nightTrace, needReview,
   });
 
   return {
@@ -486,8 +496,9 @@ function buildRemarks(args: {
   otHours: number;
   graceApplied: { lunch: boolean; checkout: boolean };
   night: { missedBlocks: number; deductedHours: number } | null;
+  needReview?: boolean;
 }): string {
-  const { category, dayType, lateMinutes, otHours, graceApplied, night } = args;
+  const { category, dayType, lateMinutes, otHours, graceApplied, night, needReview } = args;
   const label = categoryLabel(category);
   const parts: string[] = [];
 
@@ -549,6 +560,7 @@ function buildRemarks(args: {
 
   if (graceApplied.lunch) parts.push("Lunch grace applied");
   if (graceApplied.checkout) parts.push("Checkout grace applied");
+  if (needReview) parts.push("Need Review (missing punch)");
 
   return parts.join(" / ");
 }
