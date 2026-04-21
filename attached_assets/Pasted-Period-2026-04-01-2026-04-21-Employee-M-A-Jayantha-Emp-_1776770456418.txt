@@ -1,0 +1,32 @@
+Period
+2026-04-01 – 2026-04-21
+Employee
+M.A. Jayantha
+Emp ID
+HR-EMP-00004
+Department
+Maintainance
+Branch
+Drivethru Main
+Date	Day	Status	Shift	Morning In	Morning Out	Afternoon In	Actual Off Punch	Current Total	Policy OT by Off Time	Policy Remark
+01-04-2026	Wed	PRESENT	Regular Shift	08:00	17:00	—	17:00	9:00 hrs	—	No OT eligible by off time
+02-04-2026	Thu	PRESENT	Regular Shift	08:03	17:00	—	17:00	8:57 hrs	—	No OT eligible by off time
+03-04-2026	Fri	No record	Regular Shift	—	—	—	—	—	—	No punch data
+04-04-2026	Sat	HALF DAY	Regular Shift	08:07	13:00	—	13:00	4:53 hrs	—	Half day record; needs manual check against normal night shift policy
+05-04-2026	Sun	PRESENT	Regular Shift	07:57	17:00	—	17:00	9:03 hrs	—	No OT eligible by off time
+06-04-2026	Mon	HALF DAY	Regular Shift	08:00	14:57	—	14:57	6:57 hrs	—	Half day record; needs manual check against normal night shift policy
+07-04-2026	Tue	PRESENT	Regular Shift	07:57	17:00	—	17:00	9:03 hrs	—	No OT eligible by off time
+08-04-2026	Wed	PRESENT	Regular Shift	07:57	17:00	—	17:00	9:03 hrs	—	No OT eligible by off time
+09-04-2026	Thu	PRESENT	Regular Shift	07:59	17:00	—	17:00	9:01 hrs	—	No OT eligible by off time
+10-04-2026	Fri	No record	Regular Shift	—	—	—	—	—	—	No punch data
+11-04-2026	Sat	PRESENT	Regular Shift	07:58	13:00	—	13:00	5:02 hrs	—	No OT eligible by off time
+12-04-2026	Sun	PRESENT	Regular Shift	08:02	16:00	—	16:00	7:58 hrs	—	No OT eligible by off time
+13-04-2026	Mon	No record	Regular Shift	—	—	—	—	—	—	No punch data
+14-04-2026	Tue	No record	Regular Shift	—	—	—	—	—	—	No punch data
+15-04-2026	Wed	HALF DAY	Regular Shift	08:01	13:59	—	13:59	5:58 hrs	—	Half day record; needs manual check against normal night shift policy
+16-04-2026	Thu	No record	Regular Shift	—	—	—	—	—	—	No punch data
+17-04-2026	Fri	HALF DAY	Regular Shift	07:59	14:00	—	14:00	6:01 hrs	—	Half day record; needs manual check against normal night shift policy
+18-04-2026	Sat	No record	Regular Shift	—	—	—	—	—	—	No punch data
+19-04-2026	Sun	PRESENT	Regular Shift	07:58	16:52	—	16:52	8:54 hrs	—	No OT eligible by off time
+20-04-2026	Mon	No record	Regular Shift	—	—	—	—	—	—	No punch data
+21-04-2026	Tue	PRESENT	Regular Shift	07:54	—	—	—	—	—	No OT eligible by off time

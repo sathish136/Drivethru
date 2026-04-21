@@ -30,6 +30,35 @@ function clientFindRule(rules: DeptShiftRule[], department: string, shiftName?: 
   });
   return partial ?? null;
 }
+function useEmployeeOffDays() {
+  const [offDaysByEmpId, setOffDaysByEmpId] = useState<Map<number, number[]>>(new Map());
+  useEffect(() => {
+    const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+    const token = localStorage.getItem("auth_token") || "";
+    const authOpts = { credentials: "include" as const, headers: { Authorization: `Bearer ${token}` } };
+    Promise.all([
+      fetch(`${BASE}/api/weekoffs`, authOpts).then(r => r.json()),
+      fetch(`${BASE}/api/employees?limit=1000`, authOpts).then(r => r.json()),
+    ]).then(([schedules, empResp]) => {
+      const schedMap = new Map<number, number[]>();
+      if (Array.isArray(schedules)) {
+        for (const s of schedules) {
+          if (s && typeof s.id === "number") schedMap.set(s.id, Array.isArray(s.offDays) ? s.offDays : []);
+        }
+      }
+      const list: any[] = Array.isArray(empResp) ? empResp : (empResp?.employees || []);
+      const m = new Map<number, number[]>();
+      for (const e of list) {
+        if (e?.weekoffScheduleId && schedMap.has(e.weekoffScheduleId)) {
+          m.set(Number(e.id), schedMap.get(e.weekoffScheduleId)!);
+        }
+      }
+      setOffDaysByEmpId(m);
+    }).catch(() => {});
+  }, []);
+  return offDaysByEmpId;
+}
+
 function useHrRules() {
   const [rules, setRules] = useState<DeptShiftRule[]>([]);
   const [shifts, setShifts] = useState<{ id: number; name: string }[]>([]);
@@ -434,6 +463,7 @@ function AttendanceReport() {
   const dStatus  = useDebounce(status, 200);
 
   const { rules: hrRules, shifts: shiftOptions } = useHrRules();
+  const empOffDays = useEmployeeOffDays();
 
   const { data: branches } = useListBranches();
   const { data, isLoading } = useGetAttendanceReport({
@@ -520,6 +550,7 @@ function AttendanceReport() {
     if (!filtered.length) return [] as (string | number)[][];
     const first = filtered[0];
     const shift = first.shiftName || "—";
+    const offDays = empOffDays.get(Number(first.employeeId)) || [];
     const mapByDate = new Map(filtered.map((r: any) => [r.date, r]));
     const [sy, sm, sd] = dStart.split("-").map(Number);
     const [ey, em, ed] = dEnd.split("-").map(Number);
@@ -528,10 +559,16 @@ function AttendanceReport() {
     const rows: (string | number)[][] = [];
     for (let dt = new Date(start); dt <= end; dt.setUTCDate(dt.getUTCDate() + 1)) {
       const dateStr = dt.toISOString().slice(0, 10);
-      const day = DAY_NAMES[dt.getUTCDay()];
+      const dow = dt.getUTCDay();
+      const day = DAY_NAMES[dow];
       const r = mapByDate.get(dateStr);
+      const isOff = offDays.includes(dow);
       if (!r) {
-        rows.push([toDdMmYyyy(dateStr), day, "No record", shift, "—", "—", "—", "—", "—", "—", policyRemark("no_record", 0)]);
+        if (isOff) {
+          rows.push([toDdMmYyyy(dateStr), day, "WEEK OFF", shift, "—", "—", "—", "—", "—", "—", "Scheduled week off"]);
+        } else {
+          rows.push([toDdMmYyyy(dateStr), day, "No record", shift, "—", "—", "—", "—", "—", "—", policyRemark("no_record", 0)]);
+        }
         continue;
       }
       const st = r.status;
@@ -1505,6 +1542,7 @@ function IndividualReport() {
 
   const { data: empData, isLoading: empLoading } = useListEmployees({ limit: 1000 });
   const { rules: hrRules, shifts: shiftOptions } = useHrRules();
+  const empOffDays = useEmployeeOffDays();
 
   const employees = useMemo(() => {
     const list = (empData?.employees || []) as any[];
@@ -1658,6 +1696,7 @@ function IndividualReport() {
         </div>`).join("");
 
         const recMap = new Map(recs.map((r: any) => [r.date, r]));
+        const offDaysListPdf = empOffDays.get(Number(emp.id)) || [];
         let rowsHtml = "";
         for (let d = 1; d <= daysInMonth; d++) {
           const dateStr = `${year}-${String(month).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
@@ -1665,7 +1704,11 @@ function IndividualReport() {
           const dayName = DAY_NAMES[dow];
           const r = recMap.get(dateStr);
           if (!r) {
-            rowsHtml += `<tr><td>${d}</td><td>${dayName}</td><td colspan="9" style="text-align:center;color:#ccc">—</td></tr>`;
+            if (offDaysListPdf.includes(dow)) {
+              rowsHtml += `<tr style="background:#ede9fe"><td>${d}</td><td>${dayName}</td><td style="font-weight:700;color:#6d28d9">WEEK OFF</td><td colspan="8" style="text-align:center;color:#9ca3af">Scheduled week off</td></tr>`;
+            } else {
+              rowsHtml += `<tr><td>${d}</td><td>${dayName}</td><td colspan="9" style="text-align:center;color:#ccc">—</td></tr>`;
+            }
             continue;
           }
           const st = r.status;
@@ -1783,13 +1826,17 @@ function IndividualReport() {
   function handleExportExcel() {
     if (!selectedEmp || records.length === 0) return;
     const HEADERS = ["#","Date","Day","Status","Morning In","Lunch Out","Lunch In","End Out","Lunch Break","Total Hrs","Late","OT Hrs"];
+    const offDaysListXls = empOffDays.get(Number(selectedEmp.id)) || [];
     const rows = Array.from({ length: daysInMonth }, (_, i) => {
       const d = i + 1;
       const dateStr = `${year}-${String(month).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
       const dow = new Date(dateStr + "T00:00:00Z").getUTCDay();
       const dayName = DAY_NAMES[dow];
       const r = records.find((x: any) => x.date === dateStr);
-      if (!r) return [d, dateStr, dayName, "No Record", "","","","","","","",""];
+      if (!r) {
+        if (offDaysListXls.includes(dow)) return [d, dateStr, dayName, "WEEK OFF", "","","","","","","",""];
+        return [d, dateStr, dayName, "No Record", "","","","","","","",""];
+      }
       const st = r.status;
       const statusLabel = st==="late"?"PRESENT (LATE)":st==="half_day"?"HALF DAY":st==="off_day"?"DAY OFF":st.replace("_"," ").toUpperCase();
       const lm = (r.morningLateMinutes || 0) + (r.lunchLateMinutes || 0);
@@ -1974,6 +2021,7 @@ function IndividualReport() {
                   <tbody className="divide-y divide-border">
                     {(() => {
                       const recMap = new Map(records.map((r: any) => [r.date, r]));
+                      const offDaysList = selectedEmp ? (empOffDays.get(Number(selectedEmp.id)) || []) : [];
                       return Array.from({length: daysInMonth}, (_, i) => {
                         const d = i + 1;
                         const dateStr = `${year}-${String(month).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
@@ -1981,13 +2029,18 @@ function IndividualReport() {
                         const dayName = DAY_NAMES[dow];
                         const r = recMap.get(dateStr);
                         const isWeekend = dow === 0 || dow === 6;
+                        const isOff = offDaysList.includes(dow);
                         if (!r) {
                           return (
-                            <tr key={dateStr} className={cn("transition-colors", isWeekend ? "bg-slate-50/60" : "")}>
+                            <tr key={dateStr} className={cn("transition-colors", isOff ? "bg-violet-50/60" : isWeekend ? "bg-slate-50/60" : "")}>
                               <td className="px-3 py-2 font-mono text-muted-foreground">{d}</td>
                               <td className="px-3 py-2 text-muted-foreground">{dayName}</td>
                               <td className="px-3 py-2 font-mono text-muted-foreground">{dateStr}</td>
-                              <td className="px-3 py-2" colSpan={9}><span className="text-muted-foreground text-[10px]">No record</span></td>
+                              {isOff ? (
+                                <td className="px-3 py-2" colSpan={9}><span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-700">WEEK OFF</span></td>
+                              ) : (
+                                <td className="px-3 py-2" colSpan={9}><span className="text-muted-foreground text-[10px]">No record</span></td>
+                              )}
                             </tr>
                           );
                         }
