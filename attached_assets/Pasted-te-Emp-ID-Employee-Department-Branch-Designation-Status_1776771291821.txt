@@ -1,0 +1,186 @@
+te	Emp ID	Employee	Department	Branch	Designation	Status	Morning Session	Afternoon Session	Lunch Break	Total Hrs	OT Hrs	Remarks
+In	Out (Lunch)	In	Out				
+2026-02-01	HR-EMP-00002	Anura Manamperi	Security	Drivethru Main	Night Watcher	
+HALF DAY
+00:49:36	
+04:49:19
+4h 00m
+05:49:56	
+07:51:27
+2h 02m
+1h 00m	
+00:49:36 → 04:49:19 = 4h 00m
+05:49:56 → 07:51:27 = 2h 02m
+✅ 6:02 hrs
+—	
+Actual off time 8am – add 3hrs OT. Must punch every hr. Missed punch deducts 1hr from 3hrs OT.
+2026-02-02	HR-EMP-00002	Anura Manamperi	Security	Drivethru Main	Night Watcher	
+PRESENT
+19:57:14	
+22:01:01
+2h 04m
+23:01:22	
+08:00:26
+1h 00m	
+19:57:14 → 22:01:01 = 2h 04m
+✅ 2:04 hrs
+—	
+Actual off time 8am – add 3hrs OT. Must punch every hr. Missed punch deducts 1hr from 3hrs OT.
+2026-02-04	HR-EMP-00002	Anura Manamperi	Security	Drivethru Main	Night Watcher	
+PRESENT
+19:54:52	
+22:00:17
+2h 06m
+23:00:59	
+08:00:47
+1h 00m	
+19:54:52 → 22:00:17 = 2h 06m
+✅ 2:06 hrs
+—	
+Actual off time 8am – add 3hrs OT. Must punch every hr. Missed punch deducts 1hr from 3hrs OT.
+2026-02-06	HR-EMP-00002	Anura Manamperi	Security	Drivethru Main	Night Watcher	
+PRESENT
+19:53:11	
+22:00:51
+2h 07m
+23:00:47	
+08:00:39
+1h 00m	
+19:53:11 → 22:00:51 = 2h 07m
+✅ 2:07 hrs
+—	
+Actual off time 8am – add 3hrs OT. Must punch every hr. Missed punch deducts 1hr from 3hrs OT.
+2026-02-08	HR-EMP-00002	Anura Manamperi	Security	Drivethru Main	Night Watcher	
+PRESENT
+19:55:14	
+22:01:18
+2h 06m
+23:00:50	
+08:01:11
+0h 59m	
+19:55:14 → 22:01:18 = 2h 06m
+✅ 2:06 hrs
+—	
+Actual off time 8am – add 3hrs OT. Must punch every hr. Missed punch deducts 1hr from 3hrs OT.
+2026-02-10	HR-EMP-00002	Anura Manamperi	Security	Drivethru Main	Night Watcher	
+PRESENT
+19:51:25	
+22:00:22
+2h 09m
+23:00:17	
+08:04:51
+1h 00m	
+19:51:25 → 22:00:22 = 2h 09m
+✅ 2:09 hrs
+—	
+Actual off time 8am – add 3hrs OT. Must punch every hr. Missed punch deducts 1hr from 3hrs OT.
+2026-02-12	HR-EMP-00002	Anura Manamperi	Security	Drivethru Main	Night Watcher	
+PRESENT
+19:52:55	
+22:00:33
+2h 08m
+23:00:18	
+08:00:45
+1h 00m	
+19:52:55 → 22:00:33 = 2h 08m
+✅ 2:08 hrs
+—	
+Actual off time 8am – add 3hrs OT. Must punch every hr. Missed punch deducts 1hr from 3hrs OT.
+2026-02-14	HR-EMP-00002	Anura Manamperi	Security	Drivethru Main	Night Watcher	
+PRESENT
+19:48:54	
+21:55:18
+2h 07m
+22:54:15	
+07:54:23
+0h 59m	
+19:48:54 → 21:55:18 = 2h 07m
+✅ 2:07 hrs
+1.0h	
+Actual off time 8am – add 3hrs OT. Must punch every hr. Missed punch deducts 1hr from 3hrs OT.
+2026-02-16	HR-EMP-00002	Anura Manamperi	Security	Drivethru Main	Night Watcher	
+PRESENT
+19:49:30	
+21:54:15
+2h 05m
+22:54:15	
+07:54:05
+1h 00m	
+19:49:30 → 21:54:15 = 2h 05m
+✅ 2:05 hrs
+1.0h	
+Actual off time 8am – add 3hrs OT. Must punch every hr. Missed punch deducts 1hr from 3hrs OT.
+2026-02-18	HR-EMP-00002	Anura Manamperi	Security	Drivethru Main	Night Watcher	
+PRESENT
+19:48:48	
+21:53:54
+2h 05m
+22:54:03	
+07:54:06
+1h 01m	
+19:48:48 → 21:53:54 = 2h 05m
+✅ 2:05 hrs
+1.0h	
+Actual off time 8am – add 3hrs OT. Must punch every hr. Missed punch deducts 1hr from 3hrs OT.
+2026-02-20	HR-EMP-00002	Anura Manamperi	Security	Drivethru Main	Night Watcher	
+PRESENT
+19:48:44	
+21:54:00
+2h 06m
+22:54:05	
+07:59:24
+1h 00m	
+19:48:44 → 21:54:00 = 2h 06m
+✅ 2:06 hrs
+1.0h	
+Actual off time 8am – add 3hrs OT. Must punch every hr. Missed punch deducts 1hr from 3hrs OT.
+2026-02-22	HR-EMP-00002	Anura Manamperi	Security	Drivethru Main	Night Watcher	
+PRESENT
+19:48:31	
+20:54:20
+1h 06m
+21:54:10	
+07:54:03
+1h 00m	
+19:48:31 → 20:54:20 = 1h 06m
+✅ 1:06 hrs
+1.0h	
+Actual off time 8am – add 3hrs OT. Must punch every hr. Missed punch deducts 1hr from 3hrs OT.
+2026-02-24	HR-EMP-00002	Anura Manamperi	Security	Drivethru Main	Night Watcher	
+PRESENT
+19:48:24	
+21:54:05
+2h 06m
+22:54:05	
+07:55:12
+1h 00m	
+19:48:24 → 21:54:05 = 2h 06m
+✅ 2:06 hrs
+1.0h	
+Actual off time 8am – add 3hrs OT. Must punch every hr. Missed punch deducts 1hr from 3hrs OT.
+2026-02-26	HR-EMP-00002	Anura Manamperi	Security	Drivethru Main	Night Watcher	
+PRESENT
+19:48:19	
+22:01:50
+2h 13m
+23:01:49	
+08:01:06
+1h 00m	
+19:48:19 → 22:01:50 = 2h 13m
+✅ 2:13 hrs
+—	
+Actual off time 8am – add 3hrs OT. Must punch every hr. Missed punch deducts 1hr from 3hrs OT.
+2026-02-28	HR-EMP-00002	Anura Manamperi	Security	Drivethru Main	Night Watcher	
+ABSENT
+19:49:16	
+21:55:03
+2h 06m
+22:57:04	
+23:55:17
+0h 58m
+1h 02m	
+19:49:16 → 21:55:03 = 2h 06m
+22:57:04 → 23:55:17 = 0h 58m
+✅ 3:04 hrs
+—	
+Actual off time 8am – add 3hrs OT. Must punch every hr. Missed punch deducts 1hr from 3hrs OT.

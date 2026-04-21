@@ -590,7 +590,12 @@ function AttendanceReport() {
       return;
     }
     const singleEmp = new Set(filtered.map((r: any) => r.employeeId)).size === 1;
-    const isNightWatcher = singleEmp && /night\s*watcher/i.test(String(filtered[0]?.shiftName || ""));
+    const firstRule = singleEmp ? clientFindRule(hrRules, filtered[0]?.department ?? "", filtered[0]?.shiftName ?? null) : null;
+    const isNightWatcher = singleEmp && (
+      !!firstRule?.nightWatcherPayroll ||
+      /night\s*watcher/i.test(String(filtered[0]?.shiftName || "")) ||
+      /night\s*watcher/i.test(String(filtered[0]?.designation || ""))
+    );
     if (singleEmp && isNightWatcher) {
       const firstRec: any = filtered[0];
       const policyRows = buildNightWatcherPolicyRows();
@@ -680,7 +685,12 @@ function AttendanceReport() {
       return;
     }
     const singleEmp = new Set(filtered.map((r: any) => r.employeeId)).size === 1;
-    const isNightWatcher = singleEmp && /night\s*watcher/i.test(String(filtered[0]?.shiftName || ""));
+    const firstRule = singleEmp ? clientFindRule(hrRules, filtered[0]?.department ?? "", filtered[0]?.shiftName ?? null) : null;
+    const isNightWatcher = singleEmp && (
+      !!firstRule?.nightWatcherPayroll ||
+      /night\s*watcher/i.test(String(filtered[0]?.shiftName || "")) ||
+      /night\s*watcher/i.test(String(filtered[0]?.designation || ""))
+    );
     if (singleEmp && isNightWatcher) {
       const rows = buildNightWatcherPolicyRows().map((r) => {
         // Force Excel to keep date text format and avoid "#####".
