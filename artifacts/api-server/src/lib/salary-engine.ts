@@ -316,25 +316,17 @@ export function processSalaryRow(opts: {
     const span = e > s ? e - s : (24 * 60 - s) + e;
     return Math.max(1, span / 60);
   })();
-  // Spec rule #1 + revised Half Day Rule:
-  //   < 4 hrs              → ABSENT
-  //   4 hrs ≤ work < 8 hrs → HALF DAY
-  //   ≥ 8 hrs              → PRESENT
-  // Capped against the actual shift duration for short shifts (e.g. 5-hr Half
-  // Day Shift) so the absolute hour bands never exceed the shift itself.
-  // "Full shift" tolerance keeps an employee finishing within ~20 min of
-  // end-time as PRESENT.
-  const fullShiftToleranceHrs = (LATE_GRACE_MINUTES + CHECKOUT_GRACE_MINUTES) / 60; // 20 min
+  // Spec — absolute hour bands applied to ALL shifts (including FLEXIBLE):
+  //   total_hours == 0    → ABSENT
+  //   total_hours <  4    → ABSENT
+  //   4 ≤ hours <  8      → HALF DAY
+  //   hours ≥ 8           → PRESENT
+  //
+  // INVALID is reserved for missing-punch records with < 4 hrs work;
+  // anything ≥ 4 hrs is still classified normally and the row is flagged
+  // with a "Need Review" note so HR can fix the punch later.
   const absoluteFullHrs = 8;
   const absoluteHalfHrs = 4;
-  const fullShiftThresholdHours = Math.max(
-    2,
-    Math.min(absoluteFullHrs, shiftDurationHours - fullShiftToleranceHrs),
-  );
-  const halfDayThresholdHours = Math.max(
-    1,
-    Math.min(absoluteHalfHrs, shiftDurationHours * 0.5),
-  );
 
   let dayType: DayType;
   if (rec?.leaveType) {
@@ -342,25 +334,19 @@ export function processSalaryRow(opts: {
     dayType = "ABSENT";
   } else if (isOff) {
     dayType = hasWork ? "WEEK_OFF_WORKED" : "WEEK_OFF";
-  } else if (!hasWork) {
+  } else if (workedHoursRaw <= 0 && !firstIn) {
     dayType = "ABSENT";
-  } else if (hasMissingPunch) {
-    // Spec rule #2 — never collapse incomplete punches into HALF DAY.
+  } else if (hasMissingPunch && workedHoursRaw < absoluteHalfHrs) {
+    // Missing punch AND not enough work to classify → flag for review.
     dayType = "INVALID";
-  } else if (category === "FLEXIBLE" || category === "NIGHT") {
-    // No shift-duration based half/absent split for flexible/night.
-    dayType = "WORKING_DAY";
-  } else if (isHalfDayScheduled || category === "HALF_DAY") {
-    // Scheduled half-day: showing up = HALF DAY completed.
-    dayType = "HALF_DAY";
-  } else if (workedHoursRaw < halfDayThresholdHours) {
-    // < 50% of shift → ABSENT (per spec, NOT half day).
+  } else if (workedHoursRaw < absoluteHalfHrs) {
     dayType = "ABSENT";
-  } else if (workedHoursRaw < fullShiftThresholdHours) {
-    // 50% – full shift → HALF DAY.
+  } else if (isHalfDayScheduled || category === "HALF_DAY") {
+    // Scheduled half-day shift: showing up at all = HALF DAY completed.
+    dayType = "HALF_DAY";
+  } else if (workedHoursRaw < absoluteFullHrs) {
     dayType = "HALF_DAY";
   } else {
-    // ≥ full shift → PRESENT.
     dayType = "WORKING_DAY";
   }
 
@@ -397,13 +383,13 @@ export function processSalaryRow(opts: {
     lateMinutes = 0;
   }
 
-  // Spec rule: "If total_hours ≥ 8 hrs AND missing punch → PRESENT + Need Review"
-  // Also: "9+ hrs should never remain INVALID."
-  // If we flagged INVALID but the employee actually clocked a full day's work,
-  // promote them to a working day and surface a soft "Need Review" note.
-  let needReview = false;
-  if (dayType === "INVALID" && workedHoursRaw >= 8) {
-    dayType = "WORKING_DAY";
+  // Spec rule: INVALID is reserved for low-hours missing-punch rows.
+  // If a row was flagged INVALID (e.g. by the > 3-hr late guard above) but the
+  // employee actually clocked ≥ 4 hrs, reclassify normally and add a soft
+  // "Need Review" note so HR can fix the underlying punch/shift later.
+  let needReview = hasMissingPunch && workedHoursRaw >= absoluteHalfHrs;
+  if (dayType === "INVALID" && workedHoursRaw >= absoluteHalfHrs) {
+    dayType = workedHoursRaw >= absoluteFullHrs ? "WORKING_DAY" : "HALF_DAY";
     needReview = true;
   }
 
