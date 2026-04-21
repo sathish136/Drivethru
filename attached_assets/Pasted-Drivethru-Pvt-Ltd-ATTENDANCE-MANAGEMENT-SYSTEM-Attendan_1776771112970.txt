@@ -1,0 +1,45 @@
+Drivethru Pvt Ltd
+ATTENDANCE MANAGEMENT SYSTEM
+Attendance Report (Policy Format)
+Generated: April 20, 2026 at 7:40 PM
+PERIOD
+2026-02-01 – 2026-02-28
+EMPLOYEE
+Anura Manamperi
+EMP ID
+HR-EMP-00002
+DEPARTMENT
+Security
+BRANCH
+Drivethru Main
+Date Day Status Shift Morning In Morning Out Afternoon In Actual Off Punch Current Total Policy OT by Off Time Policy Remark
+01-02-2026 Sun HALF DAY Night Watcher Shift 00:49:36 04:49:19 05:49:56 07:51:27 6:01 hrs — Half day record; needs manual check against normal night shift policy
+02-02-2026 Mon PRESENT Night Watcher Shift 19:57:14 22:01:01 23:01:22 08:00:26 9:04 hrs 3:00 hrs All hourly checkpoints satisfied (05:00/06:00/07:00)
+03-02-2026 Tue No record Night Watcher Shift — — — — — — No punch data
+04-02-2026 Wed PRESENT Night Watcher Shift 19:54:52 22:00:17 23:00:59 08:00:47 9:06 hrs 3:00 hrs All hourly checkpoints satisfied (05:00/06:00/07:00)
+05-02-2026 Thu No record Night Watcher Shift — — — — — — No punch data
+06-02-2026 Fri PRESENT Night Watcher Shift 19:53:11 22:00:51 23:00:47 08:00:39 9:08 hrs 3:00 hrs All hourly checkpoints satisfied (05:00/06:00/07:00)
+07-02-2026 Sat No record Night Watcher Shift — — — — — — No punch data
+08-02-2026 Sun PRESENT Night Watcher Shift 19:55:14 22:01:18 23:00:50 08:01:11 9:06 hrs 3:00 hrs All hourly checkpoints satisfied (05:00/06:00/07:00)
+09-02-2026 Mon No record Night Watcher Shift — — — — — — No punch data
+10-02-2026 Tue PRESENT Night Watcher Shift 19:51:25 22:00:22 23:00:17 08:04:51 9:14 hrs 3:00 hrs All hourly checkpoints satisfied (05:00/06:00/07:00)
+11-02-2026 Wed No record Night Watcher Shift — — — — — — No punch data
+12-02-2026 Thu PRESENT Night Watcher Shift 19:52:55 22:00:33 23:00:18 08:00:45 9:08 hrs 3:00 hrs All hourly checkpoints satisfied (05:00/06:00/07:00)
+13-02-2026 Fri No record Night Watcher Shift — — — — — — No punch data
+14-02-2026 Sat PRESENT Night Watcher Shift 19:48:54 21:55:18 22:54:15 07:54:23 9:07 hrs 3:00 hrs All hourly checkpoints satisfied (05:00/06:00/07:00)
+15-02-2026 Sun No record Night Watcher Shift — — — — — — No punch data
+16-02-2026 Mon PRESENT Night Watcher Shift 19:49:30 21:54:15 22:54:15 07:54:05 8:58 hrs 3:00 hrs All hourly checkpoints satisfied (05:00/06:00/07:00)
+17-02-2026 Tue No record Night Watcher Shift — — — — — — No punch data
+18-02-2026 Wed PRESENT Night Watcher Shift 19:48:48 21:53:54 22:54:03 07:54:06 9:05 hrs 3:00 hrs All hourly checkpoints satisfied (05:00/06:00/07:00)
+19-02-2026 Thu No record Night Watcher Shift — — — — — — No punch data
+20-02-2026 Fri PRESENT Night Watcher Shift 19:48:44 21:54:00 22:54:05 07:59:24 9:08 hrs 3:00 hrs All hourly checkpoints satisfied (05:00/06:00/07:00)
+21-02-2026 Sat No record Night Watcher Shift — — — — — — No punch data
+22-02-2026 Sun PRESENT Night Watcher Shift 19:48:31 20:54:20 21:54:10 07:54:03 8:47 hrs 3:00 hrs All hourly checkpoints satisfied (05:00/06:00/07:00)
+23-02-2026 Mon No record Night Watcher Shift — — — — — — No punch data
+24-02-2026 Tue PRESENT Night Watcher Shift 19:48:24 21:54:05 22:54:05 07:55:12 9:07 hrs 3:00 hrs All hourly checkpoints satisfied (05:00/06:00/07:00)
+25-02-2026 Wed No record Night Watcher Shift — — — — — — No punch data
+26-02-2026 Thu PRESENT Night Watcher Shift 19:48:19 22:01:50 23:01:49 08:01:06 9:14 hrs 3:00 hrs All hourly checkpoints satisfied (05:00/06:00/07:00)
+27-02-2026 Fri No record Night Watcher Shift — — — — — — No punch data
+Date Day Status Shift Morning In Morning Out Afternoon In Actual Off Punch Current Total Policy OT by Off Time Policy Remark
+28-02-2026 Sat ABSENT Night Watcher Shift 19:49:16 21:55:03 22:57:04 23:55:17 3:04 hrs — Absent/invalid against policy shift; manual review needed
+System-generated report. For internal use only. © 2026 Drivethru Pvt Ltd Powered by Live U Pvt Ltd

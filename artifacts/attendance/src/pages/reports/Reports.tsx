@@ -550,7 +550,6 @@ function AttendanceReport() {
     if (!filtered.length) return [] as (string | number)[][];
     const first = filtered[0];
     const shift = first.shiftName || "—";
-    const offDays = empOffDays.get(Number(first.employeeId)) || [];
     const mapByDate = new Map(filtered.map((r: any) => [r.date, r]));
     const [sy, sm, sd] = dStart.split("-").map(Number);
     const [ey, em, ed] = dEnd.split("-").map(Number);
@@ -559,16 +558,10 @@ function AttendanceReport() {
     const rows: (string | number)[][] = [];
     for (let dt = new Date(start); dt <= end; dt.setUTCDate(dt.getUTCDate() + 1)) {
       const dateStr = dt.toISOString().slice(0, 10);
-      const dow = dt.getUTCDay();
-      const day = DAY_NAMES[dow];
+      const day = DAY_NAMES[dt.getUTCDay()];
       const r = mapByDate.get(dateStr);
-      const isOff = offDays.includes(dow);
       if (!r) {
-        if (isOff) {
-          rows.push([toDdMmYyyy(dateStr), day, "WEEK OFF", shift, "—", "—", "—", "—", "—", "—", "Scheduled week off"]);
-        } else {
-          rows.push([toDdMmYyyy(dateStr), day, "No record", shift, "—", "—", "—", "—", "—", "—", policyRemark("no_record", 0)]);
-        }
+        rows.push([toDdMmYyyy(dateStr), day, "No record", shift, "—", "—", "—", "—", "—", "—", policyRemark("no_record", 0)]);
         continue;
       }
       const st = r.status;
