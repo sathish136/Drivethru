@@ -11,7 +11,7 @@ import {
   timeToMins, calcLunchLateMinutes, calcTimeBasedOtHours,
   isNightShiftRecord, calcNightWatcherPolicyOtHours,
 } from "../lib/hr-rules.js";
-import { processSalaryRow, type WeekOffInfo } from "../lib/salary-engine.js";
+import { processSalaryRow, resolveDayShift, type WeekOffInfo } from "../lib/salary-engine.js";
 
 const STATUTORY_NAMES = ["EPF – Employee", "EPF – Employer", "ETF"];
 
@@ -227,6 +227,7 @@ router.post("/generate", async (req, res) => {
 
     const allShifts = await db.select().from(shifts);
     const shiftMap = new Map(allShifts.map(s => [s.id, s]));
+    const shiftsByName = new Map(allShifts.map(s => [s.name.trim().toLowerCase(), s]));
 
     const allWeekoffs = await db.select().from(weekoffSchedules);
     const weekoffMap = new Map(allWeekoffs.map(w => ({
@@ -303,14 +304,15 @@ router.post("/generate", async (req, res) => {
         (empOffDays.length > 0 || empHalfDays.length > 0)
           ? { offDays: empOffDays, halfDays: empHalfDays }
           : null;
-      const empShiftInfo = { name: empShiftName, startTime: shiftStart1, endTime: shiftEnd1 };
       const salaryRowByDate = new Map<string, ReturnType<typeof processSalaryRow>>();
       const salaryRowFor = (rec: typeof empAtt[number]) => {
         const cached = salaryRowByDate.get(rec.date);
         if (cached) return cached;
+        // Day-wise variant lookup: e.g. Kitchen on Sunday picks "Kitchen Shift - Sunday"
+        const dayShift = empShift ? resolveDayShift(empShift, rec.date, shiftsByName as any) : null;
         const sr = processSalaryRow({
           date: rec.date,
-          shift: empShiftInfo,
+          shift: { name: dayShift?.name ?? empShiftName, startTime: dayShift?.startTime1 ?? shiftStart1, endTime: dayShift?.endTime1 ?? shiftEnd1 },
           weekoff: empWeekoffInfo,
           rec: {
             date: rec.date,

@@ -4,7 +4,7 @@ import { attendanceRecords, employees, branches, shifts, weekoffSchedules } from
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 import { getDaysInMonth, today } from "../lib/helpers.js";
 import { loadDeptRules, findRule, timeToMins, calcLunchLateMinutes, lateCutoffMins, calcOtHours, calcTimeBasedOtHours, isNightShiftRecord, DeptShiftRule, calcNightWatcherPolicyOtHours } from "../lib/hr-rules.js";
-import { processSalaryRow, type WeekOffInfo, type DayType } from "../lib/salary-engine.js";
+import { processSalaryRow, resolveDayShift, type WeekOffInfo, type DayType } from "../lib/salary-engine.js";
 
 /**
  * Map salary-engine DayType into the front-end status string used across
@@ -270,6 +270,8 @@ router.get("/attendance", async (req, res) => {
 
     const allShifts = await db.select().from(shifts);
     const shiftMap = new Map(allShifts.map(s => [s.id, s]));
+    // Day-wise variant lookup ("kitchen shift - sunday", etc.)
+    const shiftsByName = new Map(allShifts.map(s => [s.name.trim().toLowerCase(), s]));
     const hrRules = await loadDeptRules();
 
     /* Load week-off schedules and join via employees.weekoffScheduleId so the
@@ -306,10 +308,12 @@ router.get("/attendance", async (req, res) => {
       : all;
 
     let enriched = processedAll.map(r => {
-      const empShift = r.empShiftId ? shiftMap.get(r.empShiftId) ?? undefined : undefined;
-      const rule = findRule(hrRules, r.empDepartment || "", empShift?.name);
+      const baseShift = r.empShiftId ? shiftMap.get(r.empShiftId) ?? undefined : undefined;
+      const rule = findRule(hrRules, r.empDepartment || "", baseShift?.name);
       const date = r.rec.date;            // "YYYY-MM-DD"
       const empWeekoff = empWeekoffById.get(r.rec.employeeId) ?? null;
+      // Day-wise variant: e.g. "Kitchen Shift" + Sunday → "Kitchen Shift - Sunday"
+      const empShift = baseShift ? resolveDayShift(baseShift, date, shiftsByName as any) : undefined;
 
       // Run the policy-driven salary engine for THIS row.
       const sr = processSalaryRow({
@@ -420,6 +424,7 @@ router.get("/monthly", async (req, res) => {
 
     const allShifts = await db.select().from(shifts);
     const shiftMap = new Map(allShifts.map(s => [s.id, s]));
+    const shiftsByName = new Map(allShifts.map(s => [s.name.trim().toLowerCase(), s]));
     const hrRules = await loadDeptRules();
 
     const allWeekoffs = await db.select().from(weekoffSchedules);
@@ -461,10 +466,12 @@ router.get("/monthly", async (req, res) => {
       let lunchLateDays = 0, totalMorningLateMinutes = 0, totalLunchLateMinutes = 0;
 
       for (const r of recs) {
+        // Resolve day-wise shift variant (e.g. Kitchen on Sunday) from master.
+        const dayShift = empShift ? resolveDayShift(empShift, r.date, shiftsByName as any) : undefined;
         // Salary engine = single source of truth
         const sr = processSalaryRow({
           date: r.date,
-          shift: { name: empShift?.name, startTime: empShift?.startTime1, endTime: empShift?.endTime1 },
+          shift: { name: dayShift?.name, startTime: dayShift?.startTime1, endTime: dayShift?.endTime1 },
           weekoff: empWeekoff,
           rec: {
             date: r.date,

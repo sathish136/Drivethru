@@ -120,6 +120,42 @@ function dayOfWeek(dateStr: string): number {
   return new Date(dateStr + "T00:00:00Z").getUTCDay(); // 0=Sun..6=Sat
 }
 
+/** "2026-02-01" -> "Sunday" */
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+export function dayNameOf(dateStr: string): string {
+  return DAY_NAMES[dayOfWeek(dateStr)];
+}
+
+/**
+ * Day-wise shift variant resolver — uses ONLY the existing /shifts master.
+ *
+ * If the employee is assigned a shift named "Kitchen Shift" and the master has
+ * a row "Kitchen Shift - Sunday" that is active, that variant's start/end
+ * times are used for that date. Otherwise the employee's base shift is used
+ * unchanged. This keeps day-wise Kitchen timing within the existing module.
+ */
+export interface ShiftMasterRow {
+  id: number;
+  name: string;
+  startTime1: string;
+  endTime1: string;
+  isActive: boolean;
+}
+export function resolveDayShift<T extends ShiftMasterRow | undefined | null>(
+  baseShift: T,
+  dateStr: string,
+  shiftsByName: Map<string, ShiftMasterRow>,
+): T {
+  if (!baseShift) return baseShift;
+  const variantKey = `${baseShift.name.trim().toLowerCase()} - ${dayNameOf(dateStr).toLowerCase()}`;
+  const variant = shiftsByName.get(variantKey);
+  if (variant && variant.isActive) {
+    // Return a shallow override — keep id/name of variant so remarks reflect it.
+    return { ...(baseShift as object), startTime1: variant.startTime1, endTime1: variant.endTime1 } as T;
+  }
+  return baseShift;
+}
+
 /* ── Night-shift hourly punch validation ───────────────────────────────── */
 
 /**
@@ -255,6 +291,19 @@ export function processSalaryRow(opts: {
   // Did the employee actually work? Use a small lower bound to ignore noise punches.
   const hasWork = workedHoursRaw > 0.25 || !!firstIn;
 
+  // Effective shift duration in hours (used by half-day & OT thresholds).
+  // Falls back to 9 hrs when undefined or category is FLEXIBLE/NIGHT.
+  const shiftDurationHours = (() => {
+    if (category === "FLEXIBLE" || category === "NIGHT") return 9;
+    if (!startTime || !endTime || startTime === "—" || endTime === "—") return 9;
+    const s = timeToMins(startTime);
+    const e = timeToMins(endTime);
+    const span = e > s ? e - s : (24 * 60 - s) + e;
+    return Math.max(1, span / 60);
+  })();
+  // 50% of shift duration is the half-day threshold per policy.
+  const halfDayThresholdHours = Math.max(2, shiftDurationHours * 0.5);
+
   let dayType: DayType;
   if (rec?.leaveType) {
     // Leaves are out of scope for salary-run day-type — surface as ABSENT day so payroll handles via leave routes.
@@ -267,10 +316,9 @@ export function processSalaryRow(opts: {
   } else if (isHalfDayScheduled || category === "HALF_DAY") {
     // Scheduled half-day: completed if they showed up; remarks differentiate
     dayType = "HALF_DAY";
-  } else if (workedHoursRaw < HALF_DAY_HOURS) {
-    // Spec: do not mark near full-day worked rows as HALF_DAY without rule basis.
-    // Below 5 hrs and not on a scheduled half-day → ABSENT for salary purposes.
-    dayType = "ABSENT";
+  } else if (workedHoursRaw < halfDayThresholdHours) {
+    // Worked some but under 50% of shift → HALF_DAY (not ABSENT).
+    dayType = "HALF_DAY";
   } else {
     dayType = "WORKING_DAY";
   }
@@ -317,9 +365,13 @@ export function processSalaryRow(opts: {
         const outMins = timeToMins(lastOut);
         const otStartMins = timeToMins(otStart);
         const overMins = outMins - otStartMins;
+        // OT completion guard: the person must have actually completed the
+        // shift (worked hrs ≥ shift duration − 30 min). Prevents bugs like
+        // "came in at 14:02, left at 20:00 → 2.5h OT" on a Regular Shift.
+        const completedShift = workedHoursRaw >= shiftDurationHours - 0.5;
         // 30-minute threshold: only count OT once over by ≥ threshold,
         // and the counted minutes are the full minutes past otStart.
-        if (overMins >= OT_THRESHOLD_MINUTES) {
+        if (completedShift && overMins >= OT_THRESHOLD_MINUTES) {
           otHours = Math.round((overMins / 60) * 100) / 100;
         }
       }

@@ -1,0 +1,142 @@
+⚠️ Still Issues (IMPORTANT)
+❌ 1. OT calculation still inconsistent
+
+👉 Example:
+
+21:09 out → OT 0.7h
+But kitchen rule:
+👉 OT should be counted after 8:30 PM properly rounded
+
+Also:
+
+சில rowsல OT missing completely
+👉 even after long hours
+
+📌 Conclusion:
+OT logic partially working, not consistent across all rows
+
+❌ 2. Late calculation still WRONG in some cases
+
+👉 Example:
+
+13:53 IN → Late = 6 hr 38 min
+✔️ correct mathematically
+❌ BUT:
+
+👉 That day shift start depends on schedule (not always 7 AM)
+
+📌 Problem:
+System is assuming fixed shift start, not day-based shift timing
+
+❌ 3. Kitchen Shift major issue (core bug still there)
+
+Kitchen shift should:
+
+follow day-wise shift timing
+not fixed 7:00 AM
+
+👉 Example:
+
+Some days shift is 2 PM – 7 PM
+But system calculating late from morning shift
+
+📌 Result:
+👉 Fake huge late values like:
+
+6 hr late
+3 hr late
+❌ 4. Half Day logic still weak
+
+👉 Example:
+
+6:06 hrs → HALF DAY ❌
+👉 That is almost full working
+
+📌 Rule missing:
+
+Half-day should be based on threshold (e.g. < 50% shift)
+❌ 5. Regular Shift OT wrong logic
+
+👉 Example:
+
+14:02 → 20:00
+OT shown = 2.5h ❌
+
+But rule:
+
+OT only after 5:30 PM
+and after 30 min threshold
+
+📌 System is:
+👉 Calculating OT from total hours, not from shift end
+
+❌ 6. Absent logic questionable
+
+👉 Example:
+
+4 hrs worked → marked ABSENT ❌
+
+📌 Should be:
+
+HALF DAY or PRESENT (depending rule)
+❌ 7. Night watcher logic missing (not visible)
+
+👉 No evidence of:
+
+3 hr default OT
+hourly punch validation
+
+📌 That module still not confirmed fixed
+
+🎯 FINAL STATUS
+Area	Status
+Flexible shift	✅ Correct
+Reception shift	✅ Correct
+Week off	✅ Fixed
+Remarks	✅ Good
+OT calculation	❌ Inconsistent
+Kitchen shift timing	❌ Wrong
+Late logic	⚠️ Partially wrong
+Half-day logic	❌ Wrong
+Regular OT	❌ Wrong
+Absent logic	❌ Weak
+🧠 FINAL VERDICT
+
+👉 System improved a lot
+👉 BUT still NOT payroll safe
+
+🔥 FINAL DEV FIX (Short version)
+
+Give this to dev 👇
+
+1. Kitchen Shift
+- Must use DAY-WISE shift timing from master
+- Do NOT assume fixed 7:00 AM start
+
+2. Late Calculation
+- Late = (Actual In - Assigned Shift Start)
+- Must use correct shift per day
+
+3. OT Calculation
+- Regular: after 5:30 PM only
+- Reception: after 6:00 PM
+- Kitchen: after 8:30 PM
+- Apply 30 min threshold before OT
+
+4. Half Day Rule
+- Define threshold (ex: <50% shift hours)
+- Do not mark 6+ hrs as half day
+
+5. Absent Rule
+- If worked hours > threshold → not ABSENT
+
+6. Remove generic OT logic
+- Use shift-based OT logic ONLY
+
+7. Validate each row with:
+- Shift time
+- Late
+- OT
+- Day type
+
+Make report strictly policy-driven, not hours-driven.
