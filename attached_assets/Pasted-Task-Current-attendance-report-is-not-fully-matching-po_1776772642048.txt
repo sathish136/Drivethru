@@ -1,0 +1,233 @@
+Task
+
+Current attendance report is not fully matching policy.
+Before salary run, fix the attendance engine, OT engine, late engine, week off handling, half day logic, and report remarks.
+
+This is not only a UI/report change.
+This is a logic correction task for salary and reports.
+
+Current Problems Found
+
+The current system has these issues:
+
+Shift category is not explicitly used
+Late calculation is inconsistent
+OT calculation is inconsistent
+Night shift OT policy is not implemented fully
+Week off logic is missing
+Half day classification is not reliable
+Remarks are static, not calculation-based
+Report is not payroll-audit friendly
+Mandatory Rule Source
+
+Use these as source of truth:
+
+Shift details → /shifts
+Week off details → /weekoffs
+
+Do not infer business rules from report output alone.
+Use master data and apply policy from shift category.
+
+Required Shift Categories
+
+Add and use an explicit category field in /shifts.
+
+Allowed categories:
+
+REGULAR
+RECEPTION
+NIGHT
+KITCHEN
+FLEXIBLE
+HALF_DAY
+
+Do not infer category only from timing or designation.
+Each shift record must be tagged explicitly.
+
+Example:
+
+{
+  "shiftId": "...",
+  "shiftName": "...",
+  "category": "REGULAR",
+  "startTime": "08:00",
+  "endTime": "17:00"
+}
+Policy to Implement
+1. REGULAR SHIFT
+Standard time: 8:00 AM - 5:00 PM
+Late after: 8:15 AM
+OT after: 5:30 PM
+OT should count only after 30 minutes threshold
+2. RECEPTION SHIFT
+Standard time: 8:30 AM - 5:30 PM
+Late after: 8:45 AM
+OT after: 6:00 PM
+OT should count only after 30 minutes threshold
+3. KITCHEN SHIFT
+Shift timing may vary by assigned shift row
+Late after: 15 minutes from assigned shift start
+OT rule must be based on assigned kitchen shift
+If policy says extended OT applies after long shift completion, calculate only from the assigned shift rule, not generic regular shift logic
+Do not use random OT decimals without rule basis
+4. FLEXIBLE SHIFT
+No late deduction
+OT only if total worked hours exceed 9 hours 30 minutes
+If total worked time is <= 9:30, OT = 0
+5. NIGHT SHIFT
+Standard shift: 8:00 PM - 5:00 AM
+Actual off time can be considered until 8:00 AM
+Maximum OT = 3 hours
+Hourly punch validation is mandatory
+Night Shift OT Deduction Logic
+
+Check hourly punch presence across night blocks.
+
+Expected hourly continuity across the shift window.
+
+Use this rule:
+
+0 missed hourly blocks → full 3 hrs OT
+1 missed hourly block → deduct 1 hr OT
+2 or more missed hourly blocks → deduct 2 hrs OT
+Never deduct more than 2 hrs
+
+Night shift remarks must clearly show:
+
+Night Shift - 3 hrs OT added
+Night Shift - 1 hr OT deducted due to missed punch
+Night Shift - 2 hrs OT deducted due to multiple missed punches
+Common Rules
+Late Grace
+General grace = 15 minutes
+After grace only, calculate actual late minutes
+
+Examples:
+
+Shift start 8:00, punch 8:10 → no late
+Shift start 8:00, punch 8:18 → late = 3 mins
+OT Threshold
+OT should only start counting after 30 minutes
+Example:
+Shift end 5:00
+OT start threshold 5:30
+Punch out 5:45
+OT = 15 mins
+Grace Adjustments
+
+Apply before final late/OT result:
+
+Lunch grace = +10 mins
+Final checkout grace = +5 mins
+
+If these are used, remarks must mention them.
+
+Week Off Logic
+
+Use /weekoffs for each employee/date.
+
+For each date:
+
+If it is week off and no valid work → WEEK_OFF
+If it is week off and work exists → WEEK_OFF_WORKED
+
+Week off must not be ignored.
+Current report is missing this logic and must be corrected.
+
+Half Day Logic
+
+Half day must not be assigned only by raw status label.
+
+System must validate:
+
+assigned shift type
+worked duration
+expected half-day schedule
+
+A row with near full-day worked hours must not remain incorrectly marked as HALF_DAY without rule validation.
+
+Day Type Output
+
+Each attendance row must be classified as one of these:
+
+WORKING_DAY
+WEEK_OFF
+WEEK_OFF_WORKED
+HALF_DAY
+ABSENT
+Mandatory Report Changes
+
+Final report must include these columns for every row:
+
+Employee ID / Name
+Date
+Shift Category
+Shift Time
+Week Off Status
+First In
+Last Out
+Worked Hours
+Late Minutes
+OT Hours
+Day Type
+Remarks
+Remarks Rule
+
+Remarks must be dynamic and calculation-based.
+
+Do not repeat static policy text only.
+
+Bad
+Late deduction after 8.15am / OT after 5.30pm
+Good
+Regular Shift - Late by 12 mins
+Regular Shift - OT 1 hr 15 mins
+Reception Shift - Within grace
+Flexible Shift - No late deduction
+Flexible Shift - OT applied after 9.30 hrs
+Week Off - Not worked
+Week Off - Worked
+Half Day - Completed
+Night Shift - 3 hrs OT added
+Night Shift - 1 hr OT deducted due to missed punch
+Lunch grace applied
+Checkout grace applied
+
+Remarks must explain the final payroll effect clearly.
+
+Processing Flow
+
+For each employee and date:
+
+Read assigned shift from /shifts
+Read week off from /weekoffs
+Read punches
+Determine shift category
+Determine day type
+Apply shift-based late rule
+Apply shift-based OT rule
+Apply lunch/checkout grace
+Apply night shift special validation if category = NIGHT
+Validate half day if applicable
+Generate final dynamic remarks
+Output payroll-ready report row
+Important Corrections Required from Current System
+
+Fix these current issues:
+
+Remove static remarks-only behavior
+Stop using raw department/designation as shift rule source
+Stop calculating late without proper grace
+Stop calculating OT without threshold and shift-specific logic
+Add week off handling
+Add shift category column
+Add payroll-friendly remarks
+Make report salary-ready
+Final Requirement
+
+This change must make the system ready for:
+
+salary calculation
+attendance verification
+payroll audit
+clear HR reporting
