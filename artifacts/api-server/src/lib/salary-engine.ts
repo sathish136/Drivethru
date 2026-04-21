@@ -30,7 +30,8 @@ export type DayType =
   | "WEEK_OFF"
   | "WEEK_OFF_WORKED"
   | "HALF_DAY"
-  | "ABSENT";
+  | "ABSENT"
+  | "INVALID";
 
 /** Common policy constants (per spec) */
 export const LATE_GRACE_MINUTES = 15;
@@ -287,12 +288,21 @@ export function processSalaryRow(opts: {
   const workedHoursRaw = rec?.totalHours ?? 0;
   const workedHours = Math.round(workedHoursRaw * 100) / 100;
 
-  /* ── Day-type classification ─────────────────────────────────────── */
-  // Did the employee actually work? Use a small lower bound to ignore noise punches.
+  /* ── Day-type classification (spec-driven) ────────────────────────── */
+  // Has any meaningful work happened today?
   const hasWork = workedHoursRaw > 0.25 || !!firstIn;
 
-  // Effective shift duration in hours (used by half-day & OT thresholds).
-  // Falls back to 9 hrs when undefined or category is FLEXIBLE/NIGHT.
+  // Missing-punch detection per spec rule #2:
+  //   "Missing OUT / incomplete punches → INVALID / NEED REVIEW"
+  // Trigger when there's a check-in but no final check-out at all, or when
+  // the second session is half-open (inTime2 without outTime2).
+  // NOTE: many employees record only one in/out pair (no lunch split) — that
+  // is NOT a missing punch.
+  const hasMissingPunch =
+    (!!firstIn && !lastOut) ||
+    (!!rec?.inTime2 && !rec?.outTime2);
+
+  // Effective shift duration in hours (used by half-day & full-day thresholds).
   const shiftDurationHours = (() => {
     if (category === "FLEXIBLE" || category === "NIGHT") return 9;
     if (!startTime || !endTime || startTime === "—" || endTime === "—") return 9;
@@ -301,25 +311,43 @@ export function processSalaryRow(opts: {
     const span = e > s ? e - s : (24 * 60 - s) + e;
     return Math.max(1, span / 60);
   })();
-  // 50% of shift duration is the half-day threshold per policy.
+  // Spec rule #1:
+  //   < 50% of shift  → ABSENT
+  //   ≥ 50%, < full   → HALF DAY
+  //   ≥ full          → PRESENT
   const halfDayThresholdHours = Math.max(2, shiftDurationHours * 0.5);
+  // "Full shift" tolerance: late grace (15 min) + checkout grace (5 min) = 20 min.
+  // i.e. an employee finishing within ~20 minutes of end-time is still PRESENT.
+  const fullShiftThresholdHours = Math.max(
+    halfDayThresholdHours + 0.01,
+    shiftDurationHours - (LATE_GRACE_MINUTES + CHECKOUT_GRACE_MINUTES) / 60,
+  );
 
   let dayType: DayType;
   if (rec?.leaveType) {
-    // Leaves are out of scope for salary-run day-type — surface as ABSENT day so payroll handles via leave routes.
-    // (Kept conservative — we never silently downgrade a leave to "WORKING_DAY".)
+    // Leaves out of scope here — surface as ABSENT so leave routes handle them.
     dayType = "ABSENT";
   } else if (isOff) {
     dayType = hasWork ? "WEEK_OFF_WORKED" : "WEEK_OFF";
   } else if (!hasWork) {
     dayType = "ABSENT";
+  } else if (hasMissingPunch) {
+    // Spec rule #2 — never collapse incomplete punches into HALF DAY.
+    dayType = "INVALID";
+  } else if (category === "FLEXIBLE" || category === "NIGHT") {
+    // No shift-duration based half/absent split for flexible/night.
+    dayType = "WORKING_DAY";
   } else if (isHalfDayScheduled || category === "HALF_DAY") {
-    // Scheduled half-day: completed if they showed up; remarks differentiate
+    // Scheduled half-day: showing up = HALF DAY completed.
     dayType = "HALF_DAY";
   } else if (workedHoursRaw < halfDayThresholdHours) {
-    // Worked some but under 50% of shift → HALF_DAY (not ABSENT).
+    // < 50% of shift → ABSENT (per spec, NOT half day).
+    dayType = "ABSENT";
+  } else if (workedHoursRaw < fullShiftThresholdHours) {
+    // 50% – full shift → HALF DAY.
     dayType = "HALF_DAY";
   } else {
+    // ≥ full shift → PRESENT.
     dayType = "WORKING_DAY";
   }
 
@@ -328,6 +356,7 @@ export function processSalaryRow(opts: {
   if (
     dayType !== "ABSENT" &&
     dayType !== "WEEK_OFF" &&
+    dayType !== "INVALID" &&
     category !== "FLEXIBLE" &&
     category !== "NIGHT"
   ) {
@@ -346,11 +375,20 @@ export function processSalaryRow(opts: {
     }
   }
 
+  // Spec validation rule: "Late > 4 hrs → check shift timing.
+  // No random huge late values." A late > 4 hrs almost certainly means the
+  // employee's assigned shift didn't match this day's actual shift — flag
+  // for review instead of dumping a misleading huge late number into payroll.
+  if (lateMinutes > 240) {
+    dayType = "INVALID";
+    lateMinutes = 0;
+  }
+
   /* ── OT hours ─────────────────────────────────────────────────────── */
   let otHours = 0;
   let nightTrace: { missedBlocks: number; deductedHours: number } | null = null;
 
-  if (dayType !== "ABSENT" && rec) {
+  if (dayType !== "ABSENT" && dayType !== "INVALID" && rec) {
     if (category === "NIGHT") {
       const r = nightShiftOt(rec);
       otHours = r.otHours;
@@ -441,6 +479,9 @@ function buildRemarks(args: {
   }
   if (dayType === "ABSENT") {
     return `${label} - Absent`;
+  }
+  if (dayType === "INVALID") {
+    return `${label} - Invalid / Need Review (missing punch or shift mismatch)`;
   }
   if (dayType === "HALF_DAY") {
     parts.push(`${label} - Half Day Completed`);

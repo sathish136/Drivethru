@@ -753,6 +753,7 @@ function AttendanceReport() {
               <option value="late">Late</option><option value="half_day">Half Day</option>
               <option value="leave">Leave</option><option value="holiday">Holiday</option>
               <option value="off_day">Day Off</option>
+              <option value="invalid">Invalid / Need Review</option>
             </Select></div>
           <div><Label className="text-xs">Employee Type</Label>
             <Select value={empType} onChange={e=>setEmpType(e.target.value)}>
@@ -771,7 +772,7 @@ function AttendanceReport() {
       </FilterCard>
 
       {data && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-3">
           {[
             {label:"Present",  val:filtered.filter((r:any)=>r.status==="present"||r.status==="late").length,  cls:"text-green-600"},
             {label:"Absent",   val:filtered.filter((r:any)=>r.status==="absent").length,   cls:"text-red-600"},
@@ -780,6 +781,7 @@ function AttendanceReport() {
             {label:"Leave",    val:filtered.filter((r:any)=>r.status==="leave").length,    cls:"text-purple-600"},
             {label:"Holiday",  val:filtered.filter((r:any)=>r.status==="holiday").length,  cls:"text-gray-600"},
             {label:"Day Off",  val:filtered.filter((r:any)=>r.status==="off_day").length,  cls:"text-violet-600"},
+            {label:"Invalid",  val:filtered.filter((r:any)=>r.status==="invalid").length,  cls:"text-orange-600"},
           ].map(({label,val,cls})=>(
             <Card key={label} className="p-3 text-center">
               <div className={cn("text-2xl font-bold",cls)}>{val}</div>
