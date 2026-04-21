@@ -1,0 +1,169 @@
+Salary Run Instruction — Shift / Weekoff / Remarks Based Attendance Policy
+Objective
+
+Build the attendance and salary processing logic using shift and week off master data.
+This logic will be used as the base for salary run, so the final report must clearly show applied shift rules, week off details, late deductions, overtime, and remarks for each employee.
+
+Data Source Mapping
+Shift details source: /shifts
+Week off source: /weekoffs
+
+These two sources must be used as the primary reference for attendance interpretation and salary calculation.
+
+Core Rule
+
+For each employee, determine:
+
+Assigned shift from /shifts
+Applicable week off from /weekoffs
+Attendance in/out punches
+Late minutes
+Overtime minutes/hours
+Half day / off day handling
+Final remarks explaining how the calculation was derived
+Shift Policy Master
+Shift Category	Standard Working Time	Late Rule	OT Rule	Remarks Rule
+Regular Shift	8:00 AM - 5:00 PM	Late after 8:15 AM	OT after 5:30 PM	Use normal late and OT calculation
+Reception Shift	8:30 AM - 5:30 PM	Late after 8:45 AM	OT after 6:00 PM	Use reception-specific late and OT cut-off
+Night Shift	8:00 PM - 5:00 AM	No standard late rule defined	Fixed OT up to 8:00 AM	Add 3 hours OT if valid; hourly punches mandatory
+Kitchen Shift	Varies by day	Late after 15 minutes from shift start	OT based on assigned rule / extended time	Shift timing may vary by day, so compare against actual assigned shift
+Flexible Shift	Flexible hours	No late deduction	OT only if total hours exceed 9.30 hours	No fixed start-time late deduction
+Half Day Shift	Usually up to 1:00 PM or as assigned	Apply only if half-day shift has fixed reporting time	OT only if explicitly allowed	Must be shown clearly as half day in report
+Common Attendance Policies
+1. Late Calculation
+Late deduction starts after 15 minutes grace unless shift-specific rule overrides it.
+Example:
+Shift start: 8:00 AM
+Employee in: 8:18 AM
+Late = 3 minutes
+For Regular Shift, grace ends at 8:15 AM
+For Reception Shift, grace ends at 8:45 AM
+For Kitchen Shift, late applies after 15 minutes from assigned shift start
+For Flexible Shift, no late deduction
+2. Overtime Calculation
+OT should be calculated only after 30 minutes threshold
+Example:
+Shift end: 5:00 PM
+Punch out: 5:45 PM
+OT = 15 minutes
+For Regular Shift, OT starts after 5:30 PM
+For Reception Shift, OT starts after 6:00 PM
+For Flexible Shift, OT applies only if total working hours exceed 9.30 hours
+For Night Shift, OT is fixed 3 hours up to 8:00 AM, subject to punch validation
+For Kitchen Shift, OT must follow assigned kitchen shift rules and actual worked duration
+3. Night Shift Validation
+
+For Night Shift employees:
+
+Assigned shift: 8:00 PM - 5:00 AM
+Actual off time considered up to 8:00 AM
+Add 3 hours OT
+But hourly punch validation is mandatory
+If employee misses required hourly punch:
+deduct 1 or 2 hours from 3-hour OT as per rule
+Report remarks must clearly say:
+3 hrs OT added
+or OT reduced due to missed hourly punch
+4. Week Off Handling
+Weekly off must come from /weekoffs
+If attendance exists on a scheduled week off:
+mark clearly as Worked on Week Off
+show worked hours
+show whether OT / extra pay rule applies
+If no attendance on week off:
+mark as Week Off
+Week off day must always appear in report, even if no punch exists
+5. Half Day Handling
+
+If assigned day is half day:
+
+show shift as half day
+compare attendance only against half-day schedule
+do not treat half-day planned exit as early out
+remarks should clearly show:
+Half Day Shift
+Half Day Worked
+Half Day Absent
+whichever is applicable
+6. Lunch / Grace Policy
+Lunch out adjustment: add 10 minutes
+Final checkout grace: 5 minutes
+These adjustments must be considered before final late / OT result is frozen
+If implemented, report remarks must clearly mention:
+Lunch grace applied
+Checkout grace applied
+Calculation Flow
+
+For each employee and date:
+
+Read employee shift from /shifts
+Read employee week off from /weekoffs
+Identify whether the date is:
+Working day
+Week off
+Half day
+Read first in-punch and last out-punch
+Apply shift-specific late rule
+Apply shift-specific OT rule
+Apply grace rules
+Apply special logic for:
+Night Shift
+Flexible Shift
+Kitchen Shift
+Half day
+Week off work
+Generate final row with proper remarks
+Use this final output for salary run
+Mandatory Report Output
+
+The final report must be clear enough for payroll verification.
+Every row must contain the following columns:
+
+Column Name	Description
+Employee ID / Name	Employee identification
+Date	Attendance date
+Shift Category	Shift type from /shifts
+Shift Time	Assigned shift timing
+Week Off Status	From /weekoffs
+First In	First valid punch in
+Last Out	Last valid punch out
+Worked Hours	Net worked hours
+Late Minutes	Final late minutes after grace
+OT Minutes / Hours	Final OT after threshold rules
+Day Type	Working Day / Week Off / Half Day / Absent
+Remarks	Proper explanation of applied rule
+Mandatory Remarks Format
+
+Remarks must be meaningful and payroll-friendly.
+Do not leave remarks vague.
+Remarks should explain exactly what happened.
+
+Use remarks like:
+
+Regular Shift - Late by 12 mins
+Regular Shift - OT 1 hr 15 mins
+Reception Shift - Within grace
+Night Shift - 3 hrs OT added
+Night Shift - 1 hr OT deducted due to missed hourly punch
+Week Off - Not worked
+Week Off - Worked and eligible for OT
+Half Day Shift - Completed
+Flexible Shift - No late deduction
+Flexible Shift - OT applied after 9.30 hrs
+Kitchen Shift - Shift varied as assigned
+Lunch grace applied
+Checkout grace applied
+
+Remarks must always make the salary logic auditable.
+
+Important Implementation Notes
+Do not hardcode one common rule for all employees
+Always derive shift logic from /shifts
+Always derive off-day logic from /weekoffs
+Shift-specific rules must override generic rules
+Report must include all dates relevant for salary run, including:
+present days
+week off days
+half days
+absences if required by payroll
+Final report must be readable by HR/payroll without checking raw punch logs
