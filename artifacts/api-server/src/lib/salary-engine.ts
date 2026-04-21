@@ -257,6 +257,10 @@ export interface SalaryRunRow {
   lateMinutes: number;
   otHours: number;
   dayType: DayType;
+  /** True if this row falls on a rostered week-off day. */
+  isWeekOff: boolean;
+  /** True if this row is a worked week-off (regardless of hour-band classification). */
+  weekOffWorked: boolean;
   remarks: string;
   /** Per-row trace bits for audit */
   graceApplied: { lunch: boolean; checkout: boolean };
@@ -327,12 +331,17 @@ export function processSalaryRow(opts: {
     (rec?.inTime2 ? 1 : 0) +
     (rec?.outTime2 ? 1 : 0);
 
+  // Week-off-worked is now a side-flag, NOT a separate dayType.  Worked
+  // off-days flow through the same hour-band classifier as normal days, so
+  // a 2.98-hr week-off-worked row is correctly ABSENT (not PRESENT).
+  const weekOffWorked = isOff && punchCount > 0;
+
   let dayType: DayType;
   if (rec?.leaveType) {
     // Leaves out of scope here — surface as ABSENT so leave routes handle them.
     dayType = "ABSENT";
-  } else if (isOff) {
-    dayType = punchCount > 0 ? "WEEK_OFF_WORKED" : "WEEK_OFF";
+  } else if (isOff && punchCount === 0) {
+    dayType = "WEEK_OFF";
   } else if (punchCount === 0) {
     dayType = "ABSENT";
   } else if (punchCount === 1) {
@@ -438,7 +447,7 @@ export function processSalaryRow(opts: {
 
   /* ── Dynamic remarks ──────────────────────────────────────────────── */
   const remarks = buildRemarks({
-    category, dayType, lateMinutes, otHours, graceApplied, night: nightTrace,
+    category, dayType, lateMinutes, otHours, graceApplied, night: nightTrace, weekOffWorked,
   });
 
   return {
@@ -455,6 +464,8 @@ export function processSalaryRow(opts: {
     lateMinutes,
     otHours,
     dayType,
+    isWeekOff: isOff,
+    weekOffWorked,
     remarks,
     graceApplied,
   };
@@ -467,8 +478,9 @@ function buildRemarks(args: {
   otHours: number;
   graceApplied: { lunch: boolean; checkout: boolean };
   night: { missedBlocks: number; deductedHours: number } | null;
+  weekOffWorked?: boolean;
 }): string {
-  const { category, dayType, lateMinutes, otHours, graceApplied, night } = args;
+  const { category, dayType, lateMinutes, otHours, graceApplied, night, weekOffWorked } = args;
   const label = categoryLabel(category);
   const parts: string[] = [];
 
@@ -476,20 +488,20 @@ function buildRemarks(args: {
   if (dayType === "WEEK_OFF") {
     return "Week Off - Not worked";
   }
-  if (dayType === "WEEK_OFF_WORKED") {
-    parts.push("Week Off - Worked");
-    if (otHours > 0) parts.push(`OT ${fmtDuration(Math.round(otHours * 60))}`);
-    return parts.join(" / ");
-  }
   if (dayType === "ABSENT") {
-    return `${label} - Absent`;
+    return weekOffWorked
+      ? `${label} - Absent / Week Off - Worked`
+      : `${label} - Absent`;
   }
   if (dayType === "INVALID") {
-    return `${label} - Missing Punch - Need Review`;
+    parts.push(`${label} - Missing Punch - Need Review`);
+    if (weekOffWorked) parts.push("Week Off - Worked");
+    return parts.join(" / ");
   }
   if (dayType === "HALF_DAY") {
     parts.push(`${label} - Half Day Completed`);
     if (lateMinutes > 0) parts.push(`Late by ${fmtDuration(lateMinutes)}`);
+    if (weekOffWorked) parts.push("Week Off - Worked");
     return parts.join(" / ");
   }
 
@@ -530,6 +542,7 @@ function buildRemarks(args: {
 
   if (graceApplied.lunch) parts.push("Lunch grace applied");
   if (graceApplied.checkout) parts.push("Checkout grace applied");
+  if (weekOffWorked) parts.push("Week Off - Worked");
 
   return parts.join(" / ");
 }

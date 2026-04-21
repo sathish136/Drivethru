@@ -403,6 +403,8 @@ router.get("/attendance", async (req, res) => {
           weekOffStatus: sr.weekOffStatus,
           dayType: sr.dayType,
           workedHoursLabel: sr.workedHoursLabel,
+          isWeekOff: sr.isWeekOff,
+          weekOffWorked: sr.weekOffWorked,
         };
       }),
     });
