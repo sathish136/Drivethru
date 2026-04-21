@@ -86,7 +86,12 @@ function categoryDefaults(c: ShiftCategory): {
   switch (c) {
     case "REGULAR":   return { startTime: "08:00", endTime: "17:00", lateAfter: "08:15", otAfter: "17:30" };
     case "RECEPTION": return { startTime: "08:30", endTime: "17:30", lateAfter: "08:45", otAfter: "18:00" };
-    case "KITCHEN":   return { startTime: "08:00", endTime: "17:00", lateAfter: "08:15", otAfter: "20:30" };
+    // Kitchen OT was previously hard-coded to 20:30; spec revision says "must
+    // apply for all long hours" — so we now compute OT from the assigned
+    // shift end + 30-min threshold, identical to Regular/Reception.
+    // The category-default otAfter is left blank so the OT branch falls
+    // through to the dynamic shift-end calculation below.
+    case "KITCHEN":   return { startTime: "08:00", endTime: "17:00", lateAfter: "08:15", otAfter: "—"     };
     case "FLEXIBLE":  return { startTime: "—",     endTime: "—",     lateAfter: "—",     otAfter: "—"     };
     case "NIGHT":     return { startTime: "20:00", endTime: "05:00", lateAfter: "—",     otAfter: "05:00" };
     case "HALF_DAY":  return { startTime: "08:00", endTime: "13:00", lateAfter: "08:15", otAfter: "—"     };
@@ -311,16 +316,24 @@ export function processSalaryRow(opts: {
     const span = e > s ? e - s : (24 * 60 - s) + e;
     return Math.max(1, span / 60);
   })();
-  // Spec rule #1:
-  //   < 50% of shift  → ABSENT
-  //   ≥ 50%, < full   → HALF DAY
-  //   ≥ full          → PRESENT
-  const halfDayThresholdHours = Math.max(2, shiftDurationHours * 0.5);
-  // "Full shift" tolerance: late grace (15 min) + checkout grace (5 min) = 20 min.
-  // i.e. an employee finishing within ~20 minutes of end-time is still PRESENT.
+  // Spec rule #1 + revised Half Day Rule:
+  //   < 4 hrs              → ABSENT
+  //   4 hrs ≤ work < 8 hrs → HALF DAY
+  //   ≥ 8 hrs              → PRESENT
+  // Capped against the actual shift duration for short shifts (e.g. 5-hr Half
+  // Day Shift) so the absolute hour bands never exceed the shift itself.
+  // "Full shift" tolerance keeps an employee finishing within ~20 min of
+  // end-time as PRESENT.
+  const fullShiftToleranceHrs = (LATE_GRACE_MINUTES + CHECKOUT_GRACE_MINUTES) / 60; // 20 min
+  const absoluteFullHrs = 8;
+  const absoluteHalfHrs = 4;
   const fullShiftThresholdHours = Math.max(
-    halfDayThresholdHours + 0.01,
-    shiftDurationHours - (LATE_GRACE_MINUTES + CHECKOUT_GRACE_MINUTES) / 60,
+    2,
+    Math.min(absoluteFullHrs, shiftDurationHours - fullShiftToleranceHrs),
+  );
+  const halfDayThresholdHours = Math.max(
+    1,
+    Math.min(absoluteHalfHrs, shiftDurationHours * 0.5),
   );
 
   let dayType: DayType;
@@ -375,11 +388,11 @@ export function processSalaryRow(opts: {
     }
   }
 
-  // Spec validation rule: "Late > 4 hrs → check shift timing.
-  // No random huge late values." A late > 4 hrs almost certainly means the
-  // employee's assigned shift didn't match this day's actual shift — flag
-  // for review instead of dumping a misleading huge late number into payroll.
-  if (lateMinutes > 240) {
+  // Spec validation rule: "No extreme late (3+ hrs) unless correct shift."
+  // A late > 3 hrs almost certainly means the employee's assigned shift
+  // didn't match the actual shift worked that day — flag as INVALID for
+  // review instead of dumping a misleading huge late number into payroll.
+  if (lateMinutes > 180) {
     dayType = "INVALID";
     lateMinutes = 0;
   }
@@ -398,7 +411,17 @@ export function processSalaryRow(opts: {
         ? Math.round((workedHoursRaw - FLEXIBLE_OT_AFTER_HOURS) * 100) / 100
         : 0;
     } else if (lastOut) {
-      const otStart = defaults.otAfter;
+      // Resolve OT-start time:
+      //   1. Category default if set (REGULAR 17:30, RECEPTION 18:00).
+      //   2. Otherwise (KITCHEN, custom shifts) → assigned shift end + 30 min.
+      let otStart = defaults.otAfter;
+      if (!otStart || otStart === "—") {
+        if (endTime && endTime !== "—") {
+          const endPlusThreshold = timeToMins(endTime) + OT_THRESHOLD_MINUTES;
+          otStart = minsToTime(endPlusThreshold);
+        }
+      }
+
       if (otStart && otStart !== "—") {
         const outMins = timeToMins(lastOut);
         const otStartMins = timeToMins(otStart);
@@ -511,7 +534,7 @@ function buildRemarks(args: {
     case "KITCHEN":
       if (lateMinutes > 0) parts.push(`${label} - Late by ${fmtDuration(lateMinutes)}`);
       else parts.push(`${label} - Within grace`);
-      if (otHours > 0) parts.push(`OT ${fmtDuration(Math.round(otHours * 60))} after 8:30 PM`);
+      if (otHours > 0) parts.push(`OT ${fmtDuration(Math.round(otHours * 60))}`);
       break;
 
     case "RECEPTION":

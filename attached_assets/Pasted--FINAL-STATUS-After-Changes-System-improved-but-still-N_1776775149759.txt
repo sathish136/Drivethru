@@ -1,0 +1,121 @@
+🔍 FINAL STATUS (After Changes)
+
+👉 System improved but still NOT 100% correct
+
+📊 Summary:
+
+Present: 120
+Absent: 3
+Half Day: 65 ❌ (too high)
+❌ STILL ISSUES (CLEAR)
+1. HALF DAY still over-used
+
+👉 Examples:
+
+8:34 hrs → HALF DAY ❌
+8:37 hrs → HALF DAY ❌
+
+👉 இது full day ஆக இருக்கணும்
+
+2. Kitchen Shift late still wrong
+
+👉 Example:
+
+11:00 IN → Late 3 hrs 45 mins ❌
+
+👉 Problem:
+➡️ Still using wrong shift start
+➡️ Should use actual assigned shift
+
+3. OT mostly missing (especially Kitchen)
+
+👉 Many rows:
+
+12–13 hrs work
+OT = empty ❌
+
+👉 Policy violation:
+➡️ OT after 8:30 PM not consistently applied
+
+4. Flexible shift OK ✅
+No late deduction ✔️
+OT only > 9:30 ✔️
+
+👉 This part is correct
+
+5. Invalid rows OK ✅
+
+👉 Now showing:
+
+Invalid / Need Review ✔️
+6. Absent exists but weak logic ⚠️
+
+👉 Example:
+
+3:54 hrs → ABSENT ✔️
+But threshold consistency still unclear
+🧾 FINAL SINGLE SHEET FIX (CORRECTED VERSION)
+
+👉 Copy paste this 👇
+
+FINAL CORRECTION INSTRUCTION
+
+Use Shift Name as policy base
+
+Attendance Classification
+If total_hours == 0 → ABSENT
+If total_hours < 50% shift → ABSENT
+If total_hours ≥ 50% AND < full shift → HALF DAY
+If total_hours ≥ full shift → PRESENT
+
+👉 Do NOT mark 8+ hrs as HALF DAY
+
+Missing Punch
+Missing OUT → INVALID / NEED REVIEW
+Not HALF DAY
+Late Calculation
+Late = (IN - SHIFT START) - 15 mins
+If < 0 → 0
+Use correct shift timing
+OT Calculation (MANDATORY)
+Regular Shift
+OT after 5:30 PM
+Receptionist Shift
+OT after 6:00 PM
+Kitchen Shift
+OT after 8:30 PM
+Must apply for all long hours
+Flexible Shift
+OT only if > 9:30 hrs
+
+👉 Apply 30 min threshold
+
+Kitchen Shift FIX (CRITICAL)
+Use correct shift timing per day
+Do NOT assume 07:00 AM
+Fix late calculation based on correct shift
+Half Day Rule FIX
+8+ hrs = PRESENT
+6–8 hrs = HALF DAY
+< 4 hrs = ABSENT
+Week Off
+No work → WEEK_OFF
+Worked → WEEK_OFF_WORKED
+Remarks
+
+Use only dynamic:
+
+Late by X mins
+OT X hrs
+Half Day Completed
+Invalid / Need Review
+FINAL VALIDATION
+Half Day must not exceed Present excessively
+OT must exist for long working hours
+No extreme late (3+ hrs) unless correct shift
+🔴 FINAL VERDICT
+
+👉 System is now ~80–85% correct
+👉 Still NOT safe for final payroll
+
+👉 After above fixes → ✅ READY
