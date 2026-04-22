@@ -344,12 +344,21 @@ router.get("/attendance", async (req, res) => {
         },
       });
 
-      // Preserve "leave" as authoritative when present.
+      // Preserve authoritative manual entries.
+      // Leave / holiday are always preserved.
+      // For manual records (HR override for missed biometric), trust the
+      // explicitly-set status so a one-punch "missing punch" entry that HR
+      // marked Present/Late/Half-Day is not auto-flipped back to Absent
+      // by the salary engine.
+      const isManual = (r.rec as any).source === "manual";
+      const manualStatus = r.rec.status as string | null | undefined;
       const status = r.rec.status === "leave"
         ? "leave"
         : r.rec.status === "holiday"
           ? "holiday"
-          : dayTypeToStatus(sr.dayType, sr.lateMinutes);
+          : (isManual && manualStatus && ["present", "late", "half_day", "absent"].includes(manualStatus))
+            ? (manualStatus === "present" && sr.lateMinutes > 0 ? "late" : manualStatus)
+            : dayTypeToStatus(sr.dayType, sr.lateMinutes);
 
       return {
         ...r,
@@ -609,9 +618,13 @@ router.get("/monthly", async (req, res) => {
             leaveType: (r as any).leaveType ?? null,
           },
         });
+        const isManual = (r as any).source === "manual";
+        const manualStatus = r.status as string | null | undefined;
         const st = r.status === "leave"   ? "leave"
                  : r.status === "holiday" ? "holiday"
-                 : dayTypeToStatus(sr.dayType, sr.lateMinutes);
+                 : (isManual && manualStatus && ["present", "late", "half_day", "absent"].includes(manualStatus))
+                   ? (manualStatus === "present" && sr.lateMinutes > 0 ? "late" : manualStatus)
+                   : dayTypeToStatus(sr.dayType, sr.lateMinutes);
 
         if (st === "present") presentDays++;
         else if (st === "absent") absentDays++;
