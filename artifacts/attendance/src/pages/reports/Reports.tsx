@@ -810,6 +810,7 @@ function AttendanceReport() {
                 {filtered.slice(0,300).map((r:any)=>{
                   const s1m = calcMins(r.inTime1, r.outTime1);
                   const s2m = calcMins(r.inTime2, r.outTime2);
+                  const lb  = lunchBreakMins(r);
                   const totalMins = s1m + s2m;
                   const totalH = Math.floor(totalMins/60), totalMin = totalMins%60;
                   const has1 = !!(r.inTime1 && r.outTime1);
@@ -844,20 +845,31 @@ function AttendanceReport() {
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap bg-blue-50/20 font-mono text-[11px]">
                       {has1 || has2 ? (
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {has1 && (
-                            <span className="text-blue-700">
-                              {r.inTime1} <span className="text-muted-foreground">→</span> {r.outTime1}
-                              <span className="text-blue-500 ml-1">= {fmtHM(s1m)}</span>
-                            </span>
-                          )}
-                          {has1 && has2 && <span className="text-muted-foreground">/</span>}
-                          {has2 && (
-                            <span className="text-orange-700">
-                              {r.inTime2} <span className="text-muted-foreground">→</span> {r.outTime2}
-                              <span className="text-orange-500 ml-1">= {fmtHM(s2m)}</span>
-                            </span>
-                          )}
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {has1 && (
+                              <span className="text-blue-700">
+                                <span className="text-[9px] font-sans font-semibold text-blue-500 mr-1">S1</span>
+                                {r.inTime1} <span className="text-muted-foreground">→</span> {r.outTime1}
+                                <span className="text-blue-500 ml-1">= {fmtHM(s1m)}</span>
+                              </span>
+                            )}
+                            {has2 && (
+                              <>
+                                {has1 && lb > 0 && (
+                                  <span className="text-purple-600 text-[10px] font-sans">
+                                    · Lunch {fmtHM(lb)} ·
+                                  </span>
+                                )}
+                                {has1 && lb <= 0 && <span className="text-muted-foreground">/</span>}
+                                <span className="text-orange-700">
+                                  <span className="text-[9px] font-sans font-semibold text-orange-500 mr-1">S2</span>
+                                  {r.inTime2} <span className="text-muted-foreground">→</span> {r.outTime2}
+                                  <span className="text-orange-500 ml-1">= {fmtHM(s2m)}</span>
+                                </span>
+                              </>
+                            )}
+                          </div>
                           {r.weekOffWorked && (
                             <span className="text-violet-600 text-[10px] font-sans font-semibold">(Week Off Worked)</span>
                           )}
