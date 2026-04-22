@@ -271,7 +271,7 @@ router.post("/manual-entry", async (req, res) => {
       totalHours,
       leaveType: null,
       source: "manual",
-      approvalStatus: "approved",
+      approvalStatus: "pending",
       remarks: remarks || null,
       updatedAt: new Date(),
     };
