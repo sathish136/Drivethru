@@ -25,8 +25,18 @@ interface PendingRecord {
 
 function formatTime(t: string | null) {
   if (!t) return "—";
-  try { return new Date(t).toLocaleTimeString("en-LK", { hour: "2-digit", minute: "2-digit", hour12: true }); }
-  catch { return t; }
+  // Stored as "HH:MM" or "HH:MM:SS" — convert to 12-hour display.
+  const m = /^(\d{1,2}):(\d{2})/.exec(t);
+  if (m) {
+    let h = Number(m[1]);
+    const mm = m[2];
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12 || 12;
+    return `${String(h).padStart(2, "0")}:${mm} ${ampm}`;
+  }
+  const d = new Date(t);
+  if (isNaN(d.getTime())) return t;
+  return d.toLocaleTimeString("en-LK", { hour: "2-digit", minute: "2-digit", hour12: true });
 }
 function formatDate(d: string) {
   try { return new Date(d).toLocaleDateString("en-LK", { weekday: "short", year: "numeric", month: "short", day: "numeric" }); }
