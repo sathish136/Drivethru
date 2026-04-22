@@ -344,20 +344,23 @@ router.get("/attendance", async (req, res) => {
         },
       });
 
-      // Preserve authoritative manual entries.
+      // Preserve authoritative entries.
       // Leave / holiday are always preserved.
-      // For manual records (HR override for missed biometric), trust the
-      // explicitly-set status so a one-punch "missing punch" entry that HR
-      // marked Present/Late/Half-Day is not auto-flipped back to Absent
-      // by the salary engine.
-      const isManual = (r.rec as any).source === "manual";
-      const manualStatus = r.rec.status as string | null | undefined;
-      const status = r.rec.status === "leave"
+      // Trust an explicitly stored Present/Late/Half-Day/Absent status when
+      // the row is a manual override OR has been explicitly approved — this
+      // prevents the salary engine from auto-flipping HR-confirmed "missing
+      // punch" days back to Absent.
+      const recSource = (r.rec as any).source as string | null | undefined;
+      const recApproval = (r.rec as any).approvalStatus as string | null | undefined;
+      const storedStatus = r.rec.status as string | null | undefined;
+      const isAuthoritative =
+        recSource === "manual" || recApproval === "approved";
+      const status = storedStatus === "leave"
         ? "leave"
-        : r.rec.status === "holiday"
+        : storedStatus === "holiday"
           ? "holiday"
-          : (isManual && manualStatus && ["present", "late", "half_day", "absent"].includes(manualStatus))
-            ? (manualStatus === "present" && sr.lateMinutes > 0 ? "late" : manualStatus)
+          : (isAuthoritative && storedStatus && ["present", "late", "half_day", "absent"].includes(storedStatus))
+            ? (storedStatus === "present" && sr.lateMinutes > 0 ? "late" : storedStatus)
             : dayTypeToStatus(sr.dayType, sr.lateMinutes);
 
       return {
@@ -618,12 +621,14 @@ router.get("/monthly", async (req, res) => {
             leaveType: (r as any).leaveType ?? null,
           },
         });
-        const isManual = (r as any).source === "manual";
-        const manualStatus = r.status as string | null | undefined;
-        const st = r.status === "leave"   ? "leave"
-                 : r.status === "holiday" ? "holiday"
-                 : (isManual && manualStatus && ["present", "late", "half_day", "absent"].includes(manualStatus))
-                   ? (manualStatus === "present" && sr.lateMinutes > 0 ? "late" : manualStatus)
+        const recSource = (r as any).source as string | null | undefined;
+        const recApproval = (r as any).approvalStatus as string | null | undefined;
+        const storedStatus = r.status as string | null | undefined;
+        const isAuthoritative = recSource === "manual" || recApproval === "approved";
+        const st = storedStatus === "leave"   ? "leave"
+                 : storedStatus === "holiday" ? "holiday"
+                 : (isAuthoritative && storedStatus && ["present", "late", "half_day", "absent"].includes(storedStatus))
+                   ? (storedStatus === "present" && sr.lateMinutes > 0 ? "late" : storedStatus)
                    : dayTypeToStatus(sr.dayType, sr.lateMinutes);
 
         if (st === "present") presentDays++;
