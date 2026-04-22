@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { attendanceRecords, employees, branches, shifts, weekoffSchedules } from "@workspace/db/schema";
+import { attendanceRecords, employees, branches, shifts, weekoffSchedules, holidays } from "@workspace/db/schema";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 import { getDaysInMonth, today } from "../lib/helpers.js";
 import { loadDeptRules, findRule, timeToMins, calcLunchLateMinutes, lateCutoffMins, calcOtHours, calcTimeBasedOtHours, isNightShiftRecord, DeptShiftRule, calcNightWatcherPolicyOtHours } from "../lib/hr-rules.js";
@@ -294,6 +294,17 @@ router.get("/attendance", async (req, res) => {
       }
     }
 
+    /* Load holidays so the salary engine can apply OT pay multipliers
+       (Statutory ×2.0 / Poya ×1.5 / Public ×1.5) when employees work on them. */
+    const allHolidays = await db.select().from(holidays);
+    const holidayByDate = new Map<string, { type: "statutory" | "poya" | "public"; name: string }>();
+    for (const h of allHolidays) {
+      const t = (h.type as string)?.toLowerCase();
+      if (t === "statutory" || t === "poya" || t === "public") {
+        holidayByDate.set(h.date, { type: t as any, name: h.name });
+      }
+    }
+
     // Merge overnight (evening + morning) records for night-shift employees
     const getShift = (shiftId: number | null | undefined) =>
       shiftId ? shiftMap.get(shiftId) : undefined;
@@ -321,6 +332,7 @@ router.get("/attendance", async (req, res) => {
         date,
         shift: { name: empShift?.name, startTime: empShift?.startTime1, endTime: empShift?.endTime1 },
         weekoff: empWeekoff,
+        holiday: holidayByDate.get(date) ?? null,
         rec: {
           date,
           inTime1:  r.rec.inTime1,
@@ -389,6 +401,7 @@ router.get("/attendance", async (req, res) => {
             date,
             shift: { name: empShift?.name, startTime: empShift?.startTime1, endTime: empShift?.endTime1 },
             weekoff: wo,
+            holiday: holidayByDate.get(date) ?? null,
             rec: { date, inTime1: null, outTime1: null, inTime2: null, outTime2: null, totalHours: 0 },
           });
 
@@ -478,6 +491,10 @@ router.get("/attendance", async (req, res) => {
           workedHoursLabel: sr.workedHoursLabel,
           isWeekOff: sr.isWeekOff,
           weekOffWorked: sr.weekOffWorked,
+          holidayType: sr.holidayType,
+          holidayName: sr.holidayName,
+          holidayMultiplier: sr.holidayMultiplier,
+          holidayWorked: sr.holidayWorked,
         };
       }),
     });
@@ -550,6 +567,7 @@ router.get("/monthly", async (req, res) => {
           date: r.date,
           shift: { name: dayShift?.name, startTime: dayShift?.startTime1, endTime: dayShift?.endTime1 },
           weekoff: empWeekoff,
+          holiday: holidayByDate.get(r.date) ?? null,
           rec: {
             date: r.date,
             inTime1:  r.inTime1,

@@ -887,10 +887,23 @@ function AttendanceReport() {
                           {r.weekOffWorked && (
                             <span className="text-violet-600 text-[10px] font-semibold">(Week Off Worked)</span>
                           )}
+                          {r.holidayType && (
+                            <span className={`text-[10px] font-semibold ${
+                              r.holidayType==="statutory" ? "text-red-600"
+                                : r.holidayType==="poya" ? "text-amber-600"
+                                : "text-blue-600"}`}>
+                              {r.holidayType==="statutory"?"Statutory":r.holidayType==="poya"?"Poya":"Public"} Holiday × {Number(r.holidayMultiplier).toFixed(1)}
+                            </span>
+                          )}
                         </div>
                       ) : <span className="text-muted-foreground">—</span>}
                     </td>
-                    <td className="px-3 py-2 font-mono whitespace-nowrap">{r.overtimeHours>0?`${r.overtimeHours.toFixed(1)}h`:"—"}</td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap">
+                      {r.overtimeHours>0?`${r.overtimeHours.toFixed(1)}h`:"—"}
+                      {r.holidayWorked && r.overtimeHours>0 && (
+                        <span className="ml-1 text-[10px] text-orange-600 font-semibold">×{Number(r.holidayMultiplier).toFixed(1)}</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 bg-indigo-50/10 max-w-[220px]">
                       {(() => {
                         const rm = getRemarks(r);

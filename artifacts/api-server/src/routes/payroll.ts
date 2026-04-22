@@ -221,8 +221,13 @@ router.post("/generate", async (req, res) => {
 
     const monthHolidays = await getMonthHolidays(year, month);
     const holidayDateMap = new Map<string, "statutory" | "poya" | "public">();
+    const holidayInfoMap = new Map<string, { type: "statutory" | "poya" | "public"; name: string }>();
     for (const h of monthHolidays) {
-      holidayDateMap.set(h.date, h.type as "statutory" | "poya" | "public");
+      const t = (h.type as string)?.toLowerCase();
+      if (t === "statutory" || t === "poya" || t === "public") {
+        holidayDateMap.set(h.date, t as any);
+        holidayInfoMap.set(h.date, { type: t as any, name: h.name });
+      }
     }
 
     const allShifts = await db.select().from(shifts);
@@ -314,6 +319,7 @@ router.post("/generate", async (req, res) => {
           date: rec.date,
           shift: { name: dayShift?.name ?? empShiftName, startTime: dayShift?.startTime1 ?? shiftStart1, endTime: dayShift?.endTime1 ?? shiftEnd1 },
           weekoff: empWeekoffInfo,
+          holiday: holidayInfoMap.get(rec.date) ?? null,
           rec: {
             date: rec.date,
             inTime1:  rec.inTime1,

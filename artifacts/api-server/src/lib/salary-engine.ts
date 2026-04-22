@@ -242,6 +242,9 @@ export interface AttendanceRow {
   leaveType?: string | null;
 }
 
+/** Holiday classification used for OT pay multipliers */
+export type HolidayType = "statutory" | "poya" | "public";
+
 /** Final payroll-ready row */
 export interface SalaryRunRow {
   date: string;
@@ -261,10 +264,29 @@ export interface SalaryRunRow {
   isWeekOff: boolean;
   /** True if this row is a worked week-off (regardless of hour-band classification). */
   weekOffWorked: boolean;
+  /** Holiday type if this date is a holiday (null for normal days). */
+  holidayType: HolidayType | null;
+  /** Holiday name (e.g. "Tamil Thai Pongal Day"). */
+  holidayName: string | null;
+  /** Pay multiplier when worked on this holiday (2.0 statutory, 1.5 poya/public). */
+  holidayMultiplier: number;
+  /** True if employee actually punched on a holiday. */
+  holidayWorked: boolean;
   remarks: string;
   /** Per-row trace bits for audit */
   graceApplied: { lunch: boolean; checkout: boolean };
 }
+
+const HOLIDAY_MULTIPLIERS: Record<HolidayType, number> = {
+  statutory: 2.0,
+  poya:      1.5,
+  public:    1.5,
+};
+const HOLIDAY_LABELS: Record<HolidayType, string> = {
+  statutory: "Statutory Holiday",
+  poya:      "Poya Day",
+  public:    "Public Holiday",
+};
 
 /**
  * Process a single (employee × date × shift × weekoff × punches) into a
@@ -275,8 +297,10 @@ export function processSalaryRow(opts: {
   shift: ShiftInfo | null | undefined;
   weekoff: WeekOffInfo | null | undefined;
   rec: AttendanceRow | null | undefined;
+  /** Holiday classification for this date, if any. */
+  holiday?: { type: HolidayType; name: string } | null;
 }): SalaryRunRow {
-  const { date, shift, weekoff, rec } = opts;
+  const { date, shift, weekoff, rec, holiday = null } = opts;
   const category = categoryFromShiftName(shift?.name);
   const defaults = categoryDefaults(category);
 
@@ -449,9 +473,16 @@ export function processSalaryRow(opts: {
     }
   }
 
+  /* ── Holiday classification ───────────────────────────────────────── */
+  const holidayType: HolidayType | null = holiday?.type ?? null;
+  const holidayName: string | null      = holiday?.name ?? null;
+  const holidayMultiplier               = holidayType ? HOLIDAY_MULTIPLIERS[holidayType] : 1;
+  const holidayWorked                   = !!holidayType && punchCount > 0;
+
   /* ── Dynamic remarks ──────────────────────────────────────────────── */
   const remarks = buildRemarks({
     category, dayType, lateMinutes, otHours, graceApplied, night: nightTrace, weekOffWorked, punchCount,
+    holidayType, holidayName, holidayWorked, holidayMultiplier,
   });
 
   return {
@@ -470,6 +501,10 @@ export function processSalaryRow(opts: {
     dayType,
     isWeekOff: isOff,
     weekOffWorked,
+    holidayType,
+    holidayName,
+    holidayMultiplier,
+    holidayWorked,
     remarks,
     graceApplied,
   };
@@ -484,10 +519,28 @@ function buildRemarks(args: {
   night: { missedBlocks: number; deductedHours: number } | null;
   weekOffWorked?: boolean;
   punchCount?: number;
+  holidayType?: HolidayType | null;
+  holidayName?: string | null;
+  holidayWorked?: boolean;
+  holidayMultiplier?: number;
 }): string {
-  const { category, dayType, lateMinutes, otHours, graceApplied, night, weekOffWorked, punchCount = 0 } = args;
+  const {
+    category, dayType, lateMinutes, otHours, graceApplied, night,
+    weekOffWorked, punchCount = 0,
+    holidayType = null, holidayName = null, holidayWorked = false, holidayMultiplier = 1,
+  } = args;
   const label = categoryLabel(category);
   const parts: string[] = [];
+
+  // Holiday suffix builder — appended to every remark when applicable.
+  const holidaySuffix = (() => {
+    if (!holidayType) return null;
+    const nm = holidayName ? ` (${holidayName})` : "";
+    return holidayWorked
+      ? `Worked on ${HOLIDAY_LABELS[holidayType]}${nm} × ${holidayMultiplier.toFixed(1)}`
+      : `${HOLIDAY_LABELS[holidayType]}${nm}`;
+  })();
+  const withHoliday = (s: string) => holidaySuffix ? `${s} / ${holidaySuffix}` : s;
 
   // Day-type primary remark
   if (dayType === "WEEK_OFF") {
@@ -495,19 +548,20 @@ function buildRemarks(args: {
   }
   if (dayType === "ABSENT") {
     const reason = punchCount === 1 ? "Absent - Missing Punch" : "Absent";
-    return weekOffWorked
+    return withHoliday(weekOffWorked
       ? `${label} - ${reason} / Week Off - Worked`
-      : `${label} - ${reason}`;
+      : `${label} - ${reason}`);
   }
   if (dayType === "INVALID") {
-    return weekOffWorked
+    return withHoliday(weekOffWorked
       ? `${label} - Missing Punch - Need Review / Week Off - Worked`
-      : `${label} - Missing Punch - Need Review`;
+      : `${label} - Missing Punch - Need Review`);
   }
   if (dayType === "HALF_DAY") {
     parts.push(`${label} - Half Day Completed`);
     if (lateMinutes > 0) parts.push(`Late by ${fmtDuration(lateMinutes)}`);
     if (weekOffWorked) parts.push("Week Off - Worked");
+    if (holidaySuffix) parts.push(holidaySuffix);
     return parts.join(" / ");
   }
 
@@ -549,6 +603,7 @@ function buildRemarks(args: {
   if (graceApplied.lunch) parts.push("Lunch grace applied");
   if (graceApplied.checkout) parts.push("Checkout grace applied");
   if (weekOffWorked) parts.push("Week Off - Worked");
+  if (holidaySuffix) parts.push(holidaySuffix);
 
   return parts.join(" / ");
 }
