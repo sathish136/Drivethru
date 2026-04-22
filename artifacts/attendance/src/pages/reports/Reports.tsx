@@ -796,14 +796,22 @@ function AttendanceReport() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-muted/50">
-                <tr className="border-b border-border">
+                <tr>
                   {["Date","Emp ID","Employee","Department","Branch","Designation","Status"].map(h=>(
-                    <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
+                    <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap" rowSpan={2}>{h}</th>
                   ))}
-                  <th className="px-3 py-2.5 text-left font-semibold text-blue-600 whitespace-nowrap bg-blue-50/40">Sessions</th>
-                  <th className="px-3 py-2.5 text-left font-semibold text-green-700 whitespace-nowrap bg-green-50/40">Total Hrs</th>
-                  <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">OT Hrs</th>
-                  <th className="px-3 py-2.5 text-left font-semibold text-indigo-600 whitespace-nowrap bg-indigo-50/30">Remarks</th>
+                  <th className="px-3 py-2 text-center font-semibold text-blue-600 whitespace-nowrap bg-blue-50/50" colSpan={2}>Morning Session</th>
+                  <th className="px-3 py-2 text-center font-semibold text-purple-600 whitespace-nowrap bg-purple-50/50" rowSpan={2}>Lunch Break</th>
+                  <th className="px-3 py-2 text-center font-semibold text-orange-600 whitespace-nowrap bg-orange-50/50" colSpan={2}>Afternoon Session</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-green-700 whitespace-nowrap bg-green-50/40" rowSpan={2}>Total Hrs</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap" rowSpan={2}>OT Hrs</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-indigo-600 whitespace-nowrap bg-indigo-50/30" rowSpan={2}>Remarks</th>
+                </tr>
+                <tr className="border-b border-border">
+                  <th className="px-3 py-1 text-[10px] font-medium text-blue-500 bg-blue-50/30 text-center">In 1</th>
+                  <th className="px-3 py-1 text-[10px] font-medium text-blue-500 bg-blue-50/30 text-center">Out 1 (Lunch)</th>
+                  <th className="px-3 py-1 text-[10px] font-medium text-orange-500 bg-orange-50/30 text-center">In 2</th>
+                  <th className="px-3 py-1 text-[10px] font-medium text-orange-500 bg-orange-50/30 text-center">Out 2</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -843,49 +851,45 @@ function AttendanceReport() {
                         })()}
                       </div>
                     </td>
-                    <td className="px-3 py-2 whitespace-nowrap bg-blue-50/20 font-mono text-[11px]">
-                      {has1 || has2 ? (
-                        <div className="flex flex-col gap-0.5">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {has1 && (
-                              <span className="text-blue-700">
-                                <span className="text-[9px] font-sans font-semibold text-blue-500 mr-1">S1</span>
-                                {r.inTime1} <span className="text-muted-foreground">→</span> {r.outTime1}
-                                <span className="text-blue-500 ml-1">= {fmtHM(s1m)}</span>
-                              </span>
-                            )}
-                            {has2 && (
-                              <>
-                                {has1 && lb > 0 && (
-                                  <span className="text-purple-600 text-[10px] font-sans">
-                                    · Lunch {fmtHM(lb)} ·
-                                  </span>
-                                )}
-                                {has1 && lb <= 0 && <span className="text-muted-foreground">/</span>}
-                                <span className="text-orange-700">
-                                  <span className="text-[9px] font-sans font-semibold text-orange-500 mr-1">S2</span>
-                                  {r.inTime2} <span className="text-muted-foreground">→</span> {r.outTime2}
-                                  <span className="text-orange-500 ml-1">= {fmtHM(s2m)}</span>
-                                </span>
-                              </>
-                            )}
-                          </div>
-                          {r.weekOffWorked && (
-                            <span className="text-violet-600 text-[10px] font-sans font-semibold">(Week Off Worked)</span>
-                          )}
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-blue-700 bg-blue-50/20 text-center">
+                      {r.inTime1||"—"}
+                    </td>
+                    <td className="px-3 py-2 bg-blue-50/20 whitespace-nowrap text-center">
+                      {has1 ? (
+                        <div>
+                          <div className="font-mono text-blue-700">{r.outTime1}</div>
+                          <div className="text-[10px] text-blue-500 font-medium">{fmtHM(s1m)}</div>
                         </div>
                       ) : onlyIn ? (
-                        <span className="text-red-600">
-                          {r.inTime1} <span className="text-muted-foreground">→</span> —
-                          <span className="ml-2 text-[10px] font-sans font-semibold">(Missing Punch)</span>
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground font-sans">—</span>
-                      )}
+                        <span className="text-red-500 text-[10px] font-semibold">Missing</span>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap bg-purple-50/20 text-center">
+                      {lb > 0 ? (
+                        <span className="font-mono text-purple-700 font-medium">{fmtHM(lb)}</span>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2 font-mono whitespace-nowrap text-orange-700 bg-orange-50/20 text-center">
+                      {r.inTime2||"—"}
+                    </td>
+                    <td className="px-3 py-2 bg-orange-50/20 whitespace-nowrap text-center">
+                      {has2 ? (
+                        <div>
+                          <div className="font-mono text-orange-700">{r.outTime2}</div>
+                          <div className="text-[10px] text-orange-500 font-medium">{fmtHM(s2m)}</div>
+                        </div>
+                      ) : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap bg-green-50/20">
                       {totalMins > 0 ? (
-                        <span className="font-semibold text-green-700 text-xs">✅ {totalH}:{String(totalMin).padStart(2,"0")} hrs</span>
+                        <div className="flex flex-col gap-0.5">
+                          {has1 && <div className="text-[10px] text-muted-foreground font-mono">{r.inTime1} → {r.outTime1} = {fmtHM(s1m)}</div>}
+                          {has2 && <div className="text-[10px] text-muted-foreground font-mono">{r.inTime2} → {r.outTime2} = {fmtHM(s2m)}</div>}
+                          <span className="font-semibold text-green-700 text-xs">✅ {totalH}:{String(totalMin).padStart(2,"0")} hrs</span>
+                          {r.weekOffWorked && (
+                            <span className="text-violet-600 text-[10px] font-semibold">(Week Off Worked)</span>
+                          )}
+                        </div>
                       ) : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="px-3 py-2 font-mono whitespace-nowrap">{r.overtimeHours>0?`${r.overtimeHours.toFixed(1)}h`:"—"}</td>
