@@ -349,8 +349,8 @@ export function processSalaryRow(opts: {
   } else if (punchCount === 0) {
     dayType = "ABSENT";
   } else if (punchCount === 1) {
-    // Only one punch in the day — cannot compute hours → flag for review.
-    dayType = "INVALID";
+    // Only one punch in the day — treat as ABSENT (missing punch = no valid work).
+    dayType = "ABSENT";
   } else if (workedMinutes < HALFDAY_THRESHOLD_MINS) {
     dayType = "ABSENT";
   } else if (isHalfDayScheduled || category === "HALF_DAY") {
@@ -451,7 +451,7 @@ export function processSalaryRow(opts: {
 
   /* ── Dynamic remarks ──────────────────────────────────────────────── */
   const remarks = buildRemarks({
-    category, dayType, lateMinutes, otHours, graceApplied, night: nightTrace, weekOffWorked,
+    category, dayType, lateMinutes, otHours, graceApplied, night: nightTrace, weekOffWorked, punchCount,
   });
 
   return {
@@ -483,8 +483,9 @@ function buildRemarks(args: {
   graceApplied: { lunch: boolean; checkout: boolean };
   night: { missedBlocks: number; deductedHours: number } | null;
   weekOffWorked?: boolean;
+  punchCount?: number;
 }): string {
-  const { category, dayType, lateMinutes, otHours, graceApplied, night, weekOffWorked } = args;
+  const { category, dayType, lateMinutes, otHours, graceApplied, night, weekOffWorked, punchCount = 0 } = args;
   const label = categoryLabel(category);
   const parts: string[] = [];
 
@@ -493,9 +494,10 @@ function buildRemarks(args: {
     return "Week Off - Not worked";
   }
   if (dayType === "ABSENT") {
+    const reason = punchCount === 1 ? "Absent - Missing Punch" : "Absent";
     return weekOffWorked
-      ? `${label} - Absent / Week Off - Worked`
-      : `${label} - Absent`;
+      ? `${label} - ${reason} / Week Off - Worked`
+      : `${label} - ${reason}`;
   }
   if (dayType === "INVALID") {
     return weekOffWorked
