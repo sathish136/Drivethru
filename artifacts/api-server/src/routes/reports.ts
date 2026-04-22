@@ -375,6 +375,7 @@ router.get("/attendance", async (req, res) => {
         id: employees.id, fullName: employees.fullName, employeeCode: employees.employeeId,
         designation: employees.designation, department: employees.department,
         branchId: employees.branchId, shiftId: employees.shiftId,
+        joiningDate: employees.joiningDate, status: employees.status,
       }).from(employees);
       const branchRows = await db.select().from(branches);
       const branchNameById = new Map(branchRows.map(b => [b.id, b.name]));
@@ -388,13 +389,23 @@ router.get("/attendance", async (req, res) => {
       }
 
       for (const emp of allEmps) {
+        // Skip employees whose status is not active for absence purposes
+        // (resigned/terminated employees still get virtual rows only for dates before separation -
+        //  here we conservatively skip non-active accounts entirely from synthesis).
+        if (emp.status && emp.status !== "active" && emp.status !== "on_leave") continue;
+
         const wo = empWeekoffById.get(emp.id);
-        if (!wo || !wo.offDays || wo.offDays.length === 0) continue;
         const baseShift = emp.shiftId ? shiftMap.get(emp.shiftId) ?? undefined : undefined;
+        const joinDate = emp.joiningDate ? String(emp.joiningDate).slice(0, 10) : null;
+
         for (const date of dates) {
           if (seen.has(`${emp.id}|${date}`)) continue;
+          // Don't synthesize rows for dates before the employee joined.
+          if (joinDate && date < joinDate) continue;
+
           const dow = new Date(date + "T00:00:00Z").getUTCDay();
-          if (!wo.offDays.includes(dow)) continue;
+          const isOffDay = !!(wo?.offDays?.includes(dow));
+          const isHoliday = !!holidayByDate.get(date);
 
           const empShift = baseShift ? resolveDayShift(baseShift, date, shiftsByName as any) : undefined;
           const sr = processSalaryRow({
@@ -405,13 +416,18 @@ router.get("/attendance", async (req, res) => {
             rec: { date, inTime1: null, outTime1: null, inTime2: null, outTime2: null, totalHours: 0 },
           });
 
+          let synthStatus: string;
+          if (isHoliday) synthStatus = "holiday";
+          else if (isOffDay) synthStatus = "off_day";
+          else synthStatus = "absent";
+
           enriched.push({
             rec: {
               id: -1,
               employeeId: emp.id,
               branchId: emp.branchId,
               date,
-              status: "off_day",
+              status: synthStatus,
               leaveType: null,
               inTime1: null, outTime1: null, workHours1: null,
               inTime2: null, outTime2: null, workHours2: null,
@@ -431,7 +447,7 @@ router.get("/attendance", async (req, res) => {
             _empShift: empShift,
             _date: date,
             _salaryRow: sr,
-            effectiveStatus: "off_day",
+            effectiveStatus: synthStatus,
           } as any);
         }
       }
