@@ -572,6 +572,17 @@ router.get("/monthly", async (req, res) => {
       }])
     );
 
+    // Holiday lookup for OT multipliers / status preservation in this month.
+    const monthHolidays = await db.select().from(holidays)
+      .where(and(gte(holidays.date, startDate), lte(holidays.date, endDate)));
+    const holidayByDate = new Map<string, { type: "statutory" | "poya" | "public"; name: string }>();
+    for (const h of monthHolidays) {
+      const t = (h.type as string)?.toLowerCase();
+      if (t === "statutory" || t === "poya" || t === "public") {
+        holidayByDate.set(h.date, { type: t as any, name: h.name });
+      }
+    }
+
     const filtered = branchId ? allEmp.filter(r => r.emp.branchId === Number(branchId)) : allEmp;
     const records = await db.select().from(attendanceRecords)
       .where(and(gte(attendanceRecords.date, startDate), lte(attendanceRecords.date, endDate)));
