@@ -796,39 +796,25 @@ function AttendanceReport() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-muted/50">
-                <tr>
+                <tr className="border-b border-border">
                   {["Date","Emp ID","Employee","Department","Branch","Designation","Status"].map(h=>(
                     <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                   ))}
-                  <th className="px-3 py-2.5 text-center font-semibold text-blue-600 whitespace-nowrap bg-blue-50/50" colSpan={2}>Morning Session</th>
-                  <th className="px-3 py-2.5 text-center font-semibold text-orange-600 whitespace-nowrap bg-orange-50/50" colSpan={2}>Afternoon Session</th>
-                  <th className="px-3 py-2.5 text-left font-semibold text-purple-600 whitespace-nowrap bg-purple-50/50">Lunch Break</th>
-                  <th className="px-3 py-2.5 text-left font-semibold text-green-700 whitespace-nowrap bg-green-50/50">Total Hrs</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-blue-600 whitespace-nowrap bg-blue-50/40">Sessions</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-green-700 whitespace-nowrap bg-green-50/40">Total Hrs</th>
                   <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">OT Hrs</th>
                   <th className="px-3 py-2.5 text-left font-semibold text-indigo-600 whitespace-nowrap bg-indigo-50/30">Remarks</th>
-                </tr>
-                <tr className="border-b border-border">
-                  {["Date","Emp ID","Employee","Department","Branch","Designation","Status"].map(h=>(
-                    <th key={h} className="px-3 py-1"></th>
-                  ))}
-                  <th className="px-3 py-1 text-xs font-medium text-blue-500 bg-blue-50/30 text-center">In</th>
-                  <th className="px-3 py-1 text-xs font-medium text-blue-500 bg-blue-50/30 text-center">Out (Lunch)</th>
-                  <th className="px-3 py-1 text-xs font-medium text-orange-500 bg-orange-50/30 text-center">In</th>
-                  <th className="px-3 py-1 text-xs font-medium text-orange-500 bg-orange-50/30 text-center">Out</th>
-                  <th className="px-3 py-1 bg-purple-50/30"></th>
-                  <th className="px-3 py-1 bg-green-50/30"></th>
-                  <th className="px-3 py-1"></th>
-                  <th className="px-3 py-1 bg-indigo-50/20"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.slice(0,300).map((r:any)=>{
                   const s1m = calcMins(r.inTime1, r.outTime1);
                   const s2m = calcMins(r.inTime2, r.outTime2);
-                  const lb  = lunchBreakMins(r);
-                  const hasSession2 = r.inTime2 && r.outTime2;
                   const totalMins = s1m + s2m;
                   const totalH = Math.floor(totalMins/60), totalMin = totalMins%60;
+                  const has1 = !!(r.inTime1 && r.outTime1);
+                  const has2 = !!(r.inTime2 && r.outTime2);
+                  const onlyIn = !!(r.inTime1 && !r.outTime1 && !r.inTime2 && !r.outTime2);
                   return (
                   <tr key={r.id} className="hover:bg-muted/30 transition-colors">
                     <td className="px-3 py-2 font-mono whitespace-nowrap">{r.date}</td>
@@ -856,36 +842,38 @@ function AttendanceReport() {
                         })()}
                       </div>
                     </td>
-                    <td className="px-3 py-2 font-mono whitespace-nowrap text-blue-700 bg-blue-50/20">
-                      {r.inTime1||"—"}
-                    </td>
-                    <td className="px-3 py-2 bg-blue-50/20 whitespace-nowrap">
-                      {r.inTime1&&r.outTime1 ? (
-                        <div className="font-mono text-blue-700">{r.outTime1}</div>
-                      ) : <span className="text-muted-foreground">—</span>}
-                      {s1m>0&&<div className="text-[10px] text-blue-500 font-medium">{fmtHM(s1m)}</div>}
-                    </td>
-                    <td className="px-3 py-2 font-mono whitespace-nowrap text-orange-700 bg-orange-50/20">
-                      {r.inTime2||"—"}
-                    </td>
-                    <td className="px-3 py-2 bg-orange-50/20 whitespace-nowrap">
-                      {r.inTime2&&r.outTime2 ? (
-                        <div className="font-mono text-orange-700">{r.outTime2}</div>
-                      ) : <span className="text-muted-foreground">—</span>}
-                      {s2m>0&&<div className="text-[10px] text-orange-500 font-medium">{fmtHM(s2m)}</div>}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap bg-purple-50/20">
-                      {lb>0 ? (
-                        <span className="text-purple-700 font-medium">{fmtHM(lb)}</span>
-                      ) : <span className="text-muted-foreground">—</span>}
+                    <td className="px-3 py-2 whitespace-nowrap bg-blue-50/20 font-mono text-[11px]">
+                      {has1 || has2 ? (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {has1 && (
+                            <span className="text-blue-700">
+                              {r.inTime1} <span className="text-muted-foreground">→</span> {r.outTime1}
+                              <span className="text-blue-500 ml-1">= {fmtHM(s1m)}</span>
+                            </span>
+                          )}
+                          {has1 && has2 && <span className="text-muted-foreground">/</span>}
+                          {has2 && (
+                            <span className="text-orange-700">
+                              {r.inTime2} <span className="text-muted-foreground">→</span> {r.outTime2}
+                              <span className="text-orange-500 ml-1">= {fmtHM(s2m)}</span>
+                            </span>
+                          )}
+                          {r.weekOffWorked && (
+                            <span className="text-violet-600 text-[10px] font-sans font-semibold">(Week Off Worked)</span>
+                          )}
+                        </div>
+                      ) : onlyIn ? (
+                        <span className="text-red-600">
+                          {r.inTime1} <span className="text-muted-foreground">→</span> —
+                          <span className="ml-2 text-[10px] font-sans font-semibold">(Missing Punch)</span>
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground font-sans">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap bg-green-50/20">
-                      {r.totalHours!=null ? (
-                        <div>
-                          {s1m>0&&<div className="text-[10px] text-muted-foreground">{r.inTime1} → {r.outTime1} = {fmtHM(s1m)}</div>}
-                          {s2m>0&&<div className="text-[10px] text-muted-foreground">{r.inTime2} → {r.outTime2} = {fmtHM(s2m)}</div>}
-                          <div className="font-semibold text-green-700 text-xs">✅ {totalH}:{String(totalMin).padStart(2,"0")} hrs</div>
-                        </div>
+                      {totalMins > 0 ? (
+                        <span className="font-semibold text-green-700 text-xs">✅ {totalH}:{String(totalMin).padStart(2,"0")} hrs</span>
                       ) : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="px-3 py-2 font-mono whitespace-nowrap">{r.overtimeHours>0?`${r.overtimeHours.toFixed(1)}h`:"—"}</td>
@@ -900,7 +888,7 @@ function AttendanceReport() {
                   </tr>
                   );
                 })}
-                {!filtered.length&&<tr><td colSpan={15} className="text-center py-8 text-muted-foreground">No records found for the selected filters.</td></tr>}
+                {!filtered.length&&<tr><td colSpan={11} className="text-center py-8 text-muted-foreground">No records found for the selected filters.</td></tr>}
               </tbody>
             </table>
           </div>
