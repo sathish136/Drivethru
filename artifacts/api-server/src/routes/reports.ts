@@ -483,6 +483,21 @@ router.get("/attendance", async (req, res) => {
         // Lunch late — uses 10-min grace (built into calcLunchLateMinutes)
         const lunchLateMinutes = calcLunchLateMinutes(r.rec.outTime1, r.rec.inTime2, rule);
 
+        // For leave rows, surface leave details (type + any saved note) instead
+        // of the generic shift-based "Absent" remark from the salary engine.
+        let remarks = sr.remarks;
+        if (r.effectiveStatus === "leave") {
+          const lt = (r.rec as any).leaveType as string | null;
+          const ltLabel = lt
+            ? (lt === "annual" ? "Annual Leave"
+              : lt === "casual" ? "Casual Leave"
+              : lt === "leave"  ? "Leave"
+              : String(lt).replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()))
+            : "Leave";
+          const note = typeof (r.rec as any).remarks === "string" ? (r.rec as any).remarks.trim() : "";
+          remarks = note ? `${ltLabel} — ${note}` : ltLabel;
+        }
+
         return {
           ...r.rec,
           status: r.effectiveStatus,
@@ -497,7 +512,7 @@ router.get("/attendance", async (req, res) => {
           morningLateMinutes: sr.lateMinutes,
           lunchLateMinutes,
           overtimeHours: sr.otHours,
-          remarks: sr.remarks,
+          remarks,
           /* Extra payroll-friendly fields exposed for the reports/payslip UI */
           shiftCategory: sr.shiftCategory,
           shiftCategoryLabel: sr.shiftCategoryLabel,
