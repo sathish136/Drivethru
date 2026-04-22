@@ -43,6 +43,11 @@ interface SelectedCell {
   date: string;
   currentStatus: string;
   currentLeaveType: string | null;
+  currentInTime1?: string | null;
+  currentOutTime1?: string | null;
+  currentInTime2?: string | null;
+  currentOutTime2?: string | null;
+  currentRemarks?: string | null;
 }
 
 function ManualAttendanceModal({
@@ -54,12 +59,17 @@ function ManualAttendanceModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const [status, setStatus] = useState<"present" | "late" | "half_day" | "absent">("present");
-  const [inTime1, setInTime1] = useState("");
-  const [outTime1, setOutTime1] = useState("");
-  const [inTime2, setInTime2] = useState("");
-  const [outTime2, setOutTime2] = useState("");
-  const [remarks, setRemarks] = useState("");
+  // Normalize "HH:MM:SS" → "HH:MM" so <input type="time"> shows the value.
+  const normTime = (t?: string | null) => (t ? t.slice(0, 5) : "");
+  const initialStatus = (["present","late","half_day","absent"].includes(cell.currentStatus)
+    ? cell.currentStatus
+    : "present") as "present" | "late" | "half_day" | "absent";
+  const [status, setStatus] = useState<"present" | "late" | "half_day" | "absent">(initialStatus);
+  const [inTime1, setInTime1] = useState(normTime(cell.currentInTime1));
+  const [outTime1, setOutTime1] = useState(normTime(cell.currentOutTime1));
+  const [inTime2, setInTime2] = useState(normTime(cell.currentInTime2));
+  const [outTime2, setOutTime2] = useState(normTime(cell.currentOutTime2));
+  const [remarks, setRemarks] = useState(cell.currentRemarks ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -547,6 +557,11 @@ export default function MonthlySheet() {
       date: dateStr,
       currentStatus: status,
       currentLeaveType: entry?.leaveType ?? null,
+      currentInTime1: entry?.inTime ?? null,
+      currentOutTime1: entry?.outTime ?? null,
+      currentInTime2: entry?.inTime2 ?? null,
+      currentOutTime2: entry?.outTime2 ?? null,
+      currentRemarks: entry?.remarks ?? null,
     });
   }
 
