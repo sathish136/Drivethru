@@ -104,6 +104,171 @@ function diffHrs(t1: string, t2: string): number {
   return ((h2 * 60 + m2) - (h1 * 60 + m1)) / 60;
 }
 
+type AttRow = { pin: string; time: string; status: string };
+
+async function processAttRows(rows: AttRow[]) {
+  type Stats = { created: number; updated: number; skipped: number; unmatched: number };
+  const stats: Stats = { created: 0, updated: 0, skipped: 0, unmatched: 0 };
+
+  if (rows.length === 0) return stats;
+
+  const allEmps = await db.select({
+    id: employees.id,
+    biometricId: employees.biometricId,
+    branchId: employees.branchId,
+    department: employees.department,
+    shiftId: employees.shiftId,
+  }).from(employees).where(eq(employees.status, "active"));
+
+  const empByBiometricId = new Map<string, { id: number; branchId: number; department: string | null; shiftId: number | null }>();
+  for (const e of allEmps) {
+    if (e.biometricId) empByBiometricId.set(e.biometricId.trim(), e);
+  }
+
+  const allShifts = await db.select().from(shifts);
+  const shiftMap = new Map(allShifts.map(s => [s.id, s]));
+  const deptRules = await loadDeptRules();
+
+  type DayLog = { time: string; type: "in" | "out" };
+  const grouped = new Map<string, Map<string, DayLog[]>>();
+
+  for (const row of rows) {
+    const pin = (row.pin || "").trim();
+    const timeStr = (row.time || "").trim();
+    if (!pin || !timeStr) continue;
+
+    const datePart = timeStr.slice(0, 10);
+    const timePart = timeStr.slice(11, 16);
+    if (!datePart || !timePart) continue;
+
+    const status = String(row.status || "0");
+    const punchType: "in" | "out" = (status === "1" || status === "255") ? "out" : "in";
+
+    if (!grouped.has(pin)) grouped.set(pin, new Map());
+    const byDate = grouped.get(pin)!;
+    if (!byDate.has(datePart)) byDate.set(datePart, []);
+    byDate.get(datePart)!.push({ time: timePart, type: punchType });
+  }
+
+  for (const [pin, dateMap] of grouped) {
+    const emp = empByBiometricId.get(pin);
+    if (!emp) { stats.unmatched += dateMap.size; continue; }
+
+    const empShift = emp.shiftId ? shiftMap.get(emp.shiftId) : undefined;
+    const rule = findRule(deptRules, emp.department ?? "", empShift?.name);
+    const shiftStartMins = empShift?.startTime1 ? timeToMins(empShift.startTime1) : 8 * 60;
+    const lateThresholdMins = shiftStartMins + (rule.lateGraceMinutes ?? 15);
+
+    for (const [date, logs] of dateMap) {
+      const sorted = logs.sort((a, b) => a.time.localeCompare(b.time));
+      const count = sorted.length;
+      if (count === 0) { stats.skipped++; continue; }
+
+      // Derive Morning & Afternoon sessions from ALL punches:
+      //   1st punch          -> Morning IN
+      //   2nd punch          -> Morning OUT (Lunch)
+      //   second-last punch  -> Afternoon IN
+      //   last punch         -> Afternoon OUT
+      // Middle punches are ignored.
+      const inTime1: string = sorted[0].time;
+      const outTime1: string | null = count >= 2 ? sorted[1].time : null;
+      const inTime2: string | null = count >= 3 ? sorted[count - 2].time : null;
+      const outTime2: string | null = count >= 3 ? sorted[count - 1].time : null;
+
+      let workHours1: number | null = null;
+      if (outTime1 && outTime1 !== inTime1) {
+        const d = diffHrs(inTime1, outTime1);
+        if (d > 0) workHours1 = Math.round(d * 100) / 100;
+      }
+      let workHours2: number | null = null;
+      if (inTime2 && outTime2 && outTime2 !== inTime2) {
+        const d = diffHrs(inTime2, outTime2);
+        if (d > 0) workHours2 = Math.round(d * 100) / 100;
+      }
+
+      let totalHours: number | null = null;
+      let overtimeHours: number | null = null;
+      const sumHrs = (workHours1 ?? 0) + (workHours2 ?? 0);
+      if (sumHrs > 0) {
+        totalHours = Math.round(sumHrs * 100) / 100;
+        const earlyMins = timeToMins(inTime1) < shiftStartMins ? shiftStartMins - timeToMins(inTime1) : 0;
+        overtimeHours = Math.round(calcOtHours(totalHours, rule, earlyMins) * 100) / 100;
+      }
+
+      const arrivalMins = timeToMins(inTime1);
+      const status: "present" | "late" = arrivalMins > lateThresholdMins ? "late" : "present";
+
+      const record: any = {
+        employeeId: emp.id,
+        branchId: emp.branchId,
+        date,
+        status,
+        inTime1,
+        outTime1: outTime1,
+        workHours1: workHours1,
+        inTime2: inTime2,
+        outTime2: outTime2,
+        workHours2: workHours2,
+        totalHours: totalHours,
+        overtimeHours: overtimeHours,
+        source: "biometric" as const,
+      };
+
+      const existing = await db.select({ id: attendanceRecords.id })
+        .from(attendanceRecords)
+        .where(and(eq(attendanceRecords.employeeId, emp.id), eq(attendanceRecords.date, date)));
+
+      if (existing.length > 0) {
+        await db.update(attendanceRecords).set(record).where(eq(attendanceRecords.id, existing[0].id));
+        stats.updated++;
+      } else {
+        await db.insert(attendanceRecords).values(record);
+        stats.created++;
+      }
+    }
+  }
+
+  return stats;
+}
+
+/**
+ * POST /api/biometric/sync-txt
+ * Upload a plain-text attendance dump (whitespace-separated columns:
+ *   pin   YYYY-MM-DD HH:MM:SS   status   [extra cols...]
+ * ). Same processing as sync-sqlite.
+ */
+router.post("/sync-txt", upload.single("file"), async (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ success: false, message: "No file uploaded." });
+    return;
+  }
+  try {
+    const text = req.file.buffer.toString("utf8");
+    const rows: AttRow[] = [];
+    for (const rawLine of text.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      // pin then "YYYY-MM-DD HH:MM:SS" then status then extras
+      const m = line.match(/^(\S+)\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+(\S+)/);
+      if (!m) continue;
+      rows.push({ pin: m[1], time: m[2], status: m[3] });
+    }
+    if (rows.length === 0) {
+      res.status(400).json({ success: false, message: "No valid punch lines found in file." });
+      return;
+    }
+    const stats = await processAttRows(rows);
+    res.json({
+      success: true,
+      message: `Sync complete. ${stats.created} records created, ${stats.updated} updated, ${stats.skipped} skipped, ${stats.unmatched} unmatched (no employee biometric ID).`,
+      stats: { ...stats, totalPunches: rows.length },
+    });
+  } catch (e) {
+    console.error("TXT sync error:", e);
+    res.status(500).json({ success: false, message: "Sync failed: " + (e as Error).message });
+  }
+});
+
 /**
  * POST /api/biometric/sync-sqlite
  * Upload the push.db SQLite file from the ZKTeco push server.
@@ -125,12 +290,6 @@ router.post("/sync-sqlite", upload.single("db"), async (req, res) => {
     const Database = require("better-sqlite3");
     const sqlite = new Database(tmpPath, { readonly: true });
 
-    type AttRow = {
-      pin: string;
-      time: string;
-      status: string;
-    };
-
     const rows: AttRow[] = sqlite.prepare(
       "SELECT pin, time, status FROM attlog ORDER BY time ASC"
     ).all() as AttRow[];
@@ -142,130 +301,12 @@ router.post("/sync-sqlite", upload.single("db"), async (req, res) => {
       return;
     }
 
-    const allEmps = await db.select({
-      id: employees.id,
-      biometricId: employees.biometricId,
-      branchId: employees.branchId,
-      department: employees.department,
-      shiftId: employees.shiftId,
-    }).from(employees).where(eq(employees.status, "active"));
-
-    const empByBiometricId = new Map<string, { id: number; branchId: number; department: string | null; shiftId: number | null }>();
-    for (const e of allEmps) {
-      if (e.biometricId) empByBiometricId.set(e.biometricId.trim(), e);
-    }
-
-    const allShifts = await db.select().from(shifts);
-    const shiftMap = new Map(allShifts.map(s => [s.id, s]));
-    const deptRules = await loadDeptRules();
-
-    type DayLog = { time: string; type: "in" | "out" };
-    const grouped = new Map<string, Map<string, DayLog[]>>();
-
-    for (const row of rows) {
-      const pin = (row.pin || "").trim();
-      const timeStr = (row.time || "").trim();
-      if (!pin || !timeStr) continue;
-
-      const datePart = timeStr.slice(0, 10);
-      const timePart = timeStr.slice(11, 16);
-      if (!datePart || !timePart) continue;
-
-      const status = String(row.status || "0");
-      const punchType: "in" | "out" = (status === "1" || status === "255") ? "out" : "in";
-
-      if (!grouped.has(pin)) grouped.set(pin, new Map());
-      const byDate = grouped.get(pin)!;
-      if (!byDate.has(datePart)) byDate.set(datePart, []);
-      byDate.get(datePart)!.push({ time: timePart, type: punchType });
-    }
-
-    let created = 0, updated = 0, skipped = 0, unmatched = 0;
-
-    for (const [pin, dateMap] of grouped) {
-      const emp = empByBiometricId.get(pin);
-      if (!emp) { unmatched += dateMap.size; continue; }
-
-      const empShift = emp.shiftId ? shiftMap.get(emp.shiftId) : undefined;
-      const rule = findRule(deptRules, emp.department ?? "", empShift?.name);
-      const shiftStartMins = empShift?.startTime1 ? timeToMins(empShift.startTime1) : 8 * 60;
-      const lateThresholdMins = shiftStartMins + (rule.lateGraceMinutes ?? 15);
-
-      for (const [date, logs] of dateMap) {
-        const sorted = logs.sort((a, b) => a.time.localeCompare(b.time));
-        const count = sorted.length;
-        if (count === 0) { skipped++; continue; }
-
-        // Derive Morning & Afternoon sessions from ALL punches:
-        //   1st punch          -> Morning IN
-        //   2nd punch          -> Morning OUT (Lunch)
-        //   second-last punch  -> Afternoon IN
-        //   last punch         -> Afternoon OUT
-        // Middle punches are ignored.
-        const inTime1: string = sorted[0].time;
-        const outTime1: string | null = count >= 2 ? sorted[1].time : null;
-        const inTime2: string | null = count >= 3 ? sorted[count - 2].time : null;
-        const outTime2: string | null = count >= 3 ? sorted[count - 1].time : null;
-
-        let workHours1: number | null = null;
-        if (outTime1 && outTime1 !== inTime1) {
-          const d = diffHrs(inTime1, outTime1);
-          if (d > 0) workHours1 = Math.round(d * 100) / 100;
-        }
-        let workHours2: number | null = null;
-        if (inTime2 && outTime2 && outTime2 !== inTime2) {
-          const d = diffHrs(inTime2, outTime2);
-          if (d > 0) workHours2 = Math.round(d * 100) / 100;
-        }
-
-        let totalHours: number | null = null;
-        let overtimeHours: number | null = null;
-        const sumHrs = (workHours1 ?? 0) + (workHours2 ?? 0);
-        if (sumHrs > 0) {
-          totalHours = Math.round(sumHrs * 100) / 100;
-          const earlyMins = timeToMins(inTime1) < shiftStartMins ? shiftStartMins - timeToMins(inTime1) : 0;
-          overtimeHours = Math.round(calcOtHours(totalHours, rule, earlyMins) * 100) / 100;
-        }
-
-        const arrivalMins = timeToMins(inTime1);
-        const status: "present" | "late" = arrivalMins > lateThresholdMins ? "late" : "present";
-
-        const record = {
-          employeeId: emp.id,
-          branchId: emp.branchId,
-          date,
-          status,
-          inTime1,
-          outTime1: outTime1 ?? undefined,
-          workHours1: workHours1 ?? undefined,
-          inTime2: inTime2 ?? undefined,
-          outTime2: outTime2 ?? undefined,
-          workHours2: workHours2 ?? undefined,
-          totalHours: totalHours ?? undefined,
-          overtimeHours: overtimeHours ?? undefined,
-          source: "biometric" as const,
-        };
-
-        const existing = await db.select({ id: attendanceRecords.id })
-          .from(attendanceRecords)
-          .where(and(eq(attendanceRecords.employeeId, emp.id), eq(attendanceRecords.date, date)));
-
-        if (existing.length > 0) {
-          await db.update(attendanceRecords).set(record).where(eq(attendanceRecords.id, existing[0].id));
-          updated++;
-        } else {
-          await db.insert(attendanceRecords).values(record);
-          created++;
-        }
-      }
-    }
-
+    const stats = await processAttRows(rows);
     res.json({
       success: true,
-      message: `Sync complete. ${created} records created, ${updated} updated, ${skipped} skipped, ${unmatched} unmatched (no employee biometric ID).`,
-      stats: { created, updated, skipped, unmatched, totalPunches: rows.length },
+      message: `Sync complete. ${stats.created} records created, ${stats.updated} updated, ${stats.skipped} skipped, ${stats.unmatched} unmatched (no employee biometric ID).`,
+      stats: { ...stats, totalPunches: rows.length },
     });
-
   } catch (e) {
     console.error("SQLite sync error:", e);
     res.status(500).json({ success: false, message: "Sync failed: " + (e as Error).message });

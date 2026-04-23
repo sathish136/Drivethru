@@ -379,9 +379,11 @@ function SqliteSyncTab() {
     setLoading(true);
     setResult(null);
     try {
+      const isTxt = /\.(txt|log|csv|tsv)$/i.test(file.name);
       const form = new FormData();
-      form.append("db", file);
-      const resp = await fetch(`${BASE}/api/biometric/sync-sqlite`, {
+      form.append(isTxt ? "file" : "db", file);
+      const endpoint = isTxt ? "/api/biometric/sync-txt" : "/api/biometric/sync-sqlite";
+      const resp = await fetch(`${BASE}${endpoint}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${localStorage.getItem("auth_token") || ""}` },
         body: form,
@@ -424,7 +426,7 @@ function SqliteSyncTab() {
           >
             {file ? "Change file" : "Browse file"}
           </button>
-          <input ref={fileRef} type="file" accept=".db,.sqlite,.sqlite3" className="hidden" onChange={handleFileChange} />
+          <input ref={fileRef} type="file" accept=".db,.sqlite,.sqlite3,.txt,.log,.csv,.tsv" className="hidden" onChange={handleFileChange} />
         </div>
 
         <div className="border border-amber-200 bg-amber-50/40 rounded-lg p-3">
