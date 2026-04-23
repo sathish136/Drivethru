@@ -193,26 +193,41 @@ router.post("/sync-sqlite", upload.single("db"), async (req, res) => {
 
       for (const [date, logs] of dateMap) {
         const sorted = logs.sort((a, b) => a.time.localeCompare(b.time));
-        if (sorted.length === 0) { skipped++; continue; }
+        const count = sorted.length;
+        if (count === 0) { skipped++; continue; }
 
-        const ins = sorted.filter(l => l.type === "in");
-        const outs = sorted.filter(l => l.type === "out");
+        // Derive Morning & Afternoon sessions from ALL punches:
+        //   1st punch          -> Morning IN
+        //   2nd punch          -> Morning OUT (Lunch)
+        //   second-last punch  -> Afternoon IN
+        //   last punch         -> Afternoon OUT
+        // Middle punches are ignored.
+        const inTime1: string = sorted[0].time;
+        const outTime1: string | null = count >= 2 ? sorted[1].time : null;
+        const inTime2: string | null = count >= 3 ? sorted[count - 2].time : null;
+        const outTime2: string | null = count >= 3 ? sorted[count - 1].time : null;
 
-        const inTime = ins.length > 0 ? ins[0].time : sorted[0].time;
-        const outTime = outs.length > 0 ? outs[outs.length - 1].time : (sorted.length > 1 ? sorted[sorted.length - 1].time : null);
+        let workHours1: number | null = null;
+        if (outTime1 && outTime1 !== inTime1) {
+          const d = diffHrs(inTime1, outTime1);
+          if (d > 0) workHours1 = Math.round(d * 100) / 100;
+        }
+        let workHours2: number | null = null;
+        if (inTime2 && outTime2 && outTime2 !== inTime2) {
+          const d = diffHrs(inTime2, outTime2);
+          if (d > 0) workHours2 = Math.round(d * 100) / 100;
+        }
 
         let totalHours: number | null = null;
         let overtimeHours: number | null = null;
-        if (outTime && outTime !== inTime) {
-          const diff = diffHrs(inTime, outTime);
-          if (diff > 0) {
-            totalHours = Math.round(diff * 100) / 100;
-            const earlyMins = timeToMins(inTime) < shiftStartMins ? shiftStartMins - timeToMins(inTime) : 0;
-            overtimeHours = Math.round(calcOtHours(totalHours, rule, earlyMins) * 100) / 100;
-          }
+        const sumHrs = (workHours1 ?? 0) + (workHours2 ?? 0);
+        if (sumHrs > 0) {
+          totalHours = Math.round(sumHrs * 100) / 100;
+          const earlyMins = timeToMins(inTime1) < shiftStartMins ? shiftStartMins - timeToMins(inTime1) : 0;
+          overtimeHours = Math.round(calcOtHours(totalHours, rule, earlyMins) * 100) / 100;
         }
 
-        const arrivalMins = timeToMins(inTime);
+        const arrivalMins = timeToMins(inTime1);
         const status: "present" | "late" = arrivalMins > lateThresholdMins ? "late" : "present";
 
         const record = {
@@ -220,9 +235,12 @@ router.post("/sync-sqlite", upload.single("db"), async (req, res) => {
           branchId: emp.branchId,
           date,
           status,
-          inTime1: inTime,
-          outTime1: outTime ?? undefined,
-          workHours1: totalHours ?? undefined,
+          inTime1,
+          outTime1: outTime1 ?? undefined,
+          workHours1: workHours1 ?? undefined,
+          inTime2: inTime2 ?? undefined,
+          outTime2: outTime2 ?? undefined,
+          workHours2: workHours2 ?? undefined,
           totalHours: totalHours ?? undefined,
           overtimeHours: overtimeHours ?? undefined,
           source: "biometric" as const,
