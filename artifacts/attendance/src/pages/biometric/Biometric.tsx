@@ -379,7 +379,7 @@ function SqliteSyncTab() {
     setLoading(true);
     setResult(null);
     try {
-      const isTxt = /\.(txt|log|csv|tsv)$/i.test(file.name);
+      const isTxt = /\.(txt|log|csv|tsv|dat)$/i.test(file.name);
       const form = new FormData();
       form.append(isTxt ? "file" : "db", file);
       const endpoint = isTxt ? "/api/biometric/sync-txt" : "/api/biometric/sync-sqlite";
@@ -426,7 +426,7 @@ function SqliteSyncTab() {
           >
             {file ? "Change file" : "Browse file"}
           </button>
-          <input ref={fileRef} type="file" accept=".db,.sqlite,.sqlite3,.txt,.log,.csv,.tsv" className="hidden" onChange={handleFileChange} />
+          <input ref={fileRef} type="file" accept=".db,.sqlite,.sqlite3,.txt,.log,.csv,.tsv,.dat" className="hidden" onChange={handleFileChange} />
         </div>
 
         <div className="border border-amber-200 bg-amber-50/40 rounded-lg p-3">
