@@ -4,9 +4,7 @@ import * as schema from "./schema";
 
 const { Pool } = pg;
 
-const DEFAULT_DATABASE_URL = "postgresql://postgres:wtt%40adm123@122.165.225.42:5432/drivethru";
-
-const connectionString = process.env.COLOMBO_DB_URL || DEFAULT_DATABASE_URL;
+const connectionString = process.env.DATABASE_URL || process.env.COLOMBO_DB_URL;
 
 export const pool = new Pool({ connectionString });
 export const db = drizzle(pool, { schema });

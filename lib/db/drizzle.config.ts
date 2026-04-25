@@ -1,8 +1,11 @@
 import { defineConfig } from "drizzle-kit";
 import path from "path";
 
-const DEFAULT_DATABASE_URL = "postgresql://postgres:wtt%40adm123@122.165.225.42:5432/drivethru";
-const dbUrl = process.env.COLOMBO_DB_URL || DEFAULT_DATABASE_URL;
+const dbUrl = process.env.DATABASE_URL || process.env.COLOMBO_DB_URL;
+
+if (!dbUrl) {
+  throw new Error("DATABASE_URL or COLOMBO_DB_URL environment variable is required");
+}
 
 export default defineConfig({
   schema: path.join(__dirname, "./src/schema/index.ts"),

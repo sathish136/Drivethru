@@ -48,8 +48,8 @@ export default defineConfig({
       strict: true,
       deny: ["**/.*"],
     },
-    // Proxy /api calls to the API server (needed for local development)
-    proxy: isReplit ? undefined : {
+    // Proxy /api calls to the API server
+    proxy: {
       "/api": {
         target: `http://localhost:${apiPort}`,
         changeOrigin: true,

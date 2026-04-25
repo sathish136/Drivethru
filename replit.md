@@ -80,11 +80,20 @@ Dark sidebar, clean white content area
 - 3 shifts (Morning, Day, Split Shift A)
 - 5 national/religious holidays
 
+## Replit Environment Notes
+
+- **Database**: Replit PostgreSQL (DATABASE_URL env var auto-set by Replit)
+- **Auth**: Custom session-based auth (username/password with SHA-256 hashing)
+- **Frontend port**: 5000 (Vite dev server)
+- **API port**: 8080 (Express, also proxies frontend for Replit routing)
+- **Default admin**: username=admin, password=admin123 (created on migration)
+- **DB schema**: Auto-pushed to Replit DB via `pnpm --filter db push`
+
 ## Structure
 
 ```text
 artifacts/
-├── attendance/          # React+Vite frontend (port 18763, preview path /)
+├── attendance/          # React+Vite frontend (port 5000, preview path /)
 │   └── src/
 │       ├── pages/       # Dashboard, attendance, employees, branches, reports, biometric, users, settings
 │       ├── components/  # Layout sidebar, UI components
