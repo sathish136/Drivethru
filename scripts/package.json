@@ -6,10 +6,15 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "seed": "tsx ./src/seed.ts",
+    "drop-attendance": "tsx ./src/drop-attendance.ts",
+    "update-attendance-raw": "tsx ./src/update-attendance-raw.ts",
+    "update-attendance-madiha": "tsx ./src/update-attendance-madiha.ts",
+    "update-attendance-multiple": "tsx ./src/update-attendance-multiple.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@workspace/db": "workspace:*"
+    "@workspace/db": "workspace:*",
+    "drizzle-orm": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

@@ -1,5 +1,5 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { AppLayout } from "@/components/Layout";
@@ -15,14 +15,18 @@ import Biometric from "@/pages/biometric/Biometric";
 import Settings from "@/pages/settings/Settings";
 import Users from "@/pages/users/Users";
 import Payroll from "@/pages/payroll/Payroll";
+import PayslipPage from "@/pages/payroll/PayslipPage";
 import PayrollSettings from "@/pages/payroll-settings/PayrollSettings";
 import ActivityLogs from "@/pages/activity-logs/ActivityLogs";
 import HRSettings from "@/pages/hr-settings/HRSettings";
 import Holidays from "@/pages/holidays/Holidays";
 import Approvals from "@/pages/attendance/Approvals";
 import LeaveBalances from "@/pages/leave/LeaveBalances";
+import LeaveEntry from "@/pages/leave/LeaveEntry";
 import Loans from "@/pages/loans/Loans";
 import Incentives from "@/pages/incentives/Incentives";
+import WeekOffs from "@/pages/weekoffs/WeekOffs";
+import Tutorial from "@/pages/tutorial/Tutorial";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -31,7 +35,45 @@ const queryClient = new QueryClient({
   },
 });
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+async function fetchMe(token: string) {
+  const r = await fetch(`${BASE}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!r.ok) {
+    throw new Error(`auth_me_failed_${r.status}`);
+  }
+  return (await r.json()) as unknown;
+}
+
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+  const token = localStorage.getItem("auth_token");
+
+  if (!token) {
+    return <Redirect to="/login" />;
+  }
+
+  const me = useQuery({
+    queryKey: ["auth", "me", token],
+    queryFn: () => fetchMe(token),
+    staleTime: 0,
+  });
+
+  if (me.isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
+        Loading…
+      </div>
+    );
+  }
+
+  if (me.isError) {
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("auth_user");
+    return <Redirect to="/login" />;
+  }
+
   return (
     <AppLayout>
       <Component />
@@ -47,11 +89,13 @@ function Router() {
       <Route path="/attendance/today"><ProtectedRoute component={TodayAttendance} /></Route>
       <Route path="/attendance/monthly"><ProtectedRoute component={MonthlySheet} /></Route>
       <Route path="/attendance/approvals"><ProtectedRoute component={Approvals} /></Route>
+      <Route path="/attendance/leave-entry"><ProtectedRoute component={LeaveEntry} /></Route>
       <Route path="/leave-balances"><ProtectedRoute component={LeaveBalances} /></Route>
       <Route path="/employees"><ProtectedRoute component={EmployeeList} /></Route>
       <Route path="/branches"><ProtectedRoute component={Branches} /></Route>
       <Route path="/shifts"><ProtectedRoute component={Shifts} /></Route>
       <Route path="/reports"><ProtectedRoute component={Reports} /></Route>
+      <Route path="/payroll/payslip/:id" component={PayslipPage} />
       <Route path="/payroll"><ProtectedRoute component={Payroll} /></Route>
       <Route path="/payroll-settings"><ProtectedRoute component={PayrollSettings} /></Route>
       <Route path="/biometric"><ProtectedRoute component={Biometric} /></Route>
@@ -62,6 +106,8 @@ function Router() {
       <Route path="/activity-logs"><ProtectedRoute component={ActivityLogs} /></Route>
       <Route path="/loans"><ProtectedRoute component={Loans} /></Route>
       <Route path="/incentives"><ProtectedRoute component={Incentives} /></Route>
+      <Route path="/weekoffs"><ProtectedRoute component={WeekOffs} /></Route>
+      <Route path="/tutorial"><ProtectedRoute component={Tutorial} /></Route>
       <Route component={NotFound} />
     </Switch>
   );

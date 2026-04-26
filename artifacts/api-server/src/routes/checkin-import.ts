@@ -2,8 +2,9 @@ import { Router } from "express";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import { db } from "@workspace/db";
-import { attendanceRecords, employees, branches } from "@workspace/db/schema";
+import { attendanceRecords, employees, branches, shifts } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
+import { loadDeptRules, findRule, timeToMins, calcOtHours } from "../lib/hr-rules.js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -70,16 +71,24 @@ router.post("/import", upload.single("file"), async (req, res) => {
       defaultBranchId = inserted.id;
     }
 
-    const empCache = new Map<string, number>();
-    const allEmps = await db.select({ id: employees.id, employeeId: employees.employeeId }).from(employees);
-    for (const e of allEmps) empCache.set(e.employeeId, e.id);
+    /* Load HR rules + shifts so late/OT thresholds come from settings */
+    const deptRules  = await loadDeptRules();
+    const allShifts  = await db.select().from(shifts);
+    const shiftMap   = new Map(allShifts.map(s => [s.id, s]));
+
+    const empCache    = new Map<string, { id: number; department: string | null; shiftId: number | null }>();
+    const allEmps     = await db.select({
+      id: employees.id, employeeId: employees.employeeId,
+      department: employees.department, shiftId: employees.shiftId,
+    }).from(employees);
+    for (const e of allEmps) empCache.set(e.employeeId, { id: e.id, department: e.department, shiftId: e.shiftId });
 
     let created = 0, updated = 0, skipped = 0, newEmp = 0;
 
     for (const [empCode, dateMap] of grouped) {
-      let empId = empCache.get(empCode);
+      let empEntry = empCache.get(empCode);
 
-      if (!empId) {
+      if (!empEntry) {
         const firstName = dateMap.values().next().value?.empName || empCode;
         try {
           const [ins] = await db.insert(employees).values({
@@ -94,14 +103,20 @@ router.post("/import", upload.single("file"), async (req, res) => {
             phone: "+94-000-0000000",
             status: "active",
           }).returning({ id: employees.id });
-          empId = ins.id;
-          empCache.set(empCode, empId);
+          empEntry = { id: ins.id, department: "General", shiftId: null };
+          empCache.set(empCode, empEntry);
           newEmp++;
         } catch {
           skipped++;
           continue;
         }
       }
+
+      /* Resolve HR rule and shift for this employee (drives late & OT thresholds) */
+      const empShift = empEntry.shiftId ? shiftMap.get(empEntry.shiftId) : undefined;
+      const rule     = findRule(deptRules, empEntry.department ?? "", empShift?.name);
+      const shiftStartMins = empShift?.startTime1 ? timeToMins(empShift.startTime1) : 8 * 60;
+      const lateThresholdMins = shiftStartMins + (rule.lateGraceMinutes ?? 15);
 
       for (const [date, { logs }] of dateMap) {
         const sorted = logs
@@ -118,16 +133,18 @@ router.post("/import", upload.single("file"), async (req, res) => {
           const diff = diffHrs(inTime, outTime);
           if (diff > 0) {
             totalHours = Math.round(diff * 100) / 100;
-            overtimeHours = totalHours > 8 ? Math.round((totalHours - 8) * 100) / 100 : 0;
+            /* OT hours from HR rule (accounts for lunch, threshold) */
+            const earlyMins = timeToMins(inTime) < shiftStartMins
+              ? shiftStartMins - timeToMins(inTime) : 0;
+            overtimeHours = Math.round(calcOtHours(totalHours, rule, earlyMins) * 100) / 100;
           }
         }
 
-        const [hIn, mIn] = inTime.split(":").map(Number);
-        const lateThresholdMins = 8 * 60 + 15;
-        const status: "present" | "late" = (hIn * 60 + mIn) > lateThresholdMins ? "late" : "present";
+        const arrivalMins = timeToMins(inTime);
+        const status: "present" | "late" = arrivalMins > lateThresholdMins ? "late" : "present";
 
         const record = {
-          employeeId: empId,
+          employeeId: empEntry.id,
           branchId: defaultBranchId,
           date,
           status,

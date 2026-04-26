@@ -35,6 +35,8 @@ import {
   Banknote,
   CalendarDays,
   Gift,
+  CalendarOff,
+  Fingerprint,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -54,6 +56,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/attendance/today",      label: "Today's Attendance", icon: ClipboardList   },
       { href: "/attendance/monthly",    label: "Monthly Sheet",      icon: CalendarCheck   },
       { href: "/attendance/approvals",  label: "Approvals",          icon: ClipboardCheck  },
+      { href: "/attendance/leave-entry", label: "Leave Entry",        icon: CalendarClock   },
     ],
   },
   {
@@ -65,6 +68,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/hr-settings",      label: "HR Settings",      icon: BookOpen    },
       { href: "/shifts",           label: "Shifts",           icon: Timer       },
       { href: "/holidays",         label: "Holidays",         icon: CalendarDays  },
+      { href: "/weekoffs",         label: "Week Offs",        icon: CalendarOff   },
       { href: "/leave-balances",   label: "Leave Balances",   icon: CalendarClock },
       { href: "/loans",            label: "Loans & Advances", icon: Banknote      },
       { href: "/incentives",       label: "Incentives",       icon: Gift          },
@@ -83,9 +87,16 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "System",
     items: [
+      { href: "/biometric",     label: "Biometric",       icon: Fingerprint },
       { href: "/users",         label: "User Management", icon: ShieldCheck },
       { href: "/activity-logs", label: "Activity Logs",   icon: ListChecks  },
       { href: "/settings",      label: "Settings",        icon: Cog         },
+    ],
+  },
+  {
+    label: "Help",
+    items: [
+      { href: "/tutorial", label: "User Guide", icon: BookOpen },
     ],
   },
 ];

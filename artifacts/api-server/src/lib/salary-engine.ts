@@ -1,0 +1,609 @@
+/**
+ * Salary-run engine.
+ *
+ * Single source of truth for the payroll-ready attendance report.
+ * Drives every late / OT / grace / day-type / remark decision off the
+ * employee's assigned shift NAME from /shifts (mapped to a category) and
+ * the employee's week-off schedule from /weekoffs.
+ *
+ * Categories (resolved from shift name):
+ *   REGULAR     "Regular Shift"
+ *   RECEPTION   "Receptionist Shift"
+ *   KITCHEN     "Kitchen Shift" (+ day variants)
+ *   FLEXIBLE    "Flexible Shift"
+ *   NIGHT       "Night Watcher Shift"
+ *   HALF_DAY    "Half Day Shift"
+ */
+
+import { timeToMins } from "./hr-rules.js";
+
+export type ShiftCategory =
+  | "REGULAR"
+  | "RECEPTION"
+  | "KITCHEN"
+  | "FLEXIBLE"
+  | "NIGHT"
+  | "HALF_DAY";
+
+export type DayType =
+  | "WORKING_DAY"
+  | "WEEK_OFF"
+  | "WEEK_OFF_WORKED"
+  | "HALF_DAY"
+  | "ABSENT"
+  | "INVALID";
+
+/** Common policy constants (per spec) */
+export const LATE_GRACE_MINUTES = 15;
+export const OT_THRESHOLD_MINUTES = 30;
+export const LUNCH_GRACE_MINUTES = 10;
+export const CHECKOUT_GRACE_MINUTES = 5;
+export const FLEXIBLE_OT_AFTER_HOURS = 9.5; // 9 hrs 30 mins
+export const HALF_DAY_HOURS = 5;
+
+/**
+ * Map shift name -> category.
+ * Matching is case-insensitive and substring-based so day variants like
+ * "Kitchen Shift - Sunday" still resolve to KITCHEN.
+ */
+export function categoryFromShiftName(name: string | null | undefined): ShiftCategory {
+  const n = (name ?? "").toLowerCase().trim();
+  if (!n) return "REGULAR";
+  if (n.includes("night")) return "NIGHT";
+  if (n.includes("recept")) return "RECEPTION";
+  if (n.includes("kitchen")) return "KITCHEN";
+  if (n.includes("flex")) return "FLEXIBLE";
+  if (n.includes("half")) return "HALF_DAY";
+  return "REGULAR";
+}
+
+/** Pretty label for remarks/UI */
+export function categoryLabel(c: ShiftCategory): string {
+  switch (c) {
+    case "REGULAR":   return "Regular Shift";
+    case "RECEPTION": return "Receptionist Shift";
+    case "KITCHEN":   return "Kitchen Shift";
+    case "FLEXIBLE":  return "Flexible Shift";
+    case "NIGHT":     return "Night Watcher Shift";
+    case "HALF_DAY":  return "Half Day Shift";
+  }
+}
+
+/** "510" -> "08:30" */
+function minsToTime(mins: number): string {
+  const h = Math.floor(mins / 60) % 24;
+  const m = mins % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/** Per-category late/OT thresholds. Times are HH:MM, minutes since midnight. */
+function categoryDefaults(c: ShiftCategory): {
+  startTime: string;
+  endTime: string;
+  lateAfter: string;     // late deduction starts after this clock time
+  otAfter: string;       // OT counted after this clock time
+} {
+  switch (c) {
+    case "REGULAR":   return { startTime: "08:00", endTime: "17:00", lateAfter: "08:15", otAfter: "17:30" };
+    case "RECEPTION": return { startTime: "08:30", endTime: "17:30", lateAfter: "08:45", otAfter: "18:00" };
+    // Kitchen OT was previously hard-coded to 20:30; spec revision says "must
+    // apply for all long hours" — so we now compute OT from the assigned
+    // shift end + 30-min threshold, identical to Regular/Reception.
+    // The category-default otAfter is left blank so the OT branch falls
+    // through to the dynamic shift-end calculation below.
+    case "KITCHEN":   return { startTime: "08:00", endTime: "17:00", lateAfter: "08:15", otAfter: "—"     };
+    case "FLEXIBLE":  return { startTime: "—",     endTime: "—",     lateAfter: "—",     otAfter: "—"     };
+    case "NIGHT":     return { startTime: "20:00", endTime: "05:00", lateAfter: "—",     otAfter: "05:00" };
+    case "HALF_DAY":  return { startTime: "08:00", endTime: "13:00", lateAfter: "08:15", otAfter: "—"     };
+  }
+}
+
+/** "08:18" -> 18 (mins after the cutoff), or 0 if not late */
+function lateMinutesAfter(inTime: string, cutoff: string): number {
+  return Math.max(0, timeToMins(inTime) - timeToMins(cutoff));
+}
+
+/** Format minutes as "1 hr 15 mins" / "12 mins" */
+function fmtDuration(mins: number): string {
+  if (mins <= 0) return "0 mins";
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h <= 0) return `${m} mins`;
+  if (m <= 0) return `${h} hr${h > 1 ? "s" : ""}`;
+  return `${h} hr${h > 1 ? "s" : ""} ${m} mins`;
+}
+
+/** Worked hours -> "8:18 hrs" style */
+export function fmtHours(hours: number): string {
+  const total = Math.max(0, Math.round(hours * 60));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${h}:${String(m).padStart(2, "0")} hrs`;
+}
+
+/** True when the date (YYYY-MM-DD) falls on one of the JS getUTCDay numbers */
+function dayOfWeek(dateStr: string): number {
+  return new Date(dateStr + "T00:00:00Z").getUTCDay(); // 0=Sun..6=Sat
+}
+
+/** "2026-02-01" -> "Sunday" */
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+export function dayNameOf(dateStr: string): string {
+  return DAY_NAMES[dayOfWeek(dateStr)];
+}
+
+/**
+ * Day-wise shift variant resolver — uses ONLY the existing /shifts master.
+ *
+ * If the employee is assigned a shift named "Kitchen Shift" and the master has
+ * a row "Kitchen Shift - Sunday" that is active, that variant's start/end
+ * times are used for that date. Otherwise the employee's base shift is used
+ * unchanged. This keeps day-wise Kitchen timing within the existing module.
+ */
+export interface ShiftMasterRow {
+  id: number;
+  name: string;
+  startTime1: string;
+  endTime1: string;
+  isActive: boolean;
+}
+export function resolveDayShift<T extends ShiftMasterRow | undefined | null>(
+  baseShift: T,
+  dateStr: string,
+  shiftsByName: Map<string, ShiftMasterRow>,
+): T {
+  if (!baseShift) return baseShift;
+  const variantKey = `${baseShift.name.trim().toLowerCase()} - ${dayNameOf(dateStr).toLowerCase()}`;
+  const variant = shiftsByName.get(variantKey);
+  if (variant && variant.isActive) {
+    // Return a shallow override — keep id/name of variant so remarks reflect it.
+    return { ...(baseShift as object), startTime1: variant.startTime1, endTime1: variant.endTime1 } as T;
+  }
+  return baseShift;
+}
+
+/* ── Night-shift hourly punch validation ───────────────────────────────── */
+
+/**
+ * Spec:
+ *   0 missed hourly blocks → full 3 hrs OT
+ *   1 missed hourly block  → deduct 1 hr OT
+ *   2+ missed              → deduct 2 hrs OT (never more)
+ *
+ * The night window for which we expect hourly continuity is
+ * 20:00 (start) → 05:00 (off), i.e. 9 hourly blocks. We treat each whole-hour
+ * window as covered if at least one stored punch (in/out 1/2) falls inside it.
+ *
+ * Returns { otHours, missedBlocks, deductedHours }.
+ */
+export function nightShiftOt(rec: {
+  inTime1?: string | null;
+  outTime1?: string | null;
+  inTime2?: string | null;
+  outTime2?: string | null;
+}): { otHours: number; missedBlocks: number; deductedHours: number } {
+  const start = 20 * 60;     // 20:00
+  const end   = 5 * 60 + 24 * 60; // 05:00 next day, normalized
+
+  // Normalize each stored punch to the night-window timeline (add 24h if before start)
+  const punches: number[] = [];
+  for (const p of [rec.inTime1, rec.outTime1, rec.inTime2, rec.outTime2]) {
+    if (!p) continue;
+    let m = timeToMins(p);
+    if (m < start) m += 24 * 60; // crossed midnight
+    punches.push(m);
+  }
+
+  // Hourly blocks: [20-21, 21-22, …, 04-05]  → 9 blocks
+  let covered = 0;
+  let missed = 0;
+  for (let blockStart = start; blockStart < end; blockStart += 60) {
+    const blockEnd = blockStart + 60;
+    const has = punches.some((m) => m >= blockStart && m < blockEnd);
+    if (has) covered++;
+    else missed++;
+  }
+
+  // No punches at all → no OT
+  if (covered === 0) return { otHours: 0, missedBlocks: missed, deductedHours: 0 };
+
+  const baseOt = 3;
+  const deducted = missed === 0 ? 0 : missed === 1 ? 1 : 2;
+  const otHours = Math.max(0, baseOt - deducted);
+  return { otHours, missedBlocks: missed, deductedHours: deducted };
+}
+
+/* ── Inputs the engine needs from the caller ──────────────────────────── */
+
+export interface ShiftInfo {
+  /** Shift NAME from /shifts — drives category mapping */
+  name: string | null | undefined;
+  /** Optional override: assigned start (HH:MM). Falls back to category default. */
+  startTime?: string | null;
+  /** Optional override: assigned end (HH:MM). Falls back to category default. */
+  endTime?: string | null;
+}
+
+export interface WeekOffInfo {
+  /** offDays array from /weekoffs (0=Sun..6=Sat) */
+  offDays: number[];
+  /** halfDays array from /weekoffs (0=Sun..6=Sat) */
+  halfDays: number[];
+}
+
+export interface AttendanceRow {
+  date: string;            // "YYYY-MM-DD"
+  inTime1?: string | null; // "HH:MM"
+  outTime1?: string | null;
+  inTime2?: string | null;
+  outTime2?: string | null;
+  totalHours?: number | null;
+  /** Stored leaveType, if any */
+  leaveType?: string | null;
+}
+
+/** Holiday classification used for OT pay multipliers */
+export type HolidayType = "statutory" | "poya" | "public";
+
+/** Final payroll-ready row */
+export interface SalaryRunRow {
+  date: string;
+  shiftCategory: ShiftCategory;
+  shiftCategoryLabel: string;
+  shiftName: string;
+  shiftTime: string;       // "08:00 - 17:00" / "Flexible" / "—"
+  weekOffStatus: string;   // "Off" | "Half Day" | "Working"
+  firstIn: string | null;
+  lastOut: string | null;
+  workedHours: number;     // numeric hours, rounded to 2dp
+  workedHoursLabel: string;// "8:18 hrs"
+  lateMinutes: number;
+  otHours: number;
+  dayType: DayType;
+  /** True if this row falls on a rostered week-off day. */
+  isWeekOff: boolean;
+  /** True if this row is a worked week-off (regardless of hour-band classification). */
+  weekOffWorked: boolean;
+  /** Holiday type if this date is a holiday (null for normal days). */
+  holidayType: HolidayType | null;
+  /** Holiday name (e.g. "Tamil Thai Pongal Day"). */
+  holidayName: string | null;
+  /** Pay multiplier when worked on this holiday (2.0 statutory, 1.5 poya/public). */
+  holidayMultiplier: number;
+  /** True if employee actually punched on a holiday. */
+  holidayWorked: boolean;
+  remarks: string;
+  /** Per-row trace bits for audit */
+  graceApplied: { lunch: boolean; checkout: boolean };
+}
+
+const HOLIDAY_MULTIPLIERS: Record<HolidayType, number> = {
+  statutory: 2.0,
+  poya:      1.5,
+  public:    1.5,
+};
+const HOLIDAY_LABELS: Record<HolidayType, string> = {
+  statutory: "Statutory Holiday",
+  poya:      "Poya Day",
+  public:    "Public Holiday",
+};
+
+/**
+ * Process a single (employee × date × shift × weekoff × punches) into a
+ * payroll-ready row.  All policy decisions live here.
+ */
+export function processSalaryRow(opts: {
+  date: string;
+  shift: ShiftInfo | null | undefined;
+  weekoff: WeekOffInfo | null | undefined;
+  rec: AttendanceRow | null | undefined;
+  /** Holiday classification for this date, if any. */
+  holiday?: { type: HolidayType; name: string } | null;
+}): SalaryRunRow {
+  const { date, shift, weekoff, rec, holiday = null } = opts;
+  const category = categoryFromShiftName(shift?.name);
+  const defaults = categoryDefaults(category);
+
+  // Resolve effective shift times — assigned start/end take precedence (Kitchen day variants)
+  const startTime = shift?.startTime || defaults.startTime;
+  const endTime   = shift?.endTime   || defaults.endTime;
+  const shiftTime = category === "FLEXIBLE"
+    ? "Flexible"
+    : (startTime && endTime && startTime !== "—" ? `${startTime} - ${endTime}` : "—");
+
+  const dow = dayOfWeek(date);
+  const isOff = !!weekoff?.offDays?.includes(dow);
+  const isHalfDayScheduled = !!weekoff?.halfDays?.includes(dow);
+  const weekOffStatus = isOff ? "Off" : isHalfDayScheduled ? "Half Day" : "Working";
+
+  const firstIn = rec?.inTime1 ?? null;
+  const lastOut = rec?.outTime2 ?? rec?.outTime1 ?? null;
+  const workedHoursRaw = rec?.totalHours ?? 0;
+  const workedHours = Math.round(workedHoursRaw * 100) / 100;
+
+  // Effective shift duration in hours (used by OT completion guard).
+  const shiftDurationHours = (() => {
+    if (category === "FLEXIBLE" || category === "NIGHT") return 9;
+    if (!startTime || !endTime || startTime === "—" || endTime === "—") return 9;
+    const s = timeToMins(startTime);
+    const e = timeToMins(endTime);
+    const span = e > s ? e - s : (24 * 60 - s) + e;
+    return Math.max(1, span / 60);
+  })();
+
+  /* ── Day-type classification (FINAL clean logic) ──────────────────── */
+  // Punch count drives the structural decision; hours drive the band.
+  //   0 punches             → DAY OFF (rostered) or ABSENT
+  //   1 punch only          → INVALID (Missing Punch)
+  //   ≥ 2 punches           → calculate hours, classify by absolute bands
+  //
+  //   Hour bands (apply to ALL shifts incl. Flexible):
+  //     0 hrs               → ABSENT
+  //     < 4 hrs             → ABSENT
+  //     4 hrs ≤ h < 7:45    → HALF DAY
+  //     ≥ 7:45 hrs          → PRESENT      (15-min grace below 8:00)
+  //
+  //   Week off:
+  //     no punches          → DAY OFF (WEEK_OFF)
+  //     punches present     → classified by hours, weekOffWorked = true
+  //
+  // Thresholds compared in MINUTES to avoid floating-point drift —
+  // 7:45 = 465 min, 4:00 = 240 min.
+  const PRESENT_THRESHOLD_MINS = 7 * 60 + 45; // 465
+  const HALFDAY_THRESHOLD_MINS = 4 * 60;      // 240
+  const workedMinutes = Math.round(workedHoursRaw * 60);
+
+  const punchCount =
+    (rec?.inTime1 ? 1 : 0) +
+    (rec?.outTime1 ? 1 : 0) +
+    (rec?.inTime2 ? 1 : 0) +
+    (rec?.outTime2 ? 1 : 0);
+
+  // Week-off-worked is now a side-flag, NOT a separate dayType.  Worked
+  // off-days flow through the same hour-band classifier as normal days, so
+  // a 2.98-hr week-off-worked row is correctly ABSENT (not PRESENT).
+  const weekOffWorked = isOff && punchCount > 0;
+
+  let dayType: DayType;
+  if (rec?.leaveType) {
+    // Leaves out of scope here — surface as ABSENT so leave routes handle them.
+    dayType = "ABSENT";
+  } else if (isOff && punchCount === 0) {
+    dayType = "WEEK_OFF";
+  } else if (punchCount === 0) {
+    dayType = "ABSENT";
+  } else if (punchCount === 1) {
+    // Only one punch in the day — treat as ABSENT (missing punch = no valid work).
+    dayType = "ABSENT";
+  } else if (workedMinutes < HALFDAY_THRESHOLD_MINS) {
+    dayType = "ABSENT";
+  } else if (isHalfDayScheduled || category === "HALF_DAY") {
+    dayType = "HALF_DAY";
+  } else if (workedMinutes < PRESENT_THRESHOLD_MINS) {
+    dayType = "HALF_DAY";
+  } else {
+    dayType = "WORKING_DAY";
+  }
+
+  /* ── Late minutes ─────────────────────────────────────────────────── */
+  let lateMinutes = 0;
+  if (
+    dayType !== "ABSENT" &&
+    dayType !== "WEEK_OFF" &&
+    dayType !== "INVALID" &&
+    category !== "FLEXIBLE" &&
+    category !== "NIGHT"
+  ) {
+    if (firstIn) {
+      // Late cutoff = assigned/category start + 15-min general grace, OR the
+      // category's explicit lateAfter when it differs (e.g. Reception 08:45).
+      // For Kitchen with a varied assigned start we use start + 15.
+      const cutoff = (() => {
+        if (category === "REGULAR")   return defaults.lateAfter;          // 08:15
+        if (category === "RECEPTION") return defaults.lateAfter;          // 08:45
+        if (category === "HALF_DAY")  return defaults.lateAfter;          // 08:15
+        // KITCHEN → assigned start + 15
+        return minsToTime(timeToMins(startTime) + LATE_GRACE_MINUTES);
+      })();
+      lateMinutes = lateMinutesAfter(firstIn, cutoff);
+    }
+  }
+
+  // Cap implausibly large late numbers (likely wrong shift assignment) so
+  // payroll never sees a 4-hour "late" charge — but DO NOT change dayType.
+  if (lateMinutes > 180) {
+    lateMinutes = 0;
+  }
+
+  /* ── OT hours ─────────────────────────────────────────────────────── */
+  let otHours = 0;
+  let nightTrace: { missedBlocks: number; deductedHours: number } | null = null;
+
+  if (dayType !== "ABSENT" && dayType !== "INVALID" && rec) {
+    if (category === "NIGHT") {
+      const r = nightShiftOt(rec);
+      otHours = r.otHours;
+      nightTrace = { missedBlocks: r.missedBlocks, deductedHours: r.deductedHours };
+    } else if (category === "FLEXIBLE") {
+      otHours = workedHoursRaw > FLEXIBLE_OT_AFTER_HOURS
+        ? Math.round((workedHoursRaw - FLEXIBLE_OT_AFTER_HOURS) * 100) / 100
+        : 0;
+    } else if (lastOut) {
+      // Resolve OT-start time:
+      //   1. Category default if set (REGULAR 17:30, RECEPTION 18:00).
+      //   2. Otherwise (KITCHEN, custom shifts) → assigned shift end + 30 min.
+      let otStart = defaults.otAfter;
+      if (!otStart || otStart === "—") {
+        if (endTime && endTime !== "—") {
+          const endPlusThreshold = timeToMins(endTime) + OT_THRESHOLD_MINUTES;
+          otStart = minsToTime(endPlusThreshold);
+        }
+      }
+
+      if (otStart && otStart !== "—") {
+        const outMins = timeToMins(lastOut);
+        const otStartMins = timeToMins(otStart);
+        const overMins = outMins - otStartMins;
+        // OT completion guard: the person must have actually completed the
+        // shift (worked hrs ≥ shift duration − 30 min). Prevents bugs like
+        // "came in at 14:02, left at 20:00 → 2.5h OT" on a Regular Shift.
+        const completedShift = workedHoursRaw >= shiftDurationHours - 0.5;
+        // 30-minute threshold: only count OT once over by ≥ threshold,
+        // and the counted minutes are the full minutes past otStart.
+        if (completedShift && overMins >= OT_THRESHOLD_MINUTES) {
+          otHours = Math.round((overMins / 60) * 100) / 100;
+        }
+      }
+    }
+  }
+
+  /* ── Grace tracking (for remarks) ─────────────────────────────────── */
+  const graceApplied = { lunch: false, checkout: false };
+  if (rec?.outTime1 && rec?.inTime2) {
+    const lunchMins = timeToMins(rec.inTime2) - timeToMins(rec.outTime1);
+    if (lunchMins > 0 && lunchMins <= 60 + LUNCH_GRACE_MINUTES) {
+      graceApplied.lunch = true;
+    }
+  }
+  if (lastOut && category !== "FLEXIBLE" && category !== "NIGHT" && defaults.endTime !== "—") {
+    const out = timeToMins(lastOut);
+    const end = timeToMins(endTime);
+    if (out >= end - CHECKOUT_GRACE_MINUTES && out < end) {
+      graceApplied.checkout = true;
+    }
+  }
+
+  /* ── Holiday classification ───────────────────────────────────────── */
+  const holidayType: HolidayType | null = holiday?.type ?? null;
+  const holidayName: string | null      = holiday?.name ?? null;
+  const holidayMultiplier               = holidayType ? HOLIDAY_MULTIPLIERS[holidayType] : 1;
+  const holidayWorked                   = !!holidayType && punchCount > 0;
+
+  /* ── Dynamic remarks ──────────────────────────────────────────────── */
+  const remarks = buildRemarks({
+    category, dayType, lateMinutes, otHours, graceApplied, night: nightTrace, weekOffWorked, punchCount,
+    holidayType, holidayName, holidayWorked, holidayMultiplier,
+  });
+
+  return {
+    date,
+    shiftCategory: category,
+    shiftCategoryLabel: categoryLabel(category),
+    shiftName: shift?.name ?? categoryLabel(category),
+    shiftTime,
+    weekOffStatus,
+    firstIn,
+    lastOut,
+    workedHours,
+    workedHoursLabel: fmtHours(workedHoursRaw),
+    lateMinutes,
+    otHours,
+    dayType,
+    isWeekOff: isOff,
+    weekOffWorked,
+    holidayType,
+    holidayName,
+    holidayMultiplier,
+    holidayWorked,
+    remarks,
+    graceApplied,
+  };
+}
+
+function buildRemarks(args: {
+  category: ShiftCategory;
+  dayType: DayType;
+  lateMinutes: number;
+  otHours: number;
+  graceApplied: { lunch: boolean; checkout: boolean };
+  night: { missedBlocks: number; deductedHours: number } | null;
+  weekOffWorked?: boolean;
+  punchCount?: number;
+  holidayType?: HolidayType | null;
+  holidayName?: string | null;
+  holidayWorked?: boolean;
+  holidayMultiplier?: number;
+}): string {
+  const {
+    category, dayType, lateMinutes, otHours, graceApplied, night,
+    weekOffWorked, punchCount = 0,
+    holidayType = null, holidayName = null, holidayWorked = false, holidayMultiplier = 1,
+  } = args;
+  const label = categoryLabel(category);
+  const parts: string[] = [];
+
+  // Holiday suffix builder — appended to every remark when applicable.
+  const holidaySuffix = (() => {
+    if (!holidayType) return null;
+    const nm = holidayName ? ` (${holidayName})` : "";
+    return holidayWorked
+      ? `Worked on ${HOLIDAY_LABELS[holidayType]}${nm} × ${holidayMultiplier.toFixed(1)}`
+      : `${HOLIDAY_LABELS[holidayType]}${nm}`;
+  })();
+  const withHoliday = (s: string) => holidaySuffix ? `${s} / ${holidaySuffix}` : s;
+
+  // Day-type primary remark
+  if (dayType === "WEEK_OFF") {
+    return "Week Off - Not worked";
+  }
+  if (dayType === "ABSENT") {
+    const reason = punchCount === 1 ? "Absent - Missing Punch" : "Absent";
+    return withHoliday(weekOffWorked
+      ? `${label} - ${reason} / Week Off - Worked`
+      : `${label} - ${reason}`);
+  }
+  if (dayType === "INVALID") {
+    return withHoliday(weekOffWorked
+      ? `${label} - Missing Punch - Need Review / Week Off - Worked`
+      : `${label} - Missing Punch - Need Review`);
+  }
+  if (dayType === "HALF_DAY") {
+    parts.push(`${label} - Half Day Completed`);
+    if (lateMinutes > 0) parts.push(`Late by ${fmtDuration(lateMinutes)}`);
+    if (weekOffWorked) parts.push("Week Off - Worked");
+    if (holidaySuffix) parts.push(holidaySuffix);
+    return parts.join(" / ");
+  }
+
+  // WORKING_DAY — category-specific phrasing
+  switch (category) {
+    case "FLEXIBLE":
+      parts.push(`${label} - No late deduction`);
+      if (otHours > 0) parts.push(`OT applied after 9.30 hrs - ${fmtDuration(Math.round(otHours * 60))}`);
+      break;
+
+    case "NIGHT":
+      if (night && night.deductedHours === 0 && otHours > 0) {
+        parts.push(`${label} - 3 hrs OT added`);
+      } else if (night && night.deductedHours === 1) {
+        parts.push(`${label} - 1 hr OT deducted due to missed hourly punch`);
+      } else if (night && night.deductedHours >= 2) {
+        parts.push(`${label} - 2 hrs OT deducted due to multiple missed punches`);
+      } else {
+        parts.push(`${label} - No OT`);
+      }
+      break;
+
+    case "KITCHEN":
+      if (lateMinutes > 0) parts.push(`${label} - Late by ${fmtDuration(lateMinutes)}`);
+      else parts.push(`${label} - Within grace`);
+      if (otHours > 0) parts.push(`OT ${fmtDuration(Math.round(otHours * 60))}`);
+      break;
+
+    case "RECEPTION":
+    case "REGULAR":
+    case "HALF_DAY":
+    default:
+      if (lateMinutes > 0) parts.push(`${label} - Late by ${fmtDuration(lateMinutes)}`);
+      else parts.push(`${label} - Within grace`);
+      if (otHours > 0) parts.push(`OT ${fmtDuration(Math.round(otHours * 60))}`);
+      break;
+  }
+
+  if (graceApplied.lunch) parts.push("Lunch grace applied");
+  if (graceApplied.checkout) parts.push("Checkout grace applied");
+  if (weekOffWorked) parts.push("Week Off - Worked");
+  if (holidaySuffix) parts.push(holidaySuffix);
+
+  return parts.join(" / ");
+}

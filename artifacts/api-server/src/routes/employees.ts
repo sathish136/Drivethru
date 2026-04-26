@@ -1,6 +1,11 @@
 import { Router } from "express";
-import { db } from "@workspace/db";
-import { employees, branches, shifts } from "@workspace/db/schema";
+import { db, pool } from "@workspace/db";
+import {
+  employees, branches, shifts,
+  attendanceRecords, leaveBalances,
+  payrollRecords, employeeSalaryAssignments, staffLoans, staffIncentives,
+  biometricLogs,
+} from "@workspace/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import multer from "multer";
 import path from "path";
@@ -167,12 +172,20 @@ router.get("/", async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
 });
 
+function sanitizeDates(body: Record<string, any>) {
+  const DATE_FIELDS = ["dateOfBirth", "joiningDate"];
+  for (const f of DATE_FIELDS) {
+    if (body[f] === "" || body[f] === undefined) body[f] = null;
+  }
+}
+
 router.post("/", async (req, res) => {
   try {
     const body = { ...req.body };
     if (body.firstName && body.lastName) {
       body.fullName = `${body.firstName} ${body.lastName}`;
     }
+    sanitizeDates(body);
     const check = await validateEmployeeId(body.employeeId, Number(body.branchId));
     if (!check.valid) {
       res.status(422).json({ message: check.message, success: false, code: "INVALID_EMPLOYEE_ID" });
@@ -208,6 +221,7 @@ router.put("/:id", async (req, res) => {
     delete body.createdAt;
     delete body.branchName;
     delete body.shiftName;
+    sanitizeDates(body);
     if (body.firstName && body.lastName) {
       body.fullName = `${body.firstName} ${body.lastName}`;
     }
@@ -224,11 +238,31 @@ router.put("/:id", async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
 });
 
-router.delete("/:id", async (req, res) => {
+router.patch("/:id/remarks", async (req, res) => {
   try {
-    await db.delete(employees).where(eq(employees.id, Number(req.params.id)));
+    const dbId = Number(req.params.id);
+    const { remarks } = req.body;
+    await pool.query(
+      "UPDATE employees SET remarks = $1 WHERE id = $2",
+      [remarks ?? null, dbId]
+    );
+    res.json({ success: true, remarks: remarks ?? null });
+  } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
+});
+
+router.delete("/:id", async (req, res) => {
+  const empId = Number(req.params.id);
+  try {
+    await db.delete(biometricLogs).where(eq(biometricLogs.employeeId, empId));
+    await db.delete(attendanceRecords).where(eq(attendanceRecords.employeeId, empId));
+    await db.delete(leaveBalances).where(eq(leaveBalances.employeeId, empId));
+    await db.delete(staffLoans).where(eq(staffLoans.employeeId, empId));
+    await db.delete(staffIncentives).where(eq(staffIncentives.employeeId, empId));
+    await db.delete(payrollRecords).where(eq(payrollRecords.employeeId, empId));
+    await db.delete(employeeSalaryAssignments).where(eq(employeeSalaryAssignments.employeeId, empId));
+    await db.delete(employees).where(eq(employees.id, empId));
     res.json({ message: "Deleted", success: true });
-  } catch (e) { res.status(500).json({ message: "Error", success: false }); }
+  } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
 });
 
 router.post("/:id/documents", upload.fields([

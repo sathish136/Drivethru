@@ -3,9 +3,15 @@ import { db } from "@workspace/db";
 import {
   payrollRecords, employees, attendanceRecords, payrollSettings,
   salaryStructures, employeeSalaryAssignments, holidays, shifts, staffLoans,
+  weekoffSchedules,
 } from "@workspace/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
-import { loadDeptRules, findRule, effectiveHours, calcOtHours, lateCutoffMins, timeToMins } from "../lib/hr-rules.js";
+import {
+  loadDeptRules, findRule, effectiveHours, calcOtHours, lateCutoffMins,
+  timeToMins, calcLunchLateMinutes, calcTimeBasedOtHours,
+  isNightShiftRecord, calcNightWatcherPolicyOtHours,
+} from "../lib/hr-rules.js";
+import { processSalaryRow, resolveDayShift, type WeekOffInfo } from "../lib/salary-engine.js";
 
 const STATUTORY_NAMES = ["EPF – Employee", "EPF – Employer", "ETF"];
 
@@ -45,6 +51,23 @@ function workingDaysInMonth(year: number, month: number): number {
     if (dow !== 0) count++;
   }
   return count;
+}
+
+function employeeWorkingDays(year: number, month: number, offDays: number[], halfDays: number[]): number {
+  const days = new Date(year, month, 0).getDate();
+  let count = 0;
+  for (let d = 1; d <= days; d++) {
+    const dow = new Date(year, month - 1, d).getDay();
+    if (dow === 0) continue;
+    if (offDays.includes(dow)) continue;
+    count += halfDays.includes(dow) ? 0.5 : 1;
+  }
+  return count;
+}
+
+function isWeekoffDay(dateStr: string, offDays: number[], halfDays: number[]): boolean {
+  const dow = new Date(dateStr + "T12:00:00").getDay();
+  return offDays.includes(dow) || halfDays.includes(dow);
 }
 
 function timeToMinutes(t: string): number {
@@ -198,12 +221,25 @@ router.post("/generate", async (req, res) => {
 
     const monthHolidays = await getMonthHolidays(year, month);
     const holidayDateMap = new Map<string, "statutory" | "poya" | "public">();
+    const holidayInfoMap = new Map<string, { type: "statutory" | "poya" | "public"; name: string }>();
     for (const h of monthHolidays) {
-      holidayDateMap.set(h.date, h.type as "statutory" | "poya" | "public");
+      const t = (h.type as string)?.toLowerCase();
+      if (t === "statutory" || t === "poya" || t === "public") {
+        holidayDateMap.set(h.date, t as any);
+        holidayInfoMap.set(h.date, { type: t as any, name: h.name });
+      }
     }
 
     const allShifts = await db.select().from(shifts);
     const shiftMap = new Map(allShifts.map(s => [s.id, s]));
+    const shiftsByName = new Map(allShifts.map(s => [s.name.trim().toLowerCase(), s]));
+
+    const allWeekoffs = await db.select().from(weekoffSchedules);
+    const weekoffMap = new Map(allWeekoffs.map(w => ({
+      ...w,
+      offDays: JSON.parse(w.offDays) as number[],
+      halfDays: JSON.parse(w.halfDays) as number[],
+    })).map(w => [w.id, w]));
 
     /* ── Load HR department rules ── */
     const deptRules = await loadDeptRules();
@@ -233,6 +269,14 @@ router.post("/generate", async (req, res) => {
       const empAtt = filteredAtt.filter(a => a.employeeId === emp.id);
       const designation = (emp.designation ?? "").toLowerCase();
 
+      /* ── Weekoff schedule for this employee ── */
+      const empWeekoff = emp.weekoffScheduleId ? weekoffMap.get(emp.weekoffScheduleId) : null;
+      const empOffDays  = empWeekoff ? empWeekoff.offDays  : [];
+      const empHalfDays = empWeekoff ? empWeekoff.halfDays : [];
+      const empWdCount  = empOffDays.length > 0 || empHalfDays.length > 0
+        ? employeeWorkingDays(year, month, empOffDays, empHalfDays)
+        : wdCount;
+
       /* ── Look up HR department rule for this employee ── */
       const empShiftName     = emp.shiftId ? shiftMap.get(emp.shiftId)?.name ?? null : null;
       const rule = findRule(deptRules, emp.department ?? "", empShiftName);
@@ -257,23 +301,62 @@ router.post("/generate", async (req, res) => {
       /* Late cutoff based on shift start + rule grace period */
       const lateCutoff = lateCutoffMins(rule, shiftStart1);
 
+      /* ── Salary-engine row cache (per-record policy results) ──
+       * Drives morning-late minutes and OT hours from the approved shift policy
+       * (Regular / Reception / Kitchen / Flexible / Night Watcher / Week-off).
+       * Single source of truth shared with /api/reports/attendance. */
+      const empWeekoffInfo: WeekOffInfo | null =
+        (empOffDays.length > 0 || empHalfDays.length > 0)
+          ? { offDays: empOffDays, halfDays: empHalfDays }
+          : null;
+      const salaryRowByDate = new Map<string, ReturnType<typeof processSalaryRow>>();
+      const salaryRowFor = (rec: typeof empAtt[number]) => {
+        const cached = salaryRowByDate.get(rec.date);
+        if (cached) return cached;
+        // Day-wise variant lookup: e.g. Kitchen on Sunday picks "Kitchen Shift - Sunday"
+        const dayShift = empShift ? resolveDayShift(empShift, rec.date, shiftsByName as any) : null;
+        const sr = processSalaryRow({
+          date: rec.date,
+          shift: { name: dayShift?.name ?? empShiftName, startTime: dayShift?.startTime1 ?? shiftStart1, endTime: dayShift?.endTime1 ?? shiftEnd1 },
+          weekoff: empWeekoffInfo,
+          holiday: holidayInfoMap.get(rec.date) ?? null,
+          rec: {
+            date: rec.date,
+            inTime1:  rec.inTime1,
+            outTime1: rec.outTime1,
+            inTime2:  rec.inTime2,
+            outTime2: rec.outTime2,
+            totalHours: rec.totalHours,
+            leaveType: (rec as any).leaveType ?? null,
+          },
+        });
+        salaryRowByDate.set(rec.date, sr);
+        return sr;
+      };
+
       const presentRecs    = empAtt.filter(a => a.status === "present" || a.status === "late");
-      const lateRecs       = empAtt.filter(a => a.status === "late");
       const absentRecs     = empAtt.filter(a => a.status === "absent");
       const leaveRecs      = empAtt.filter(a => a.status === "leave");
       const halfDayRecs    = empAtt.filter(a => a.status === "half_day");
       const holidayRecs    = empAtt.filter(a => a.status === "holiday");
       const offDayRecs     = empAtt.filter(a => a.status === "off_day");
       const presentDays    = presentRecs.length;
+      /* Recompute late arrivals from inTime1 vs cutoff — don't rely on stored status */
+      const lateRecs       = presentRecs.filter(a => a.inTime1 && timeToMins(a.inTime1) > lateCutoff);
       const lateDays       = lateRecs.length;
       const leaveDays      = leaveRecs.length;
       const halfDaysCount  = halfDayRecs.length;
       const holidayDays    = holidayRecs.length;
 
-      /* Any working day with no attendance record is treated as absent */
-      const markedDays  = empAtt.length;
-      const unmarkedAbsentDays = Math.max(0, wdCount - markedDays);
-      const absentDays  = absentRecs.length + unmarkedAbsentDays;
+      /* Any working day with no attendance record is treated as absent.
+         Weekoff days do NOT count as working days, so don't penalise. */
+      const nonWeekoffAtt = empAtt.filter(a =>
+        !isWeekoffDay(a.date, empOffDays, empHalfDays)
+      );
+      const markedDays  = nonWeekoffAtt.length;
+      const weekoffMarkedAsAbsent = absentRecs.filter(a => isWeekoffDay(a.date, empOffDays, empHalfDays)).length;
+      const unmarkedAbsentDays = Math.max(0, empWdCount - markedDays);
+      const absentDays  = absentRecs.length - weekoffMarkedAsAbsent + unmarkedAbsentDays;
 
       const structData = structureMap.get(emp.id);
 
@@ -324,33 +407,59 @@ router.post("/generate", async (req, res) => {
         etfEmployer = 0;
       }
 
-      const dailyRate   = basicSalary / wdCount;
-      const hourlyRate  = basicSalary / (wdCount * 8);
+      /* ── Night Watcher payroll mode flag ── */
+      const isNightWatcherPayroll = rule.nightWatcherPayroll === true;
+
+      /* ── NIGHT WATCHER: fixed 30-day basis; 240-hour OT basis ── */
+      const NW_SCHEDULED_SHIFTS = 15;
+      const dailyRate   = isNightWatcherPayroll
+        ? basicSalary / 30
+        : basicSalary / empWdCount;
+      const hourlyRate  = isNightWatcherPayroll
+        ? basicSalary / 240
+        : basicSalary / (empWdCount * reqHoursPerDay);
       const minuteRate  = hourlyRate / 60;
 
-      /* ── Late deduction: lateMinutes × minuteRate ──────── */
-      let totalLateMinutes = 0;
-      for (const rec of lateRecs) {
-        if (rec.inTime1) {
-          const arrivalMinutes = timeToMins(rec.inTime1);
-          if (arrivalMinutes > lateCutoff) {
-            totalLateMinutes += arrivalMinutes - lateCutoff;
-          }
-        } else {
-          totalLateMinutes += rule.lateGraceMinutes ?? 15;
-        }
-      }
-      const lateDeduction = Math.round(totalLateMinutes * minuteRate);
+      /* ── NIGHT WATCHER: shift-based leave deduction ── */
+      /* Worked shifts = PRESENT×1 + HALF_DAY×0.5 (no-record = off days, not absent) */
+      const nwWorkedShifts = isNightWatcherPayroll
+        ? presentDays + halfDaysCount * 0.5
+        : 0;
+      /* Leave days = scheduled shifts − worked shifts (includes explicit absents within 15 shifts) */
+      const nwLeaveDays = isNightWatcherPayroll
+        ? Math.max(0, NW_SCHEDULED_SHIFTS - nwWorkedShifts)
+        : 0;
+      /* Salary after deduction (Night Watcher specific) */
+      const nwLeaveDeduction = isNightWatcherPayroll
+        ? Math.round(nwLeaveDays * dailyRate * 1000) / 1000
+        : 0;
+      const nwSalaryAfterDeduction = isNightWatcherPayroll
+        ? Math.max(0, basicSalary - nwLeaveDeduction)
+        : 0;
+
+      /* ── STANDARD deductions (skipped for Night Watcher) ── */
+      /* Morning late: per-record from the salary engine (policy-driven cutoff) */
+      const morningLateMinutes = (!isNightWatcherPayroll)
+        ? presentRecs.reduce((sum, rec) => sum + salaryRowFor(rec).lateMinutes, 0)
+        : 0;
+      /* Lunch return late: minutes over allocated lunch for ALL present records */
+      const lunchLateMinutes = (!isNightWatcherPayroll) ? [...presentRecs, ...lateRecs].reduce((sum, rec) => {
+        return sum + calcLunchLateMinutes(rec.outTime1, rec.inTime2, rule);
+      }, 0) : 0;
+      const totalLateMinutes = morningLateMinutes + lunchLateMinutes;
+      const lateDeduction = Math.round(morningLateMinutes * minuteRate);
+      const lunchLateDeduction = Math.round(lunchLateMinutes * minuteRate);
 
       /* ── Absence deduction ─────────────────────────────── */
-      const absenceDeduction = Math.round(dailyRate * absentDays);
+      const absenceDeduction = isNightWatcherPayroll ? 0 : Math.round(dailyRate * absentDays);
 
       /* ── Half-day deduction ────────────────────────────── */
-      const halfDayDeduction = Math.round(halfDaysCount * (dailyRate / 2));
+      const halfDayDeduction = isNightWatcherPayroll ? 0 : Math.round(halfDaysCount * (dailyRate / 2));
 
       /* ── Incomplete hours deduction (rules-based) ───────── */
       let incompleteDeduction = 0;
-      if (!isFlexible) {
+      let totalIncompleteMinutes = 0;
+      if (!isFlexible && !isNightWatcherPayroll) {
         for (const rec of [...presentRecs, ...halfDayRecs]) {
           const rawHrs = rec.totalHours ?? 0;
           if (rawHrs === 0) continue;
@@ -358,6 +467,7 @@ router.post("/generate", async (req, res) => {
           const required = rec.status === "half_day" ? reqHoursPerDay / 2 : reqHoursPerDay;
           if (effHrs < required) {
             const shortfallMinutes = Math.round((required - effHrs) * 60);
+            totalIncompleteMinutes += shortfallMinutes;
             incompleteDeduction += Math.round(shortfallMinutes * minuteRate);
           }
         }
@@ -374,6 +484,19 @@ router.post("/generate", async (req, res) => {
       let holidayOtPay   = 0;
       let offDayOtPay    = 0;
       let regularOtPay   = 0;
+
+      /* Whether this employee's shift crosses midnight (Night Watcher etc.) */
+      const isNightShift = isNightShiftRecord(shiftStart1);
+
+      /* Scheduled shift hours — used for Night Watcher punch-count expectation.
+         e.g. 8pm–5am = 9 hours. Derived from minHours when shift times are absent. */
+      const scheduledShiftHours = (shiftStart1 && shiftEnd1)
+        ? (() => {
+            let mins = timeToMins(shiftEnd1) - timeToMins(shiftStart1);
+            if (mins <= 0) mins += 24 * 60; // midnight crossover
+            return mins / 60;
+          })()
+        : reqHoursPerDay;
 
       for (const rec of empAtt) {
         const rawHrs = rec.totalHours ?? 0;
@@ -399,9 +522,15 @@ router.post("/generate", async (req, res) => {
           if (rawHrs > 0) offDayOtPay += Math.round(dailyRate * ruleOffdayOtMult);
 
         } else if (!recInOffSeason && isOtEligible) {
-          /* Regular day OT: use effective hours (after lunch deduction) */
-          const effHrs = effectiveHours(rawHrs, rule);
-          const ot = calcOtHours(effHrs, rule);
+          /* ── Regular-day OT from the salary-engine policy ──
+           * The engine implements the approved per-shift rules:
+           *   Regular     OT after 17:30, 30-min threshold
+           *   Reception   OT after 18:00, 30-min threshold
+           *   Kitchen     OT after 20:30 (Saturday short-shift handled in engine)
+           *   Flexible    OT only when worked > 9 hrs 30 mins
+           *   Night       Discrete 0/1/2/3 hrs based on hourly punch validation
+           */
+          const ot = salaryRowFor(rec).otHours;
           if (ot > 0) {
             regularOtHours += ot;
             regularOtPay   += Math.round(ot * hourlyRate * ruleOtMult);
@@ -420,14 +549,26 @@ router.post("/generate", async (req, res) => {
                         : isOtEligible   ? regularOtPay
                         : 0;
 
-      const grossSalary = Math.round(
-        basicSalary + transportAllowance + lunchIncentive + housingAllowance + otherAllowances
-        + overtimePay + holidayOtPay + offDayOtPay
-        - absenceDeduction - lateDeduction - halfDayDeduction - incompleteDeduction
-      );
+      let grossSalary: number;
 
-      /* EPF / ETF always based on actual earned gross (not full basic) */
-      const epfBase = Math.max(0, grossSalary);
+      if (isNightWatcherPayroll) {
+        /* ── NIGHT WATCHER gross: salary after deduction + OT ── */
+        grossSalary = Math.round(nwSalaryAfterDeduction + overtimePay + holidayOtPay + offDayOtPay);
+      } else {
+        grossSalary = Math.round(
+          basicSalary + transportAllowance + lunchIncentive + housingAllowance + otherAllowances
+          + overtimePay + holidayOtPay + offDayOtPay
+          - absenceDeduction - lateDeduction - lunchLateDeduction - halfDayDeduction - incompleteDeduction
+        );
+      }
+
+      /* ── EPF / ETF ──
+       * Night Watcher: contributions on salary after deduction ONLY (not on OT)
+       * All others:    contributions on actual earned gross
+       */
+      const epfBase = isNightWatcherPayroll
+        ? Math.max(0, nwSalaryAfterDeduction)
+        : Math.max(0, grossSalary);
       if (structData) {
         epfEmployee = Math.round(epfBase * 0.08);
         epfEmployer = Math.round(epfBase * 0.12);
@@ -463,27 +604,34 @@ router.post("/generate", async (req, res) => {
       }
       loanDeduction = Math.round(loanDeduction);
 
-      const totalDeductions = epfEmployee + apit + lateDeduction + absenceDeduction + halfDayDeduction + incompleteDeduction + otherDeductions + loanDeduction;
+      const totalDeductions = epfEmployee + apit + lateDeduction + lunchLateDeduction + absenceDeduction + halfDayDeduction + incompleteDeduction + otherDeductions + loanDeduction;
       const netSalary     = grossSalary - epfEmployee - apit - otherDeductions - loanDeduction;
+
+      /* ── For Night Watcher: map leave data to standard fields for storage/display ── */
+      const storedAbsenceDeduction = isNightWatcherPayroll ? Math.round(nwLeaveDeduction) : absenceDeduction;
+      const storedLeaveDays        = isNightWatcherPayroll ? nwLeaveDays : leaveDays;
+      const storedAbsentDays       = isNightWatcherPayroll ? Math.floor(nwLeaveDays) : absentDays;
+      const storedHalfDays         = isNightWatcherPayroll ? halfDaysCount : halfDaysCount;
+      const storedWorkingDays      = isNightWatcherPayroll ? NW_SCHEDULED_SHIFTS : Math.round(empWdCount);
 
       const record = {
         employeeId: emp.id,
         branchId: emp.branchId!,
         month,
         year,
-        workingDays: wdCount,
+        workingDays: storedWorkingDays,
         presentDays,
-        absentDays,
+        absentDays: storedAbsentDays,
         lateDays,
-        halfDays: halfDaysCount,
-        leaveDays,
+        halfDays: storedHalfDays,
+        leaveDays: storedLeaveDays,
         holidayDays,
         overtimeHours: Math.round(regularOtHours * 100) / 100,
         basicSalary,
-        transportAllowance,
-        lunchIncentive,
-        housingAllowance,
-        otherAllowances,
+        transportAllowance: isNightWatcherPayroll ? 0 : transportAllowance,
+        lunchIncentive: isNightWatcherPayroll ? 0 : lunchIncentive,
+        housingAllowance: isNightWatcherPayroll ? 0 : housingAllowance,
+        otherAllowances: isNightWatcherPayroll ? 0 : otherAllowances,
         overtimePay,
         holidayOtPay: holidayOtPay + offDayOtPay,
         grossSalary,
@@ -491,14 +639,19 @@ router.post("/generate", async (req, res) => {
         epfEmployer,
         etfEmployer,
         apit,
-        lateDeduction,
-        absenceDeduction,
-        halfDayDeduction,
-        incompleteDeduction,
+        lateDeduction: isNightWatcherPayroll ? 0 : lateDeduction,
+        lunchLateDeduction: isNightWatcherPayroll ? 0 : lunchLateDeduction,
+        absenceDeduction: storedAbsenceDeduction,
+        halfDayDeduction: isNightWatcherPayroll ? 0 : halfDayDeduction,
+        incompleteDeduction: isNightWatcherPayroll ? 0 : incompleteDeduction,
         otherDeductions,
         loanDeduction,
         totalDeductions,
         netSalary,
+        reqHoursPerDay,
+        lateMinutes: morningLateMinutes,
+        lunchLateMinutes,
+        incompleteMinutes: totalIncompleteMinutes,
         status: "draft" as const,
         generatedAt: new Date(),
       };
@@ -593,6 +746,18 @@ router.patch("/bulk-status", async (req, res) => {
   }
 });
 
+router.delete("/bulk", async (req, res) => {
+  try {
+    const { ids } = req.body as { ids: number[] };
+    if (!ids || ids.length === 0) return res.status(400).json({ message: "No IDs provided" });
+    await db.delete(payrollRecords).where(inArray(payrollRecords.id, ids));
+    res.json({ success: true, deleted: ids.length });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Failed to delete records" });
+  }
+});
+
 router.patch("/:id/status", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -605,6 +770,17 @@ router.patch("/:id/status", async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: "Failed to update status" });
+  }
+});
+
+router.delete("/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    await db.delete(payrollRecords).where(eq(payrollRecords.id, id));
+    res.json({ success: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Failed to delete payroll record" });
   }
 });
 

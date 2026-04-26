@@ -1,0 +1,30 @@
+[Unit]
+Description=Drivethru Service - API Server and Attendance Frontend
+After=network.target
+
+[Service]
+Type=simple
+User=erp
+Group=erp
+WorkingDirectory=/home/erp/drive/Drive-1
+Environment=PATH=/home/erp/.npm-global/bin:/usr/bin:/home/erp/.local/bin:/usr/local/bin:/home/erp/drive/Drive-1/node_modules/.bin
+Environment=NODE_ENV=production
+ExecStartPre=/usr/bin/pnpm -C artifacts/attendance run build
+ExecStartPre=/usr/bin/pnpm -C artifacts/api-server run build
+ExecStart=/usr/bin/pnpm -C artifacts/api-server run start
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=drivethru
+# Isolation settings to prevent process contamination
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/home/erp/drive/Drive-1
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

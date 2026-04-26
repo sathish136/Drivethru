@@ -2,9 +2,11 @@ import { useState, useEffect, useCallback } from "react";
 import { PageHeader, Card, Button, Input, Label } from "@/components/ui";
 import {
   RefreshCw, AlertTriangle, X, Search, CheckCircle2,
-  CalendarDays, Users, Edit2, Save, RotateCcw,
+  CalendarDays, Users, Edit2, Save, RotateCcw, Download, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import drivethruLogo from "@/assets/drivethru-logo.png";
+import liveuLogo from "@/assets/liveu-logo.png";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 function apiUrl(path: string) { return `${BASE}/api${path}`; }
@@ -16,15 +18,16 @@ interface LeaveBalance {
   designation: string;
   department: string;
   year: number;
-  annualLeaveBalance: number;
-  casualLeaveBalance: number;
-  annualLeaveUsed: number;
-  casualLeaveUsed: number;
+  leaveBalance?: number;
+  leaveUsed?: number;
+  leaveRemaining?: number;
+  annualLeaveBalance?: number;
+  annualLeaveUsed?: number;
   lastAccrualDate: string | null;
   balanceId: number | null;
 }
 
-interface EditState { annual: string; casual: string; }
+interface EditState { leaveBalance: string; leaveUsed: string; }
 
 export default function LeaveBalances() {
   const year = new Date().getFullYear();
@@ -33,9 +36,8 @@ export default function LeaveBalances() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [editId, setEditId] = useState<number | null>(null);
-  const [editState, setEditState] = useState<EditState>({ annual: "0", casual: "0" });
+  const [editState, setEditState] = useState<EditState>({ leaveBalance: "21", leaveUsed: "0" });
   const [saving, setSaving] = useState(false);
-  const [accruing, setAccruing] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
 
@@ -50,9 +52,16 @@ export default function LeaveBalances() {
 
   useEffect(() => { load(); }, [load]);
 
+  const getLeaveBalance = (r: LeaveBalance) => r.leaveBalance ?? r.annualLeaveBalance ?? 21;
+  const getLeaveUsed = (r: LeaveBalance) => r.leaveUsed ?? r.annualLeaveUsed ?? 0;
+  const getLeaveRemaining = (r: LeaveBalance) => r.leaveRemaining ?? (getLeaveBalance(r) - getLeaveUsed(r));
+
   function startEdit(rec: LeaveBalance) {
     setEditId(rec.employeeId);
-    setEditState({ annual: String(rec.annualLeaveBalance), casual: String(rec.casualLeaveBalance) });
+    setEditState({
+      leaveBalance: String(getLeaveBalance(rec)),
+      leaveUsed: String(getLeaveUsed(rec)),
+    });
   }
 
   async function saveOverride(empId: number) {
@@ -63,8 +72,8 @@ export default function LeaveBalances() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           year,
-          annualLeaveBalance: parseFloat(editState.annual) || 0,
-          casualLeaveBalance: parseFloat(editState.casual) || 0,
+          leaveBalance: parseFloat(editState.leaveBalance) || 0,
+          leaveUsed: parseFloat(editState.leaveUsed) || 0,
         }),
       });
       const d = await r.json();
@@ -76,18 +85,6 @@ export default function LeaveBalances() {
     } catch { setError("Failed to save balance"); }
     setSaving(false);
     setTimeout(() => setActionMsg(null), 3000);
-  }
-
-  async function accrueAll() {
-    setAccruing(true); setError(null);
-    try {
-      const r = await fetch(apiUrl("/leave-balances/accrue"), { method: "POST" });
-      const d = await r.json();
-      setActionMsg(d.message || "Accrual done.");
-      load();
-    } catch { setError("Failed to run accrual"); }
-    setAccruing(false);
-    setTimeout(() => setActionMsg(null), 4000);
   }
 
   async function syncUsed() {
@@ -109,11 +106,160 @@ export default function LeaveBalances() {
     r.department?.toLowerCase().includes(search.toLowerCase())
   );
 
+  const totalEmployees = records.length;
+
+  function exportReport() {
+    const dataToExport = search ? filtered : records;
+    const headers = [
+      "Employee ID",
+      "Full Name",
+      "Department",
+      "Designation",
+      "Total Leave (days)",
+      "Used (days)",
+      "Remaining (days)",
+      "Year",
+    ];
+    const rows = dataToExport.map(rec => {
+      const bal = getLeaveBalance(rec);
+      const used = getLeaveUsed(rec);
+      const rem = getLeaveRemaining(rec);
+      return [
+        rec.employeeCode,
+        rec.fullName,
+        rec.department,
+        rec.designation,
+        bal.toFixed(1),
+        used.toFixed(1),
+        rem.toFixed(1),
+        rec.year,
+      ];
+    });
+
+    const csv = [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
+      .join("\r\n");
+
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `leave-balances-${year}${search ? "-filtered" : ""}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function exportPDF() {
+    const dataToExport = search ? filtered : records;
+    const tableRows = dataToExport.map((rec, i) => {
+      const bal = getLeaveBalance(rec);
+      const used = getLeaveUsed(rec);
+      const rem = getLeaveRemaining(rec);
+      const remColor = rem < 0 ? "#dc2626" : rem < 5 ? "#d97706" : "#15803d";
+      const bg = i % 2 === 0 ? "#ffffff" : "#f9fafb";
+      return `
+        <tr style="background:${bg}">
+          <td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;font-family:monospace">${rec.employeeCode}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:12px">${rec.fullName}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#6b7280">${rec.department}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#6b7280">${rec.designation}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;text-align:center;font-weight:600">${bal.toFixed(1)}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;text-align:center;color:#6b7280">${used.toFixed(1)}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;text-align:center;font-weight:700;color:${remColor}">${rem.toFixed(1)}</td>
+        </tr>`;
+    }).join("");
+
+    const html = `
+      <div style="font-family:Arial,sans-serif;padding:32px;max-width:900px;margin:0 auto">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <img src="${drivethruLogo}" style="height:48px;width:48px;object-fit:contain;border-radius:8px" alt="Drivethru"/>
+            <div>
+              <div style="font-size:18px;font-weight:700;color:#1565a8;line-height:1.2">Drivethru Pvt Ltd</div>
+              <div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.08em">Attendance Management System</div>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:17px;font-weight:700;color:#111827">Leave Balance Report</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px">Year ${year} · Total entitlement: 21 days per employee</div>
+            <div style="font-size:11px;color:#9ca3af;margin-top:2px">
+              Generated: ${new Date().toLocaleDateString("en-GB", { day:"numeric", month:"long", year:"numeric" })} ·
+              ${dataToExport.length} employee${dataToExport.length !== 1 ? "s" : ""}${search ? " (filtered)" : ""}
+            </div>
+          </div>
+        </div>
+        <hr style="border:none;border-top:2px solid #1565a8;margin:14px 0"/>
+
+        <div style="display:flex;gap:16px;margin-bottom:20px">
+          ${[
+            ["Total Employees", dataToExport.length, "#3b82f6"],
+            ["Avg Remaining", (dataToExport.reduce((s,r) => s + getLeaveRemaining(r), 0) / (dataToExport.length || 1)).toFixed(1) + " days", "#15803d"],
+            ["Avg Used", (dataToExport.reduce((s,r) => s + getLeaveUsed(r), 0) / (dataToExport.length || 1)).toFixed(1) + " days", "#9333ea"],
+          ].map(([label, value, color]) => `
+            <div style="flex:1;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px 16px">
+              <div style="font-size:20px;font-weight:700;color:${color}">${value}</div>
+              <div style="font-size:11px;color:#9ca3af;margin-top:2px">${label}</div>
+            </div>`).join("")}
+        </div>
+
+        <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+          <thead>
+            <tr style="background:#1e40af;color:#fff">
+              <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;letter-spacing:.5px">EMPLOYEE ID</th>
+              <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;letter-spacing:.5px">FULL NAME</th>
+              <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;letter-spacing:.5px">DEPARTMENT</th>
+              <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;letter-spacing:.5px">DESIGNATION</th>
+              <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;letter-spacing:.5px">TOTAL</th>
+              <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;letter-spacing:.5px">USED</th>
+              <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;letter-spacing:.5px">REMAINING</th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+
+        <div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between">
+          <p style="margin:0;font-size:10px;color:#9ca3af">
+            Drivethru Pvt Ltd · Attendance Management System · Leave Balance Report ${year}
+          </p>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:10px;color:#9ca3af">Powered by</span>
+            <img src="${liveuLogo}" style="height:18px;width:18px;object-fit:contain;border-radius:50%;opacity:.85" alt="Live U"/>
+            <span style="font-size:10px;font-weight:600;color:#6b7280">Live U Pvt Ltd</span>
+          </div>
+        </div>
+      </div>`;
+
+    const el = document.createElement("div");
+    el.style.cssText = "position:absolute;top:0;left:-9999px;width:1123px;background:#fff";
+    el.innerHTML = html;
+    document.body.appendChild(el);
+
+    const html2pdf = (await import("html2pdf.js")).default;
+    await html2pdf()
+      .set({
+        margin: 0,
+        filename: `leave-balances-${year}${search ? "-filtered" : ""}.pdf`,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, allowTaint: true, scrollX: 0, scrollY: 0 },
+        jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
+      })
+      .from(el)
+      .save();
+
+    document.body.removeChild(el);
+  }
+  const avgRemaining = records.length
+    ? (records.reduce((s, r) => s + getLeaveRemaining(r), 0) / records.length).toFixed(1)
+    : "0";
+  const avgUsed = records.length
+    ? (records.reduce((s, r) => s + getLeaveUsed(r), 0) / records.length).toFixed(1)
+    : "0";
+
   return (
     <div className="space-y-5 max-w-6xl">
       <PageHeader
         title="Leave Balances"
-        description={`Annual & casual leave balances for ${year} — accrues at 1.5 days per week`}
+        description={`Common leave balances for ${year} — 21 days total entitlement per employee`}
       />
 
       {error && (
@@ -140,14 +286,6 @@ export default function LeaveBalances() {
           <RefreshCw className="w-4 h-4" /> Refresh
         </Button>
         <Button
-          onClick={accrueAll}
-          disabled={accruing}
-          className="gap-2 shrink-0 bg-blue-600 hover:bg-blue-700 text-white"
-        >
-          {accruing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CalendarDays className="w-4 h-4" />}
-          Run Accrual (1.5 days/week)
-        </Button>
-        <Button
           variant="outline"
           onClick={syncUsed}
           disabled={syncing}
@@ -156,20 +294,42 @@ export default function LeaveBalances() {
           {syncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
           Sync Used Leave
         </Button>
+
+        {/* Export icon buttons */}
+        <div className="flex items-center gap-1 border border-border rounded-lg overflow-hidden shrink-0">
+          <button
+            onClick={exportReport}
+            disabled={records.length === 0}
+            title="Export as CSV"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors border-r border-border"
+          >
+            <Download className="w-3.5 h-3.5" />
+            CSV
+          </button>
+          <button
+            onClick={exportPDF}
+            disabled={records.length === 0}
+            title="Export as PDF"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            PDF
+          </button>
+        </div>
       </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: "Total Employees", value: records.length, icon: Users, color: "blue" },
+          { label: "Total Employees", value: totalEmployees, icon: Users, color: "blue" },
           {
-            label: "Avg Annual Balance",
-            value: records.length ? (records.reduce((s, r) => s + r.annualLeaveBalance, 0) / records.length).toFixed(1) : "0",
+            label: "Avg Leave Remaining",
+            value: avgRemaining,
             icon: CalendarDays, color: "green",
           },
           {
-            label: "Avg Casual Balance",
-            value: records.length ? (records.reduce((s, r) => s + r.casualLeaveBalance, 0) / records.length).toFixed(1) : "0",
+            label: "Avg Leave Used",
+            value: avgUsed,
             icon: CalendarDays, color: "violet",
           },
         ].map(({ label, value, icon: Icon, color }) => (
@@ -199,18 +359,16 @@ export default function LeaveBalances() {
                 <tr className="bg-muted/50 border-b border-border">
                   <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Employee</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Department</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Annual Balance</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Annual Used</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Casual Balance</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Casual Used</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Last Accrual</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Total</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Used</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">Remaining</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-12 text-muted-foreground">
+                    <td colSpan={6} className="text-center py-12 text-muted-foreground">
                       {search ? "No employees match your search." : "No leave balance records found."}
                     </td>
                   </tr>
@@ -227,29 +385,38 @@ export default function LeaveBalances() {
                       <td className="px-4 py-3 text-center">
                         {isEditing ? (
                           <Input type="number" step="0.5" min="0" className="w-20 text-center h-8 text-sm mx-auto"
-                            value={editState.annual} onChange={e => setEditState(s => ({ ...s, annual: e.target.value }))} />
+                            value={editState.leaveBalance}
+                            onChange={e => setEditState(s => ({ ...s, leaveBalance: e.target.value }))} />
                         ) : (
-                          <span className={cn("font-bold text-base", rec.annualLeaveBalance < 3 ? "text-red-600" : "text-green-700")}>
-                            {rec.annualLeaveBalance.toFixed(1)}
+                          <span className="font-bold text-base text-foreground">
+                            {(rec.leaveBalance ?? rec.annualLeaveBalance ?? 21).toFixed(1)}
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-center text-muted-foreground">{rec.annualLeaveUsed.toFixed(1)}</td>
                       <td className="px-4 py-3 text-center">
                         {isEditing ? (
                           <Input type="number" step="0.5" min="0" className="w-20 text-center h-8 text-sm mx-auto"
-                            value={editState.casual} onChange={e => setEditState(s => ({ ...s, casual: e.target.value }))} />
+                            value={editState.leaveUsed}
+                            onChange={e => setEditState(s => ({ ...s, leaveUsed: e.target.value }))} />
                         ) : (
-                          <span className={cn("font-bold text-base", rec.casualLeaveBalance < 2 ? "text-amber-600" : "text-blue-700")}>
-                            {rec.casualLeaveBalance.toFixed(1)}
-                          </span>
+                          <span className="text-muted-foreground">{(rec.leaveUsed ?? rec.annualLeaveUsed ?? 0).toFixed(1)}</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-center text-muted-foreground">{rec.casualLeaveUsed.toFixed(1)}</td>
-                      <td className="px-4 py-3 text-center text-xs text-muted-foreground">
-                        {rec.lastAccrualDate
-                          ? new Date(rec.lastAccrualDate).toLocaleDateString("en-LK", { day: "numeric", month: "short" })
-                          : <span className="italic">Never</span>}
+                      <td className="px-4 py-3 text-center">
+                        {(() => {
+                          const bal = rec.leaveBalance ?? rec.annualLeaveBalance ?? 21;
+                          const used = rec.leaveUsed ?? rec.annualLeaveUsed ?? 0;
+                          const rem = rec.leaveRemaining ?? (bal - used);
+                          return (
+                            <span className={cn("font-bold text-base",
+                              rem < 0 ? "text-red-600"
+                              : rem < 5 ? "text-amber-600"
+                              : "text-green-700"
+                            )}>
+                              {rem.toFixed(1)}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-right">
                         {isEditing ? (

@@ -9,3 +9,4 @@ export * from "./payroll";
 export * from "./payroll-settings";
 export * from "./activity-logs";
 export * from "./hr-settings";
+export * from "./weekoffs";

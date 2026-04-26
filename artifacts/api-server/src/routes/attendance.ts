@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { attendanceRecords, employees, branches, shifts } from "@workspace/db/schema";
-import { eq, and, gte, lte } from "drizzle-orm";
+import { attendanceRecords, employees, branches, shifts, leaveBalances } from "@workspace/db/schema";
+import { eq, and, gte, lte, isNotNull } from "drizzle-orm";
 import { calcWorkHours, getDaysInMonth, today } from "../lib/helpers.js";
 import { loadDeptRules, findRule, timeToMins } from "../lib/hr-rules.js";
 
@@ -128,8 +128,10 @@ router.get("/monthly-sheet", async (req, res) => {
       if ((status === "present" || status === "late") && rec.totalHours != null) {
         const halfDayHrs = rule.halfDayHours ?? 5;
         const minPresentHrs = rule.minPresentHours ?? 8;
+        const earlyExitGraceHrs = (rule.earlyExitGraceMinutes ?? rule.lateGraceMinutes ?? 15) / 60;
+        const presentThreshold = Math.max(halfDayHrs + 0.01, minPresentHrs - earlyExitGraceHrs);
         if (rec.totalHours < halfDayHrs) status = "absent";
-        else if (rec.totalHours < minPresentHrs) status = "half_day";
+        else if (rec.totalHours < presentThreshold) status = "half_day";
       }
 
       return status;
@@ -146,7 +148,7 @@ router.get("/monthly-sheet", async (req, res) => {
         const rec = empRecs.get(d);
         if (rec) {
           const effectiveStatus = calcEffectiveStatus(rec, empShift, emp.department);
-          dailyStatus.push({ day: d, status: effectiveStatus, inTime: rec.inTime1, outTime: rec.outTime1, inTime2: rec.inTime2, outTime2: rec.outTime2, hours: rec.totalHours });
+          dailyStatus.push({ day: d, status: effectiveStatus, inTime: rec.inTime1, outTime: rec.outTime1, inTime2: rec.inTime2, outTime2: rec.outTime2, hours: rec.totalHours, leaveType: rec.leaveType ?? null, recordId: rec.id });
           if (effectiveStatus === "present") presentDays++;
           else if (effectiveStatus === "absent") absentDays++;
           else if (effectiveStatus === "late") { lateDays++; presentDays++; }
@@ -163,6 +165,7 @@ router.get("/monthly-sheet", async (req, res) => {
 
       return {
         employeeId: emp.id,
+        branchId: emp.branchId,
         employeeName: emp.fullName,
         employeeCode: emp.employeeId,
         designation: emp.designation,
@@ -227,6 +230,170 @@ router.post("/punch", async (req, res) => {
       res.json({ ...created, employeeName: emp.fullName, employeeCode: emp.employeeId, branchName: "", shiftName: null, createdAt: created.createdAt.toISOString() });
     }
   } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
+});
+
+/* ── Manual Attendance Entry (HR override for missed biometric) ── */
+router.post("/manual-entry", async (req, res) => {
+  try {
+    const { employeeId, date, status, inTime1, outTime1, inTime2, outTime2, remarks } = req.body as {
+      employeeId: number;
+      date: string;
+      status: "present" | "late" | "half_day" | "absent";
+      inTime1?: string;
+      outTime1?: string;
+      inTime2?: string;
+      outTime2?: string;
+      remarks?: string;
+    };
+
+    if (!employeeId || !date || !status) {
+      return res.status(400).json({ message: "employeeId, date, and status are required" });
+    }
+
+    const [emp] = await db.select().from(employees).where(eq(employees.id, employeeId));
+    if (!emp) return res.status(404).json({ message: "Employee not found" });
+
+    const workHours1 = calcWorkHours(inTime1 ?? null, outTime1 ?? null);
+    const workHours2 = calcWorkHours(inTime2 ?? null, outTime2 ?? null);
+    const totalHours = workHours1 + workHours2 || null;
+
+    const [existing] = await db.select().from(attendanceRecords)
+      .where(and(eq(attendanceRecords.employeeId, employeeId), eq(attendanceRecords.date, date)));
+
+    const payload: any = {
+      status,
+      inTime1: inTime1 || null,
+      outTime1: outTime1 || null,
+      workHours1: workHours1 || null,
+      inTime2: inTime2 || null,
+      outTime2: outTime2 || null,
+      workHours2: workHours2 || null,
+      totalHours,
+      leaveType: null,
+      source: "manual",
+      approvalStatus: "pending",
+      remarks: remarks || null,
+      updatedAt: new Date(),
+    };
+
+    if (existing) {
+      await db.update(attendanceRecords).set(payload).where(eq(attendanceRecords.id, existing.id));
+    } else {
+      await db.insert(attendanceRecords).values({
+        employeeId,
+        branchId: emp.branchId!,
+        date,
+        ...payload,
+      });
+    }
+
+    return res.json({ success: true, status });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Failed to save manual attendance" });
+  }
+});
+
+/* ── Mark Leave (manual entry with leave balance deduction) ── */
+router.post("/mark-leave", async (req, res) => {
+  try {
+    const { employeeId, date, leaveType } = req.body as {
+      employeeId: number;
+      date: string;
+      leaveType: "leave" | "annual" | "casual" | "no_pay";
+    };
+    if (!employeeId || !date || !leaveType) {
+      return res.status(400).json({ message: "employeeId, date, and leaveType are required" });
+    }
+
+    const [emp] = await db.select().from(employees).where(eq(employees.id, employeeId));
+    if (!emp) return res.status(404).json({ message: "Employee not found" });
+
+    const year = parseInt(date.split("-")[0]);
+
+    if (leaveType === "leave" || leaveType === "annual" || leaveType === "casual") {
+      const [bal] = await db.select().from(leaveBalances)
+        .where(and(eq(leaveBalances.employeeId, employeeId), eq(leaveBalances.year, year)));
+
+      const leaveRemaining = (bal?.annualLeaveBalance ?? 0) - (bal?.annualLeaveUsed ?? 0);
+
+      if (leaveRemaining < 1) {
+        return res.status(422).json({
+          message: "No leave balance remaining. Please use No-Pay Leave instead.",
+          leaveRemaining,
+        });
+      }
+
+      const [existing] = await db.select().from(attendanceRecords)
+        .where(and(eq(attendanceRecords.employeeId, employeeId), eq(attendanceRecords.date, date)));
+
+      if (existing) {
+        await db.update(attendanceRecords).set({
+          status: "leave",
+          leaveType: "leave",
+          source: "manual",
+          approvalStatus: "approved",
+          updatedAt: new Date(),
+        }).where(eq(attendanceRecords.id, existing.id));
+      } else {
+        await db.insert(attendanceRecords).values({
+          employeeId,
+          branchId: emp.branchId!,
+          date,
+          status: "leave",
+          leaveType: "leave",
+          source: "manual",
+          approvalStatus: "approved",
+        });
+      }
+
+      if (bal) {
+        await db.update(leaveBalances).set({
+          annualLeaveUsed: (bal.annualLeaveUsed ?? 0) + 1,
+          updatedAt: new Date(),
+        }).where(eq(leaveBalances.id, bal.id));
+      } else {
+        await db.insert(leaveBalances).values({
+          employeeId,
+          year,
+          annualLeaveBalance: 21,
+          casualLeaveBalance: 0,
+          annualLeaveUsed: 1,
+          casualLeaveUsed: 0,
+        });
+      }
+
+      return res.json({ success: true, status: "leave", leaveType: "leave" });
+    }
+
+    /* ── No-pay leave: mark as absent (salary deduction in payroll) ── */
+    const [existing] = await db.select().from(attendanceRecords)
+      .where(and(eq(attendanceRecords.employeeId, employeeId), eq(attendanceRecords.date, date)));
+
+    if (existing) {
+      await db.update(attendanceRecords).set({
+        status: "absent",
+        leaveType: null,
+        source: "manual",
+        approvalStatus: "approved",
+        updatedAt: new Date(),
+      }).where(eq(attendanceRecords.id, existing.id));
+    } else {
+      await db.insert(attendanceRecords).values({
+        employeeId,
+        branchId: emp.branchId!,
+        date,
+        status: "absent",
+        source: "manual",
+        approvalStatus: "approved",
+      });
+    }
+
+    return res.json({ success: true, status: "absent", leaveType: "no_pay" });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Failed to mark leave" });
+  }
 });
 
 /* ── Pending manual punch approvals ───────────────────────── */
@@ -308,8 +475,10 @@ router.get("/", async (req, res) => {
       if ((st === "present" || st === "late") && rec.totalHours != null) {
         const halfDayHrs = rule.halfDayHours ?? 5;
         const minPresentHrs = rule.minPresentHours ?? 8;
+        const earlyExitGraceHrs = (rule.earlyExitGraceMinutes ?? rule.lateGraceMinutes ?? 15) / 60;
+        const presentThreshold = Math.max(halfDayHrs + 0.01, minPresentHrs - earlyExitGraceHrs);
         if (rec.totalHours < halfDayHrs) st = "absent";
-        else if (rec.totalHours < minPresentHrs) st = "half_day";
+        else if (rec.totalHours < presentThreshold) st = "half_day";
       }
       return st;
     }
@@ -368,6 +537,27 @@ router.post("/", async (req, res) => {
     const [br] = await db.select().from(branches).where(eq(branches.id, emp.branchId));
     res.status(201).json({ ...rec, employeeName: emp.fullName, employeeCode: emp.employeeId, branchName: br?.name || "", shiftName: null, createdAt: rec.createdAt.toISOString() });
   } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
+});
+
+router.get("/recent-leaves", async (req, res) => {
+  try {
+    const limit = Number(req.query.limit) || 15;
+    const rows = await db
+      .select({
+        id: attendanceRecords.id,
+        date: attendanceRecords.date,
+        leaveType: attendanceRecords.leaveType,
+        status: attendanceRecords.status,
+        employeeName: employees.fullName,
+        employeeCode: employees.employeeId,
+      })
+      .from(attendanceRecords)
+      .leftJoin(employees, eq(attendanceRecords.employeeId, employees.id))
+      .where(isNotNull(attendanceRecords.leaveType))
+      .orderBy(attendanceRecords.id)
+      .limit(limit);
+    res.json(rows.reverse());
+  } catch (e) { console.error(e); res.status(500).json({ message: "Error" }); }
 });
 
 router.put("/:id", async (req, res) => {

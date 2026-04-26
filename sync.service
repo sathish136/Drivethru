@@ -1,0 +1,27 @@
+[Unit]
+Description=Biometric Sync Service - Syncs attendance data to API
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=erp
+Group=erp
+WorkingDirectory=/home/erp/drive/Drive-1
+Environment=PATH=/usr/bin:/home/erp/.local/bin:/usr/local/bin
+Environment=API_URL=http://localhost:18763
+Environment=PUSH_DB_PATH=/home/erp/drive/erp-sync/push.db
+Environment=POLL_INTERVAL=10
+Environment=BATCH_SIZE=500
+ExecStart=/usr/bin/python3 sync.py
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=sync
+
+[Install]
+WantedBy=multi-user.target

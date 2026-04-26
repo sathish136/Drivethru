@@ -34,10 +34,17 @@ export const payrollRecords = pgTable("payroll_records", {
   etfEmployer: real("etf_employer").notNull().default(0),
   apit: real("apit").notNull().default(0),
   lateDeduction: real("late_deduction").notNull().default(0),
+  lunchLateDeduction: real("lunch_late_deduction").notNull().default(0),
   absenceDeduction: real("absence_deduction").notNull().default(0),
   halfDayDeduction: real("half_day_deduction").notNull().default(0),
   incompleteDeduction: real("incomplete_deduction").notNull().default(0),
   otherDeductions: real("other_deductions").notNull().default(0),
+
+  /* Calculation-basis fields (stored for payslip transparency) */
+  reqHoursPerDay: real("req_hours_per_day").default(0),
+  lateMinutes: real("late_minutes").default(0),
+  lunchLateMinutes: real("lunch_late_minutes").default(0),
+  incompleteMinutes: real("incomplete_minutes").default(0),
   loanDeduction: real("loan_deduction").notNull().default(0),
   totalDeductions: real("total_deductions").notNull().default(0),
 

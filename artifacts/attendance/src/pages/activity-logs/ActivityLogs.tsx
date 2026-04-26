@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useLocation } from "wouter";
 import {
   Activity, Search, Filter, RefreshCw, LogIn, LogOut, Eye,
   Shield, AlertTriangle, CheckCircle, XCircle, Clock, MapPin,
@@ -68,6 +69,7 @@ function formatTime(ts: string) {
 }
 
 export default function ActivityLogs() {
+  const [, setLocation] = useLocation();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -95,7 +97,18 @@ export default function ActivityLogs() {
       if (dateFrom) params.set("dateFrom", dateFrom);
       if (dateTo) params.set("dateTo", dateTo);
 
-      const r = await fetch(apiUrl(`/activity-logs?${params}`));
+      const token = localStorage.getItem("auth_token") || "";
+      const r = await fetch(apiUrl(`/activity-logs?${params}`), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (r.status === 401) {
+        localStorage.removeItem("auth_token");
+        localStorage.removeItem("auth_user");
+        setLocation("/login");
+        setLogs([]);
+        setTotal(0);
+        return;
+      }
       const d = await r.json();
       setLogs(d.data || []);
       setTotal(d.total || 0);
