@@ -41,11 +41,22 @@ const LEAVE_TYPES = [
   {
     id: "leave",
     label: "Leave",
-    desc: "Deducted from leave balance (21 days total)",
+    desc: "Full day — deducts 1 day from leave balance (21 days total)",
     iconBg: "bg-blue-50",
     iconColor: "text-blue-600",
     badge: "info" as const,
     balanceKey: "leaveRemaining" as keyof LeaveBalance,
+    deduct: 1,
+  },
+  {
+    id: "half_day",
+    label: "Half Day Leave",
+    desc: "Half day — deducts 0.5 day from leave balance",
+    iconBg: "bg-amber-50",
+    iconColor: "text-amber-600",
+    badge: "warning" as const,
+    balanceKey: "leaveRemaining" as keyof LeaveBalance,
+    deduct: 0.5,
   },
   {
     id: "no_pay",
@@ -55,6 +66,7 @@ const LEAVE_TYPES = [
     iconColor: "text-red-600",
     badge: "danger" as const,
     balanceKey: null,
+    deduct: 0,
   },
 ];
 
@@ -170,10 +182,18 @@ export default function LeaveEntry() {
       : null;
   const noBalance = remainingForType !== null && remainingForType <= 0;
 
-  const leaveTypeLabel = (type: string) => {
-    if (type === "leave" || type === "annual" || type === "casual") return "Leave";
-    if (type === "no_pay") return "No-Pay";
-    return type;
+  const leaveTypeLabel = (entry: RecentEntry) => {
+    if (entry.status === "half_day") return "Half Day";
+    if (entry.leaveType === "leave" || entry.leaveType === "annual" || entry.leaveType === "casual") return "Leave";
+    if (entry.leaveType === "no_pay") return "No-Pay";
+    if (entry.status === "absent") return "No-Pay";
+    return entry.leaveType || entry.status;
+  };
+
+  const leaveBadgeVariant = (entry: RecentEntry): "info" | "warning" | "danger" => {
+    if (entry.status === "half_day") return "warning";
+    if (entry.leaveType === "no_pay" || entry.status === "absent") return "danger";
+    return "info";
   };
 
   return (
@@ -443,17 +463,21 @@ export default function LeaveEntry() {
                   </Td>
                   <Td className="text-muted-foreground">{entry.date}</Td>
                   <Td>
-                    <Badge
-                      variant={
-                        entry.leaveType === "no_pay" ? "danger" : "info"
-                      }
-                    >
-                      {leaveTypeLabel(entry.leaveType)}
+                    <Badge variant={leaveBadgeVariant(entry)}>
+                      {leaveTypeLabel(entry)}
                     </Badge>
                   </Td>
                   <Td>
-                    <Badge variant={entry.status === "leave" ? "default" : "danger"}>
-                      {entry.status}
+                    <Badge
+                      variant={
+                        entry.status === "leave"
+                          ? "default"
+                          : entry.status === "half_day"
+                            ? "warning"
+                            : "danger"
+                      }
+                    >
+                      {entry.status === "half_day" ? "half day" : entry.status}
                     </Badge>
                   </Td>
                 </Tr>
