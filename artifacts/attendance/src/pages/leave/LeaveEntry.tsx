@@ -6,6 +6,7 @@ import {
 import {
   Search, CheckCircle2, AlertTriangle,
   RefreshCw, CalendarDays, User, CalendarClock,
+  Undo2, Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -117,6 +118,43 @@ export default function LeaveEntry() {
       .finally(() => setRecentLoading(false));
   }
 
+  const [removingId, setRemovingId] = useState<number | null>(null);
+
+  async function handleRemove(entry: RecentEntry, mode: "cancel" | "delete") {
+    const action = mode === "cancel" ? "cancel" : "delete";
+    const confirmMsg =
+      mode === "cancel"
+        ? `Cancel ${entry.status === "half_day" ? "half-day " : ""}leave for ${entry.employeeName} on ${entry.date}? The leave balance will be restored.`
+        : `Delete leave entry for ${entry.employeeName} on ${entry.date}? Balance will NOT be restored.`;
+    if (!window.confirm(confirmMsg)) return;
+    setRemovingId(entry.id);
+    setSuccessMsg("");
+    setErrorMsg("");
+    try {
+      const res = await fetch(apiUrl(`/attendance/leave/${entry.id}?mode=${mode}`), { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErrorMsg(data.message || `Failed to ${action} leave entry.`);
+      } else {
+        setSuccessMsg(
+          mode === "cancel"
+            ? `Leave for ${entry.employeeName} on ${entry.date} was cancelled and balance restored.`
+            : `Leave entry for ${entry.employeeName} on ${entry.date} was deleted.`
+        );
+        if (selectedEmp) {
+          const year = new Date(date).getFullYear();
+          fetch(apiUrl(`/leave-balances/employee/${selectedEmp.id}?year=${year}`))
+            .then(r => r.json()).then(setBalance).catch(() => {});
+        }
+        loadRecent();
+      }
+    } catch {
+      setErrorMsg("Network error. Please try again.");
+    } finally {
+      setRemovingId(null);
+    }
+  }
+
   const filteredEmps = employees.filter(e => {
     const q = empSearch.toLowerCase();
     return (
@@ -217,10 +255,10 @@ export default function LeaveEntry() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="space-y-5">
 
-        {/* ── Form (left 2/3) ── */}
-        <form onSubmit={handleSubmit} className="lg:col-span-2 space-y-4">
+        {/* ── Form (full width) ── */}
+        <form onSubmit={handleSubmit} className="space-y-4">
 
           {/* Employee */}
           <Card className="p-4">
@@ -265,13 +303,26 @@ export default function LeaveEntry() {
             </div>
 
             {selectedEmp && (
-              <div className="mt-3 flex items-center gap-3 bg-primary/5 border border-primary/20 rounded-lg px-4 py-3">
+              <div className="mt-3 flex flex-wrap items-center gap-3 bg-primary/5 border border-primary/20 rounded-lg px-4 py-3">
                 <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center text-primary font-bold text-sm shrink-0">
                   {selectedEmp.fullName.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase()}
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="font-semibold text-sm text-foreground">{selectedEmp.fullName}</p>
                   <p className="text-xs text-muted-foreground">{selectedEmp.employeeId} · {selectedEmp.designation}</p>
+                </div>
+                <div className="flex items-center gap-2 ml-auto">
+                  <CalendarClock className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Leave balance:</span>
+                  {balanceLoading ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                  ) : balance ? (
+                    <Badge variant={balance.leaveRemaining < 3 ? "danger" : "info"}>
+                      {balance.leaveRemaining} / {balance.leaveBalance} days
+                    </Badge>
+                  ) : (
+                    <Badge variant="neutral">—</Badge>
+                  )}
                 </div>
               </div>
             )}
@@ -367,60 +418,6 @@ export default function LeaveEntry() {
           </div>
         </form>
 
-        {/* ── Balance Panel (right 1/3) ── */}
-        <div className="space-y-4">
-          <Card className="p-4">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <CalendarClock className="w-4 h-4 text-primary" />
-              </div>
-              <span className="font-semibold text-sm text-foreground">Leave Balance</span>
-            </div>
-
-            {!selectedEmp && (
-              <p className="text-sm text-muted-foreground text-center py-6">
-                Select an employee to view their balance.
-              </p>
-            )}
-
-            {selectedEmp && balanceLoading && (
-              <div className="flex items-center justify-center py-6 gap-2 text-muted-foreground">
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span className="text-sm">Loading…</span>
-              </div>
-            )}
-
-            {selectedEmp && !balanceLoading && balance && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/20">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-blue-50">
-                    <CalendarDays className="w-4 h-4 text-blue-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-muted-foreground">Leave</p>
-                    <p className={cn("text-xl font-bold leading-tight", balance.leaveRemaining < 3 ? "text-red-600" : "text-blue-700")}>
-                      {balance.leaveRemaining}
-                      <span className="text-xs font-normal text-muted-foreground ml-1">
-                        / {balance.leaveBalance} days
-                      </span>
-                    </p>
-                    <p className="text-xs text-muted-foreground">{balance.leaveUsed} used this year</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/20">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-red-50">
-                    <CalendarDays className="w-4 h-4 text-red-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground">No-Pay Leave</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Always available — salary deducted per day</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </Card>
-        </div>
       </div>
 
       {/* ── Recent Leave Entries ── */}
@@ -452,36 +449,83 @@ export default function LeaveEntry() {
                 <Th>Date</Th>
                 <Th>Leave Type</Th>
                 <Th>Status</Th>
+                <Th className="text-right">Actions</Th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
-              {recent.map(entry => (
-                <Tr key={entry.id}>
-                  <Td>
-                    <div className="font-semibold text-foreground">{entry.employeeName}</div>
-                    <div className="text-xs text-muted-foreground font-mono">{entry.employeeCode}</div>
-                  </Td>
-                  <Td className="text-muted-foreground">{entry.date}</Td>
-                  <Td>
-                    <Badge variant={leaveBadgeVariant(entry)}>
-                      {leaveTypeLabel(entry)}
-                    </Badge>
-                  </Td>
-                  <Td>
-                    <Badge
-                      variant={
-                        entry.status === "leave"
-                          ? "default"
-                          : entry.status === "half_day"
-                            ? "warning"
-                            : "danger"
-                      }
-                    >
-                      {entry.status === "half_day" ? "half day" : entry.status}
-                    </Badge>
-                  </Td>
-                </Tr>
-              ))}
+              {recent.map(entry => {
+                const isBusy = removingId === entry.id;
+                const isLeaveType =
+                  entry.leaveType === "leave" ||
+                  entry.leaveType === "annual" ||
+                  entry.leaveType === "casual";
+                const canCancel = isLeaveType && entry.status !== "absent";
+                return (
+                  <Tr key={entry.id}>
+                    <Td>
+                      <div className="font-semibold text-foreground">{entry.employeeName}</div>
+                      <div className="text-xs text-muted-foreground font-mono">{entry.employeeCode}</div>
+                    </Td>
+                    <Td className="text-muted-foreground">{entry.date}</Td>
+                    <Td>
+                      <Badge variant={leaveBadgeVariant(entry)}>
+                        {leaveTypeLabel(entry)}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <Badge
+                        variant={
+                          entry.status === "leave"
+                            ? "default"
+                            : entry.status === "half_day"
+                              ? "warning"
+                              : "danger"
+                        }
+                      >
+                        {entry.status === "half_day" ? "half day" : entry.status}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {canCancel && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleRemove(entry, "cancel")}
+                            disabled={isBusy}
+                            className="h-7 px-2 text-xs gap-1"
+                            title="Cancel leave and restore balance"
+                          >
+                            {isBusy ? (
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Undo2 className="w-3 h-3" />
+                            )}
+                            Cancel
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemove(entry, "delete")}
+                          disabled={isBusy}
+                          className="h-7 px-2 text-xs gap-1 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          title="Delete entry (does not restore balance)"
+                        >
+                          {isBusy ? (
+                            <RefreshCw className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3 h-3" />
+                          )}
+                          Delete
+                        </Button>
+                      </div>
+                    </Td>
+                  </Tr>
+                );
+              })}
             </tbody>
           </table>
         )}

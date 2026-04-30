@@ -545,6 +545,45 @@ router.post("/", async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
 });
 
+/* ── Cancel / Delete a leave entry ───────────────────────────
+   ?mode=cancel  → delete the attendance record AND restore the
+                   leave balance (0.5 for half_day, 1 for leave)
+   ?mode=delete  → delete the attendance record only (no balance change)
+   default        → cancel
+─────────────────────────────────────────────────────────────── */
+router.delete("/leave/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const mode = (req.query.mode as string) || "cancel";
+
+    const [rec] = await db.select().from(attendanceRecords).where(eq(attendanceRecords.id, id));
+    if (!rec) return res.status(404).json({ message: "Leave entry not found" });
+
+    if (mode === "cancel") {
+      const isLeaveType = rec.leaveType === "leave" || rec.leaveType === "annual" || rec.leaveType === "casual";
+      if (isLeaveType && rec.status !== "absent") {
+        const restore = rec.status === "half_day" ? 0.5 : 1;
+        const year = parseInt(String(rec.date).split("-")[0]);
+        const [bal] = await db.select().from(leaveBalances)
+          .where(and(eq(leaveBalances.employeeId, rec.employeeId), eq(leaveBalances.year, year)));
+        if (bal) {
+          const newUsed = Math.max(0, (bal.annualLeaveUsed ?? 0) - restore);
+          await db.update(leaveBalances).set({
+            annualLeaveUsed: newUsed,
+            updatedAt: new Date(),
+          }).where(eq(leaveBalances.id, bal.id));
+        }
+      }
+    }
+
+    await db.delete(attendanceRecords).where(eq(attendanceRecords.id, id));
+    return res.json({ success: true, mode });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Failed to remove leave entry" });
+  }
+});
+
 router.get("/recent-leaves", async (req, res) => {
   try {
     const limit = Number(req.query.limit) || 15;
