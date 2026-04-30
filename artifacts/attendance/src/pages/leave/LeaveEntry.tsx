@@ -6,7 +6,7 @@ import {
   Search, CheckCircle2, AlertTriangle, RefreshCw,
   CalendarDays, User, CalendarClock, Sun, MoonStar,
   Wallet, TrendingDown, Hourglass, Sparkles,
-  Undo2, Trash2, X, ChevronRight,
+  Trash2, X, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -136,7 +136,7 @@ export default function LeaveEntry() {
   const [recent, setRecent] = useState<RecentEntry[]>([]);
   const [recentLoading, setRecentLoading] = useState(false);
   const [removingId, setRemovingId] = useState<number | null>(null);
-  const [confirm, setConfirm] = useState<{ id: number; mode: "cancel" | "delete" } | null>(null);
+  const [confirmId, setConfirmId] = useState<number | null>(null);
 
   useEffect(() => {
     fetch(apiUrl("/employees?limit=500"))
@@ -233,22 +233,22 @@ export default function LeaveEntry() {
     setErrorMsg("");
   }
 
-  async function handleRemove(entry: RecentEntry, mode: "cancel" | "delete") {
-    setConfirm(null);
+  async function handleRemove(entry: RecentEntry) {
+    setConfirmId(null);
     setRemovingId(entry.id);
     setSuccessMsg("");
     setErrorMsg("");
     try {
-      const res = await fetch(apiUrl(`/attendance/leave/${entry.id}?mode=${mode}`), { method: "DELETE" });
+      const res = await fetch(apiUrl(`/attendance/leave/${entry.id}`), { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErrorMsg(data.message || `Failed to ${mode} leave entry.`);
+        setErrorMsg(data.message || `Failed to remove leave entry.`);
       } else {
-        setSuccessMsg(
-          mode === "cancel"
-            ? `Leave for ${entry.employeeName} cancelled. Balance restored.`
-            : `Leave entry for ${entry.employeeName} deleted.`
-        );
+        const isHalf = entry.status === "half_day";
+        const restored = data.balanceRestored
+          ? ` Balance restored (+${isHalf ? "0.5" : "1"} day).`
+          : "";
+        setSuccessMsg(`Leave for ${entry.employeeName} removed.${restored}`);
         await refreshBalance();
         await new Promise(r => setTimeout(r, 350));
         loadRecent();
@@ -667,24 +667,17 @@ export default function LeaveEntry() {
                       </Td>
                       <Td>
                         <div className="flex items-center justify-end gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
-                          {confirm?.id === entry.id ? (
-                            <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200">
-                              <span className="text-xs font-medium text-amber-900">
-                                {confirm.mode === "cancel"
-                                  ? "Cancel & restore balance?"
-                                  : "Permanently delete?"}
+                          {confirmId === entry.id ? (
+                            <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200">
+                              <span className="text-xs font-medium text-rose-900">
+                                Remove & restore balance?
                               </span>
                               <Button
                                 type="button"
                                 size="sm"
-                                onClick={() => handleRemove(entry, confirm.mode)}
+                                onClick={() => handleRemove(entry)}
                                 disabled={isBusy}
-                                className={cn(
-                                  "h-7 px-2.5 text-xs gap-1 text-white",
-                                  confirm.mode === "delete"
-                                    ? "bg-rose-600 hover:bg-rose-700"
-                                    : "bg-amber-600 hover:bg-amber-700"
-                                )}
+                                className="h-7 px-2.5 text-xs gap-1 text-white bg-rose-600 hover:bg-rose-700"
                               >
                                 {isBusy ? (
                                   <RefreshCw className="w-3 h-3 animate-spin" />
@@ -697,7 +690,7 @@ export default function LeaveEntry() {
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => setConfirm(null)}
+                                onClick={() => setConfirmId(null)}
                                 disabled={isBusy}
                                 className="h-7 px-2 text-xs"
                               >
@@ -705,34 +698,18 @@ export default function LeaveEntry() {
                               </Button>
                             </div>
                           ) : (
-                            <>
-                              {canCancel && (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setConfirm({ id: entry.id, mode: "cancel" })}
-                                  disabled={isBusy || removingId !== null}
-                                  className="h-8 px-2.5 text-xs gap-1.5"
-                                  title="Cancel leave and restore balance"
-                                >
-                                  <Undo2 className="w-3.5 h-3.5" />
-                                  Cancel
-                                </Button>
-                              )}
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setConfirm({ id: entry.id, mode: "delete" })}
-                                disabled={isBusy || removingId !== null}
-                                className="h-8 px-2.5 text-xs gap-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                                title="Delete entry without restoring balance"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                Delete
-                              </Button>
-                            </>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setConfirmId(entry.id)}
+                              disabled={isBusy || removingId !== null}
+                              className="h-8 px-2.5 text-xs gap-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                              title="Remove leave entry and restore balance"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Remove
+                            </Button>
                           )}
                         </div>
                       </Td>

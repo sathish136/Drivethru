@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { attendanceRecords, employees, branches, shifts, leaveBalances } from "@workspace/db/schema";
+import { attendanceRecords, employees, branches, shifts, leaveBalances, payrollRecords } from "@workspace/db/schema";
 import { eq, and, gte, lte, isNotNull } from "drizzle-orm";
 import { calcWorkHours, getDaysInMonth, today } from "../lib/helpers.js";
 import { loadDeptRules, findRule, timeToMins } from "../lib/hr-rules.js";
@@ -545,39 +545,59 @@ router.post("/", async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
 });
 
-/* ── Cancel / Delete a leave entry ───────────────────────────
-   ?mode=cancel  → delete the attendance record AND restore the
-                   leave balance (0.5 for half_day, 1 for leave)
-   ?mode=delete  → delete the attendance record only (no balance change)
-   default        → cancel
+/* ── Remove a leave entry ───────────────────────────────────
+   Always deletes the attendance record AND restores the leave
+   balance (0.5 for half_day, 1 for full leave).
+   Blocked (409) if payroll has already been generated for the
+   employee in the same month/year.
 ─────────────────────────────────────────────────────────────── */
 router.delete("/leave/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const mode = (req.query.mode as string) || "cancel";
 
     const [rec] = await db.select().from(attendanceRecords).where(eq(attendanceRecords.id, id));
     if (!rec) return res.status(404).json({ message: "Leave entry not found" });
 
-    if (mode === "cancel") {
-      const isLeaveType = rec.leaveType === "leave" || rec.leaveType === "annual" || rec.leaveType === "casual";
-      if (isLeaveType && rec.status !== "absent") {
-        const restore = rec.status === "half_day" ? 0.5 : 1;
-        const year = parseInt(String(rec.date).split("-")[0]);
-        const [bal] = await db.select().from(leaveBalances)
-          .where(and(eq(leaveBalances.employeeId, rec.employeeId), eq(leaveBalances.year, year)));
-        if (bal) {
-          const newUsed = Math.max(0, (bal.annualLeaveUsed ?? 0) - restore);
-          await db.update(leaveBalances).set({
-            annualLeaveUsed: newUsed,
-            updatedAt: new Date(),
-          }).where(eq(leaveBalances.id, bal.id));
-        }
+    const dateParts = String(rec.date).split("-");
+    const year = parseInt(dateParts[0]);
+    const month = parseInt(dateParts[1]);
+
+    /* Block if payroll already exists for this employee + month */
+    const [existingPayroll] = await db.select({
+      id: payrollRecords.id,
+      status: payrollRecords.status,
+    }).from(payrollRecords).where(and(
+      eq(payrollRecords.employeeId, rec.employeeId),
+      eq(payrollRecords.year, year),
+      eq(payrollRecords.month, month),
+    ));
+
+    if (existingPayroll) {
+      const monthName = new Date(year, month - 1, 1).toLocaleString("en-US", { month: "long" });
+      return res.status(409).json({
+        message: `Cannot remove — payroll for ${monthName} ${year} has already been generated (status: ${existingPayroll.status}). Reverse the payroll first.`,
+        payrollGenerated: true,
+        payrollStatus: existingPayroll.status,
+      });
+    }
+
+    /* Restore leave balance for any leave-type entry */
+    const isLeaveType = rec.leaveType === "leave" || rec.leaveType === "annual" || rec.leaveType === "casual";
+    if (isLeaveType && rec.status !== "absent") {
+      const restore = rec.status === "half_day" ? 0.5 : 1;
+      const [bal] = await db.select().from(leaveBalances)
+        .where(and(eq(leaveBalances.employeeId, rec.employeeId), eq(leaveBalances.year, year)));
+      if (bal) {
+        const newUsed = Math.max(0, (bal.annualLeaveUsed ?? 0) - restore);
+        await db.update(leaveBalances).set({
+          annualLeaveUsed: newUsed,
+          updatedAt: new Date(),
+        }).where(eq(leaveBalances.id, bal.id));
       }
     }
 
     await db.delete(attendanceRecords).where(eq(attendanceRecords.id, id));
-    return res.json({ success: true, mode });
+    return res.json({ success: true, balanceRestored: isLeaveType && rec.status !== "absent" });
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: "Failed to remove leave entry" });
