@@ -31,11 +31,13 @@ interface LeaveBalance {
 
 interface RecentEntry {
   id: number;
+  employeeId: number;
   employeeCode: string;
   employeeName: string;
   date: string;
   leaveType: string;
   status: string;
+  currentRemaining: number | null;
 }
 
 type LeaveTypeId = "leave" | "half_day" | "no_pay";
@@ -134,17 +136,33 @@ export default function LeaveEntry() {
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [recent, setRecent] = useState<RecentEntry[]>([]);
+  const [recentTotal, setRecentTotal] = useState(0);
   const [recentLoading, setRecentLoading] = useState(false);
   const [removingId, setRemovingId] = useState<number | null>(null);
   const [confirmId, setConfirmId] = useState<number | null>(null);
+  const [recentPage, setRecentPage] = useState(1);
+  const [recentPageSize, setRecentPageSize] = useState(25);
+  const [recentSearch, setRecentSearch] = useState("");
+  const [recentSearchInput, setRecentSearchInput] = useState("");
 
   useEffect(() => {
     fetch(apiUrl("/employees?limit=500"))
       .then(r => r.json())
       .then(d => setEmployees(d.employees || []))
       .catch(() => {});
-    loadRecent();
   }, []);
+
+  useEffect(() => { loadRecent(); /* eslint-disable-next-line */ }, [recentPage, recentPageSize, recentSearch]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (recentSearchInput !== recentSearch) {
+        setRecentPage(1);
+        setRecentSearch(recentSearchInput);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [recentSearchInput]);
 
   useEffect(() => {
     if (!selectedEmp) { setBalance(null); return; }
@@ -159,10 +177,18 @@ export default function LeaveEntry() {
 
   function loadRecent() {
     setRecentLoading(true);
-    fetch(apiUrl("/attendance/recent-leaves?limit=15"))
+    const params = new URLSearchParams({
+      page: String(recentPage),
+      pageSize: String(recentPageSize),
+    });
+    if (recentSearch) params.set("search", recentSearch);
+    fetch(apiUrl(`/attendance/recent-leaves?${params}`))
       .then(r => r.json())
-      .then(d => setRecent(Array.isArray(d) ? d : []))
-      .catch(() => setRecent([]))
+      .then(d => {
+        setRecent(Array.isArray(d?.rows) ? d.rows : []);
+        setRecentTotal(typeof d?.total === "number" ? d.total : 0);
+      })
+      .catch(() => { setRecent([]); setRecentTotal(0); })
       .finally(() => setRecentLoading(false));
   }
 
@@ -571,103 +597,166 @@ export default function LeaveEntry() {
 
       {/* ── Recent Leave Entries ── */}
       <Card className="overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-border">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
               <CalendarClock className="w-5 h-5 text-muted-foreground" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-foreground leading-tight">Recent Leave Entries</h2>
-              <p className="text-xs text-muted-foreground">Last 15 leave entries across all employees</p>
+              <h2 className="text-base font-semibold text-foreground leading-tight">Leave Entries</h2>
+              <p className="text-xs text-muted-foreground">
+                {recentTotal === 0
+                  ? "No entries"
+                  : `${recentTotal.toLocaleString()} total ${recentTotal === 1 ? "entry" : "entries"}${recentSearch ? ` matching "${recentSearch}"` : ""}`}
+              </p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={loadRecent} className="gap-1.5 text-xs h-8">
-            <RefreshCw className={cn("w-3.5 h-3.5", recentLoading && "animate-spin")} />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <input
+                type="text"
+                value={recentSearchInput}
+                onChange={e => setRecentSearchInput(e.target.value)}
+                placeholder="Search name or ID…"
+                className="h-8 pl-8 pr-7 text-xs rounded-md border border-input bg-background w-52 focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              {recentSearchInput && (
+                <button
+                  type="button"
+                  onClick={() => setRecentSearchInput("")}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+            <select
+              value={recentPageSize}
+              onChange={e => { setRecentPage(1); setRecentPageSize(Number(e.target.value)); }}
+              className="h-8 text-xs rounded-md border border-input bg-background px-2 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              {[10, 25, 50, 100].map(n => (
+                <option key={n} value={n}>{n} / page</option>
+              ))}
+            </select>
+            <Button variant="ghost" size="sm" onClick={loadRecent} className="gap-1.5 text-xs h-8">
+              <RefreshCw className={cn("w-3.5 h-3.5", recentLoading && "animate-spin")} />
+              Refresh
+            </Button>
+          </div>
         </div>
 
-        {recentLoading ? (
-          <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
-            <RefreshCw className="w-4 h-4 animate-spin" />
-            <span className="text-sm">Loading…</span>
-          </div>
-        ) : recent.length === 0 ? (
+        {recent.length === 0 && !recentLoading ? (
           <div className="text-center py-16 px-6">
             <div className="w-14 h-14 mx-auto rounded-full bg-muted flex items-center justify-center mb-3">
               <CalendarClock className="w-6 h-6 text-muted-foreground/60" />
             </div>
-            <p className="text-sm font-medium text-foreground">No leave entries yet</p>
+            <p className="text-sm font-medium text-foreground">
+              {recentSearch ? "No matches found" : "No leave entries yet"}
+            </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Submitted leave records will appear here.
+              {recentSearch ? "Try a different name or employee ID." : "Submitted leave records will appear here."}
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/40 border-b border-border">
-                  <Th>Employee</Th>
-                  <Th>Date</Th>
-                  <Th>Leave Type</Th>
-                  <Th>Status</Th>
-                  <Th className="text-right">Actions</Th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
-                {recent.map(entry => {
-                  const isBusy = removingId === entry.id;
-                  const isLeaveType =
-                    entry.leaveType === "leave" ||
-                    entry.leaveType === "annual" ||
-                    entry.leaveType === "casual";
-                  const canCancel = isLeaveType && entry.status !== "absent";
-                  return (
-                    <Tr
-                      key={entry.id}
-                      className={cn(
-                        "group transition-all duration-300 ease-out",
-                        isBusy
-                          ? "opacity-0 -translate-x-6 bg-rose-50/40"
-                          : "opacity-100 translate-x-0 hover:bg-muted/20"
-                      )}
-                    >
-                      <Td>
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-foreground/70 shrink-0">
-                            {entry.employeeName.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase()}
+          <>
+            <div className="relative max-h-[560px] overflow-auto">
+              {recentLoading && (
+                <div className="absolute inset-0 z-20 bg-white/60 backdrop-blur-[1px] flex items-center justify-center gap-2 text-muted-foreground">
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span className="text-sm">Loading…</span>
+                </div>
+              )}
+              <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
+                <colgroup>
+                  <col style={{ width: "30%" }} />
+                  <col style={{ width: "16%" }} />
+                  <col style={{ width: "12%" }} />
+                  <col style={{ width: "12%" }} />
+                  <col style={{ width: "13%" }} />
+                  <col style={{ width: "17%" }} />
+                </colgroup>
+                <thead className="sticky top-0 z-10 bg-muted/90 backdrop-blur supports-[backdrop-filter]:bg-muted/70">
+                  <tr className="border-b border-border">
+                    <Th>Employee</Th>
+                    <Th>Date</Th>
+                    <Th>Type</Th>
+                    <Th>Status</Th>
+                    <Th>Balance ({new Date().getFullYear()})</Th>
+                    <Th className="text-right">Actions</Th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/50">
+                  {recent.map(entry => {
+                    const isBusy = removingId === entry.id;
+                    return (
+                      <Tr
+                        key={entry.id}
+                        className={cn(
+                          "group transition-all duration-300 ease-out",
+                          isBusy
+                            ? "opacity-0 -translate-x-6 bg-rose-50/40"
+                            : "opacity-100 translate-x-0 hover:bg-muted/20"
+                        )}
+                      >
+                        <Td>
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-foreground/70 shrink-0">
+                              {entry.employeeName.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-semibold text-foreground truncate">{entry.employeeName}</div>
+                              <div className="text-xs text-muted-foreground font-mono truncate">{entry.employeeCode}</div>
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <div className="font-semibold text-foreground truncate">{entry.employeeName}</div>
-                            <div className="text-xs text-muted-foreground font-mono">{entry.employeeCode}</div>
-                          </div>
-                        </div>
-                      </Td>
-                      <Td>
-                        <div className="text-foreground">{formatDate(entry.date)}</div>
-                        <div className="text-xs text-muted-foreground">{relativeDay(entry.date) || entry.date}</div>
-                      </Td>
-                      <Td>
-                        <Badge variant={leaveBadgeVariant(entry)}>
-                          {leaveTypeLabel(entry)}
-                        </Badge>
-                      </Td>
-                      <Td>
-                        <Badge
-                          variant={
-                            entry.status === "leave"
-                              ? "default"
-                              : entry.status === "half_day"
-                                ? "warning"
-                                : "danger"
-                          }
-                        >
-                          {entry.status === "half_day" ? "half day" : entry.status}
-                        </Badge>
-                      </Td>
-                      <Td>
-                        <div className="flex items-center justify-end gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
-                          {confirmId === entry.id ? (
+                        </Td>
+                        <Td>
+                          <div className="text-foreground truncate">{formatDate(entry.date)}</div>
+                          <div className="text-xs text-muted-foreground truncate">{relativeDay(entry.date) || entry.date}</div>
+                        </Td>
+                        <Td>
+                          <Badge variant={leaveBadgeVariant(entry)}>
+                            {leaveTypeLabel(entry)}
+                          </Badge>
+                        </Td>
+                        <Td>
+                          <Badge
+                            variant={
+                              entry.status === "leave"
+                                ? "default"
+                                : entry.status === "half_day"
+                                  ? "warning"
+                                  : "danger"
+                            }
+                          >
+                            {entry.status === "half_day" ? "half day" : entry.status}
+                          </Badge>
+                        </Td>
+                        <Td>
+                          {entry.currentRemaining == null ? (
+                            <span className="text-xs text-muted-foreground italic">—</span>
+                          ) : (
+                            <div className="flex items-baseline gap-1">
+                              <span className={cn(
+                                "text-base font-bold tabular-nums leading-none",
+                                entry.currentRemaining <= 0
+                                  ? "text-rose-600"
+                                  : entry.currentRemaining < 3
+                                    ? "text-amber-600"
+                                    : "text-emerald-700"
+                              )}>
+                                {Number.isInteger(entry.currentRemaining)
+                                  ? entry.currentRemaining
+                                  : entry.currentRemaining.toFixed(1)}
+                              </span>
+                              <span className="text-xs text-muted-foreground">days left</span>
+                            </div>
+                          )}
+                        </Td>
+                        <Td>
+                          <div className="flex items-center justify-end gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
+                            {confirmId === entry.id ? (
                             <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200">
                               <span className="text-xs font-medium text-rose-900">
                                 Remove & restore balance?
@@ -718,7 +807,52 @@ export default function LeaveEntry() {
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+
+            {/* Pagination footer */}
+            {recentTotal > 0 && (() => {
+              const totalPages = Math.max(1, Math.ceil(recentTotal / recentPageSize));
+              const start = (recentPage - 1) * recentPageSize + 1;
+              const end = Math.min(recentTotal, recentPage * recentPageSize);
+              return (
+                <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-t border-border bg-muted/20 text-xs">
+                  <span className="text-muted-foreground">
+                    Showing <span className="font-semibold text-foreground tabular-nums">{start}–{end}</span>
+                    {" "}of <span className="font-semibold text-foreground tabular-nums">{recentTotal.toLocaleString()}</span>
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline" size="sm"
+                      onClick={() => setRecentPage(1)}
+                      disabled={recentPage === 1 || recentLoading}
+                      className="h-7 px-2 text-xs"
+                    >First</Button>
+                    <Button
+                      variant="outline" size="sm"
+                      onClick={() => setRecentPage(p => Math.max(1, p - 1))}
+                      disabled={recentPage === 1 || recentLoading}
+                      className="h-7 px-2 text-xs"
+                    >Prev</Button>
+                    <span className="px-2.5 py-1 rounded-md bg-background border border-border tabular-nums">
+                      Page {recentPage} / {totalPages}
+                    </span>
+                    <Button
+                      variant="outline" size="sm"
+                      onClick={() => setRecentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={recentPage >= totalPages || recentLoading}
+                      className="h-7 px-2 text-xs"
+                    >Next</Button>
+                    <Button
+                      variant="outline" size="sm"
+                      onClick={() => setRecentPage(totalPages)}
+                      disabled={recentPage >= totalPages || recentLoading}
+                      className="h-7 px-2 text-xs"
+                    >Last</Button>
+                  </div>
+                </div>
+              );
+            })()}
+          </>
         )}
       </Card>
     </div>

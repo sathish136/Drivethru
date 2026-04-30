@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { attendanceRecords, employees, branches, shifts, leaveBalances, payrollRecords } from "@workspace/db/schema";
-import { eq, and, gte, lte, isNotNull } from "drizzle-orm";
+import { eq, and, gte, lte, isNotNull, desc, or, ilike, sql } from "drizzle-orm";
 import { calcWorkHours, getDaysInMonth, today } from "../lib/helpers.js";
 import { loadDeptRules, findRule, timeToMins } from "../lib/hr-rules.js";
 
@@ -606,22 +606,64 @@ router.delete("/leave/:id", async (req, res) => {
 
 router.get("/recent-leaves", async (req, res) => {
   try {
-    const limit = Number(req.query.limit) || 15;
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(200, Math.max(5, Number(req.query.pageSize) || 25));
+    const search = String(req.query.search || "").trim();
+    const offset = (page - 1) * pageSize;
+
+    const currentYear = new Date().getFullYear();
+
+    const filters = [isNotNull(attendanceRecords.leaveType)];
+    if (search) {
+      const q = `%${search}%`;
+      filters.push(
+        or(
+          ilike(employees.fullName, q),
+          ilike(employees.employeeId, q),
+        )!
+      );
+    }
+    const whereClause = and(...filters);
+
+    const [{ total }] = await db
+      .select({ total: sql<number>`COUNT(*)::int` })
+      .from(attendanceRecords)
+      .leftJoin(employees, eq(attendanceRecords.employeeId, employees.id))
+      .where(whereClause);
+
     const rows = await db
       .select({
         id: attendanceRecords.id,
         date: attendanceRecords.date,
         leaveType: attendanceRecords.leaveType,
         status: attendanceRecords.status,
+        employeeId: attendanceRecords.employeeId,
         employeeName: employees.fullName,
         employeeCode: employees.employeeId,
+        annualBalance: leaveBalances.annualLeaveBalance,
+        annualUsed: leaveBalances.annualLeaveUsed,
       })
       .from(attendanceRecords)
       .leftJoin(employees, eq(attendanceRecords.employeeId, employees.id))
-      .where(isNotNull(attendanceRecords.leaveType))
-      .orderBy(attendanceRecords.id)
-      .limit(limit);
-    res.json(rows.reverse());
+      .leftJoin(
+        leaveBalances,
+        and(
+          eq(leaveBalances.employeeId, attendanceRecords.employeeId),
+          eq(leaveBalances.year, currentYear),
+        ),
+      )
+      .where(whereClause)
+      .orderBy(desc(attendanceRecords.date), desc(attendanceRecords.id))
+      .limit(pageSize)
+      .offset(offset);
+
+    const enriched = rows.map(r => ({
+      ...r,
+      currentRemaining:
+        r.annualBalance != null ? (r.annualBalance - (r.annualUsed ?? 0)) : null,
+    }));
+
+    res.json({ rows: enriched, total, page, pageSize });
   } catch (e) { console.error(e); res.status(500).json({ message: "Error" }); }
 });
 
