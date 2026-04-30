@@ -250,6 +250,7 @@ export default function LeaveEntry() {
             : `Leave entry for ${entry.employeeName} deleted.`
         );
         await refreshBalance();
+        await new Promise(r => setTimeout(r, 350));
         loadRecent();
       }
     } catch {
@@ -622,7 +623,15 @@ export default function LeaveEntry() {
                     entry.leaveType === "casual";
                   const canCancel = isLeaveType && entry.status !== "absent";
                   return (
-                    <Tr key={entry.id} className="group hover:bg-muted/20 transition-colors">
+                    <Tr
+                      key={entry.id}
+                      className={cn(
+                        "group transition-all duration-300 ease-out",
+                        isBusy
+                          ? "opacity-0 -translate-x-6 bg-rose-50/40"
+                          : "opacity-100 translate-x-0 hover:bg-muted/20"
+                      )}
+                    >
                       <Td>
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-foreground/70 shrink-0">
