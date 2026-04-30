@@ -136,6 +136,7 @@ export default function LeaveEntry() {
   const [recent, setRecent] = useState<RecentEntry[]>([]);
   const [recentLoading, setRecentLoading] = useState(false);
   const [removingId, setRemovingId] = useState<number | null>(null);
+  const [confirm, setConfirm] = useState<{ id: number; mode: "cancel" | "delete" } | null>(null);
 
   useEffect(() => {
     fetch(apiUrl("/employees?limit=500"))
@@ -233,12 +234,7 @@ export default function LeaveEntry() {
   }
 
   async function handleRemove(entry: RecentEntry, mode: "cancel" | "delete") {
-    const isHalf = entry.status === "half_day";
-    const confirmMsg =
-      mode === "cancel"
-        ? `Cancel ${isHalf ? "half-day " : ""}leave for ${entry.employeeName} on ${formatDate(entry.date)}?\n\nThe leave balance will be restored.`
-        : `Delete leave entry for ${entry.employeeName} on ${formatDate(entry.date)}?\n\nThe balance will NOT be restored.`;
-    if (!window.confirm(confirmMsg)) return;
+    setConfirm(null);
     setRemovingId(entry.id);
     setSuccessMsg("");
     setErrorMsg("");
@@ -661,41 +657,74 @@ export default function LeaveEntry() {
                         </Badge>
                       </Td>
                       <Td>
-                        <div className="flex items-center justify-end gap-1.5 opacity-70 group-hover:opacity-100 transition-opacity">
-                          {canCancel && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleRemove(entry, "cancel")}
-                              disabled={isBusy}
-                              className="h-8 px-2.5 text-xs gap-1.5"
-                              title="Cancel leave and restore balance"
-                            >
-                              {isBusy ? (
-                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <Undo2 className="w-3.5 h-3.5" />
+                        <div className="flex items-center justify-end gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
+                          {confirm?.id === entry.id ? (
+                            <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200">
+                              <span className="text-xs font-medium text-amber-900">
+                                {confirm.mode === "cancel"
+                                  ? "Cancel & restore balance?"
+                                  : "Permanently delete?"}
+                              </span>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => handleRemove(entry, confirm.mode)}
+                                disabled={isBusy}
+                                className={cn(
+                                  "h-7 px-2.5 text-xs gap-1 text-white",
+                                  confirm.mode === "delete"
+                                    ? "bg-rose-600 hover:bg-rose-700"
+                                    : "bg-amber-600 hover:bg-amber-700"
+                                )}
+                              >
+                                {isBusy ? (
+                                  <RefreshCw className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <CheckCircle2 className="w-3 h-3" />
+                                )}
+                                Yes
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setConfirm(null)}
+                                disabled={isBusy}
+                                className="h-7 px-2 text-xs"
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <>
+                              {canCancel && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setConfirm({ id: entry.id, mode: "cancel" })}
+                                  disabled={isBusy || removingId !== null}
+                                  className="h-8 px-2.5 text-xs gap-1.5"
+                                  title="Cancel leave and restore balance"
+                                >
+                                  <Undo2 className="w-3.5 h-3.5" />
+                                  Cancel
+                                </Button>
                               )}
-                              Cancel
-                            </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setConfirm({ id: entry.id, mode: "delete" })}
+                                disabled={isBusy || removingId !== null}
+                                className="h-8 px-2.5 text-xs gap-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                title="Delete entry without restoring balance"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                Delete
+                              </Button>
+                            </>
                           )}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemove(entry, "delete")}
-                            disabled={isBusy}
-                            className="h-8 px-2.5 text-xs gap-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                            title="Delete entry without restoring balance"
-                          >
-                            {isBusy ? (
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-3.5 h-3.5" />
-                            )}
-                            Delete
-                          </Button>
                         </div>
                       </Td>
                     </Tr>
