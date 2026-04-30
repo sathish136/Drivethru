@@ -1,5 +1,5 @@
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { AppLayout } from "@/components/Layout";
@@ -35,10 +35,42 @@ const queryClient = new QueryClient({
   },
 });
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+async function fetchMe(token: string) {
+  const r = await fetch(`${BASE}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!r.ok) {
+    throw new Error(`auth_me_failed_${r.status}`);
+  }
+  return (await r.json()) as unknown;
+}
+
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const token = localStorage.getItem("auth_token");
 
   if (!token) {
+    return <Redirect to="/login" />;
+  }
+
+  const me = useQuery({
+    queryKey: ["auth", "me", token],
+    queryFn: () => fetchMe(token),
+    staleTime: 0,
+  });
+
+  if (me.isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
+        Loading…
+      </div>
+    );
+  }
+
+  if (me.isError) {
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("auth_user");
     return <Redirect to="/login" />;
   }
 

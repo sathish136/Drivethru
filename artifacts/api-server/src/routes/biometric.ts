@@ -11,7 +11,7 @@ import {
 import { eq, and } from "drizzle-orm";
 import { loadDeptRules, findRule, timeToMins, calcOtHours } from "../lib/hr-rules.js";
 
-const require = createRequire(import.meta.url);
+const require = createRequire(join(process.cwd(), "package.json"));
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
