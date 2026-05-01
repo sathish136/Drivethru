@@ -504,15 +504,15 @@ function AttendanceReport() {
     && (!empName || (r.employeeName || "").toLowerCase().includes(empName.toLowerCase()) || String(r.employeeId || "").toLowerCase().includes(empName.toLowerCase()))
   ), [data, empType, department, empName]);
 
-  const HEADERS = ["Date","Emp ID","Employee","Department","Branch","Designation","Status","In 1","Out 1 (Lunch)","In 2 (After Lunch)","Out 2","Lunch Break","Total Hrs","Late","OT Hrs","Remarks"];
+  const HEADERS = ["Date","Emp ID","Employee","Department","Branch","Designation","Status","1st In","1st Out","2nd In","2nd Out","Lunch Break","Total Hrs","Late","OT Hrs","Remarks"];
   const NIGHT_WATCHER_POLICY_HEADERS = [
     "Date",
     "Day",
     "Status",
     "Shift",
-    "Morning In",
-    "Morning Out",
-    "Afternoon In",
+    "1st In",
+    "1st Out",
+    "2nd In",
     "Actual Off Punch",
     "Current Total",
     "Policy OT by Off Time",
@@ -810,18 +810,18 @@ function AttendanceReport() {
                   {["Date","Emp ID","Employee","Department","Branch","Designation","Status"].map(h=>(
                     <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap" rowSpan={2}>{h}</th>
                   ))}
-                  <th className="px-3 py-2 text-center font-semibold text-blue-600 whitespace-nowrap bg-blue-50/50" colSpan={2}>Morning Session</th>
+                  <th className="px-3 py-2 text-center font-semibold text-blue-600 whitespace-nowrap bg-blue-50/50" colSpan={2}>1st Session</th>
                   <th className="px-3 py-2 text-center font-semibold text-purple-600 whitespace-nowrap bg-purple-50/50" rowSpan={2}>Lunch Break</th>
-                  <th className="px-3 py-2 text-center font-semibold text-orange-600 whitespace-nowrap bg-orange-50/50" colSpan={2}>Afternoon Session</th>
+                  <th className="px-3 py-2 text-center font-semibold text-orange-600 whitespace-nowrap bg-orange-50/50" colSpan={2}>2nd Session</th>
                   <th className="px-3 py-2.5 text-left font-semibold text-green-700 whitespace-nowrap bg-green-50/40" rowSpan={2}>Total Hrs</th>
                   <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap" rowSpan={2}>OT Hrs</th>
                   <th className="px-3 py-2.5 text-left font-semibold text-indigo-600 whitespace-nowrap bg-indigo-50/30" rowSpan={2}>Remarks</th>
                 </tr>
                 <tr className="border-b border-border">
-                  <th className="px-3 py-1 text-[10px] font-medium text-blue-500 bg-blue-50/30 text-center">In 1</th>
-                  <th className="px-3 py-1 text-[10px] font-medium text-blue-500 bg-blue-50/30 text-center">Out 1 (Lunch)</th>
-                  <th className="px-3 py-1 text-[10px] font-medium text-orange-500 bg-orange-50/30 text-center">In 2</th>
-                  <th className="px-3 py-1 text-[10px] font-medium text-orange-500 bg-orange-50/30 text-center">Out 2</th>
+                  <th className="px-3 py-1 text-[10px] font-medium text-blue-500 bg-blue-50/30 text-center">In</th>
+                  <th className="px-3 py-1 text-[10px] font-medium text-blue-500 bg-blue-50/30 text-center">Out</th>
+                  <th className="px-3 py-1 text-[10px] font-medium text-orange-500 bg-orange-50/30 text-center">In</th>
+                  <th className="px-3 py-1 text-[10px] font-medium text-orange-500 bg-orange-50/30 text-center">Out</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">

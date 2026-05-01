@@ -277,10 +277,10 @@ export default function Approvals() {
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                       {[
-                        { label: "In 1",  val: formatTime(rec.inTime1) },
-                        { label: "Out 1", val: formatTime(rec.outTime1) },
-                        { label: "In 2",  val: formatTime(rec.inTime2) },
-                        { label: "Out 2", val: formatTime(rec.outTime2) },
+                        { label: "1st In",  val: formatTime(rec.inTime1) },
+                        { label: "1st Out", val: formatTime(rec.outTime1) },
+                        { label: "2nd In",  val: formatTime(rec.inTime2) },
+                        { label: "2nd Out", val: formatTime(rec.outTime2) },
                       ].map(({ label, val }) => (
                         <div key={label} className="p-2.5 rounded-lg bg-muted/40 border border-border text-center">
                           <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
