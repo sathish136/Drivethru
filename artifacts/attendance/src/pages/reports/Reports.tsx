@@ -1680,7 +1680,7 @@ function IndividualReport() {
 
   const summary = useMemo(() => {
     let present = 0, absent = 0, late = 0, halfDay = 0, leave = 0, holiday = 0, offDay = 0;
-    let totalHours = 0, totalOT = 0, totalLateMins = 0;
+    let totalHours = 0, totalOT = 0, totalRegularOT = 0, totalHolidayOT = 0, holidayWorkedDays = 0, totalLateMins = 0;
     for (const r of records) {
       const st = r.status;
       if (st === "present") present++;
@@ -1691,12 +1691,15 @@ function IndividualReport() {
       else if (st === "holiday") holiday++;
       else if (st === "off_day") offDay++;
       totalHours += r.totalHours || 0;
-      totalOT += r.overtimeHours || 0;
+      const ot = r.overtimeHours || 0;
+      totalOT += ot;
+      if ((r as any).holidayWorked) { totalHolidayOT += ot; holidayWorkedDays++; }
+      else totalRegularOT += ot;
       totalLateMins += (r.morningLateMinutes || 0) + (r.lunchLateMinutes || 0);
     }
     const effectiveDays = daysInMonth - holiday - offDay;
     const attPct = effectiveDays > 0 ? Math.round(((present + halfDay * 0.5) / effectiveDays) * 100) : 0;
-    return { present, absent, late, halfDay, leave, holiday, offDay, totalHours, totalOT, totalLateMins, attPct };
+    return { present, absent, late, halfDay, leave, holiday, offDay, totalHours, totalOT, totalRegularOT, totalHolidayOT, holidayWorkedDays, totalLateMins, attPct };
   }, [records, daysInMonth]);
 
   function fmtHM(mins: number) {
@@ -1778,6 +1781,8 @@ function IndividualReport() {
         const effectiveDays = daysInMonth - holiday - offDay;
         const attPct = effectiveDays > 0 ? Math.round(((present + halfDay * 0.5) / effectiveDays) * 100) : 0;
 
+        let pdfTotalOT = 0, pdfRegularOT = 0, pdfHolidayOT = 0;
+        for (const r of recs) { const ot = r.overtimeHours || 0; pdfTotalOT += ot; if ((r as any).holidayWorked) pdfHolidayOT += ot; else pdfRegularOT += ot; }
         const sumCardsHtml = [
           { label:"Present", val:present, color:"#16a34a" },
           { label:"Absent", val:absent, color:"#dc2626" },
@@ -1787,10 +1792,11 @@ function IndividualReport() {
           { label:"Holiday", val:holiday, color:"#6b7280" },
           { label:"Day Off", val:offDay, color:"#7c3aed" },
           { label:"Total Hours", val:`${Math.floor(totalHours)}:${String(Math.round((totalHours%1)*60)).padStart(2,"00")}`, color:"#0369a1" },
-          { label:"OT Hours", val:`${totalOT.toFixed(1)}h`, color:"#ea580c" },
+          { label:"Reg OT", val:`${pdfRegularOT.toFixed(1)}h`, color:"#ea580c" },
+          { label:"Holiday OT", val:`${pdfHolidayOT.toFixed(1)}h`, color:"#b91c1c" },
           { label:"Late (Total)", val:totalLateMins>0?(totalLateMins<60?`${totalLateMins}m`:fmtHM(totalLateMins)):"0m", color:"#dc2626" },
           { label:"Att. %", val:`${attPct}%`, color:attPct>=90?"#16a34a":attPct>=75?"#ca8a04":"#dc2626" },
-        ].map(c => `<div style="padding:8px 14px;border-right:1px solid #e5e7eb;text-align:center;min-width:70px">
+        ].map(c => `<div style="padding:8px 14px;border-right:1px solid #e5e7eb;text-align:center;min-width:70px${c.label==="Holiday OT"&&pdfHolidayOT>0?";background:#fff1f2":""}">
           <div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;font-weight:600">${c.label}</div>
           <div style="font-size:14px;font-weight:800;color:${c.color};margin-top:2px">${c.val}</div>
         </div>`).join("");
@@ -1820,16 +1826,26 @@ function IndividualReport() {
           const bg = stColorMap[st] || "#f9fafb";
           const lm = (r.morningLateMinutes || 0) + (r.lunchLateMinutes || 0);
           const lateStr = lm > 0 ? (lm < 60 ? `${lm}m` : `${Math.floor(lm/60)}h${lm%60}m`) : "—";
-          const otStr = (r.overtimeHours || 0) > 0 ? `${r.overtimeHours.toFixed(1)}h` : "—";
+          const isHolWorked = !!(r as any).holidayWorked;
+          const holMultiplier = (r as any).holidayMultiplier;
+          const otVal = r.overtimeHours || 0;
+          const otStr = otVal > 0
+            ? isHolWorked
+              ? `<span style="display:inline-block;background:#fee2e2;color:#b91c1c;font-weight:700;padding:1px 5px;border-radius:4px">🏖 ${otVal.toFixed(1)}h ×${holMultiplier ?? "?"}</span>`
+              : `<span style="color:#ea580c;font-weight:600">${otVal.toFixed(1)}h</span>`
+            : isHolWorked
+              ? `<span style="color:#f87171;font-size:8px">🏖 worked</span>`
+              : "—";
           const lbMins = (() => {
             if (!r.outTime1 || !r.inTime2) return 0;
             const [oh,om] = r.outTime1.split(":").map(Number);
             const [ih,im] = r.inTime2.split(":").map(Number);
             return Math.max(0,(ih*60+im)-(oh*60+om));
           })();
-          rowsHtml += `<tr style="background:${bg}">
+          const rowBg = isHolWorked ? "#fff1f2" : bg;
+          rowsHtml += `<tr style="background:${rowBg}">
             <td>${d}</td><td>${dayName}</td>
-            <td style="font-weight:700">${statusLabel}</td>
+            <td style="font-weight:700">${isHolWorked ? `${statusLabel} <span style="font-size:7px;background:#fecaca;color:#b91c1c;padding:1px 4px;border-radius:3px;font-weight:700">${(r as any).holidayName||"Holiday"}</span>` : statusLabel}</td>
             <td>${r.inTime1||"—"}</td><td>${r.outTime1||"—"}</td>
             <td>${r.inTime2||"—"}</td><td>${r.outTime2||"—"}</td>
             <td>${lbMins>0?fmtHM(lbMins):"—"}</td>
@@ -1925,7 +1941,7 @@ function IndividualReport() {
 
   function handleExportExcel() {
     if (!selectedEmp || records.length === 0) return;
-    const HEADERS = ["#","Date","Day","Status","Morning In","Lunch Out","Lunch In","End Out","Lunch Break","Total Hrs","Late","OT Hrs"];
+    const HEADERS = ["#","Date","Day","Status","Morning In","Lunch Out","Lunch In","End Out","Lunch Break","Total Hrs","Late","OT Hrs","Holiday OT?","Holiday Name","OT Rate"];
     const offDaysListXls = empOffDays.get(Number(selectedEmp.id)) || [];
     const rows = Array.from({ length: daysInMonth }, (_, i) => {
       const d = i + 1;
@@ -1954,6 +1970,9 @@ function IndividualReport() {
         fmtTotal(r.totalHours),
         lateStr,
         (r.overtimeHours||0) > 0 ? (r.overtimeHours as number).toFixed(1) : "",
+        (r as any).holidayWorked ? "YES" : "",
+        (r as any).holidayName || "",
+        (r as any).holidayWorked ? `×${(r as any).holidayMultiplier ?? ""}` : "",
       ];
     });
     const safeMonth = `${getMonthName(month)}-${year}`;
@@ -2064,21 +2083,22 @@ function IndividualReport() {
       {activeEmpId && showReport && (
         <>
           {summary && records.length > 0 && (
-            <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-11 gap-2">
+            <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-12 gap-2">
               {[
-                {label:"Present",   val:summary.present,   cls:"text-green-600"},
-                {label:"Absent",    val:summary.absent,    cls:"text-red-600"},
-                {label:"Late Days", val:summary.late,      cls:"text-amber-600"},
-                {label:"Half Day",  val:summary.halfDay,   cls:"text-yellow-600"},
-                {label:"Leave",     val:summary.leave,     cls:"text-purple-600"},
-                {label:"Holiday",   val:summary.holiday,   cls:"text-gray-500"},
-                {label:"Day Off",   val:summary.offDay,    cls:"text-violet-600"},
-                {label:"Work Hrs",  val:`${Math.floor(summary.totalHours)}:${String(Math.round((summary.totalHours%1)*60)).padStart(2,"0")}`, cls:"text-blue-600"},
-                {label:"OT Hrs",    val:`${summary.totalOT.toFixed(1)}h`,                                                                     cls:"text-orange-600"},
-                {label:"Late Min",  val:summary.totalLateMins>0?`${summary.totalLateMins}m`:"0",                                              cls:"text-red-500"},
-                {label:"Att %",     val:`${summary.attPct}%`,                                                                                  cls:summary.attPct>=90?"text-green-600":summary.attPct>=75?"text-yellow-600":"text-red-600"},
+                {label:"Present",    val:summary.present,   cls:"text-green-600"},
+                {label:"Absent",     val:summary.absent,    cls:"text-red-600"},
+                {label:"Late Days",  val:summary.late,      cls:"text-amber-600"},
+                {label:"Half Day",   val:summary.halfDay,   cls:"text-yellow-600"},
+                {label:"Leave",      val:summary.leave,     cls:"text-purple-600"},
+                {label:"Holiday",    val:summary.holiday,   cls:"text-gray-500"},
+                {label:"Day Off",    val:summary.offDay,    cls:"text-violet-600"},
+                {label:"Work Hrs",   val:`${Math.floor(summary.totalHours)}:${String(Math.round((summary.totalHours%1)*60)).padStart(2,"0")}`, cls:"text-blue-600"},
+                {label:"Reg OT",     val:`${summary.totalRegularOT.toFixed(1)}h`,                                                              cls:"text-orange-500"},
+                {label:"Holiday OT", val:`${summary.totalHolidayOT.toFixed(1)}h`,                                                             cls:"text-red-600"},
+                {label:"Late Min",   val:summary.totalLateMins>0?`${summary.totalLateMins}m`:"0",                                             cls:"text-red-500"},
+                {label:"Att %",      val:`${summary.attPct}%`,                                                                                 cls:summary.attPct>=90?"text-green-600":summary.attPct>=75?"text-yellow-600":"text-red-600"},
               ].map(({label,val,cls})=>(
-                <Card key={label} className="p-2 text-center">
+                <Card key={label} className={cn("p-2 text-center", label==="Holiday OT" && summary.totalHolidayOT>0 ? "ring-1 ring-red-200 bg-red-50/30" : "")}>
                   <div className={cn("text-lg font-bold",cls)}>{val}</div>
                   <div className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{label}</div>
                 </Card>
@@ -2105,7 +2125,7 @@ function IndividualReport() {
                       <th className="px-3 py-2.5 text-left font-semibold text-purple-600 bg-purple-50/50">Lunch</th>
                       <th className="px-3 py-2.5 text-left font-semibold text-green-700 bg-green-50/50">Total Hrs</th>
                       <th className="px-3 py-2.5 text-left font-semibold text-red-500">Late</th>
-                      <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">OT</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-orange-600">OT</th>
                     </tr>
                     <tr className="border-b border-border">
                       <th className="px-3 py-1" colSpan={4}></th>
@@ -2115,7 +2135,8 @@ function IndividualReport() {
                       <th className="px-3 py-1 text-xs font-medium text-orange-500 bg-orange-50/30 text-center">Out</th>
                       <th className="px-3 py-1 bg-purple-50/30"></th>
                       <th className="px-3 py-1 bg-green-50/30"></th>
-                      <th className="px-3 py-1" colSpan={2}></th>
+                      <th className="px-3 py-1"></th>
+                      <th className="px-3 py-1 text-[10px] font-medium text-orange-500">Reg / Hol</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -2177,7 +2198,24 @@ function IndividualReport() {
                               ) : <span className="text-muted-foreground">—</span>}
                             </td>
                             <td className="px-3 py-2 font-mono">
-                              {(r.overtimeHours||0)>0 ? <span className="text-orange-600 font-semibold">{r.overtimeHours.toFixed(1)}h</span> : <span className="text-muted-foreground">—</span>}
+                              {(r.overtimeHours||0) > 0 ? (
+                                (r as any).holidayWorked ? (
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold whitespace-nowrap">
+                                      🏖 {r.overtimeHours.toFixed(1)}h
+                                    </span>
+                                    <span className="text-[9px] text-red-500 font-semibold">
+                                      ×{(r as any).holidayMultiplier ?? "?"} OT
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-orange-600 font-semibold">{r.overtimeHours.toFixed(1)}h</span>
+                                )
+                              ) : (r as any).holidayWorked ? (
+                                <span className="text-[10px] text-red-400 font-medium">🏖 worked</span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
                             </td>
                           </tr>
                         );
