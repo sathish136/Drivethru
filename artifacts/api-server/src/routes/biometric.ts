@@ -342,8 +342,7 @@ router.post("/parse-pdf", upload.single("pdf"), async (req, res) => {
     return;
   }
   try {
-    const _pdfMod = require("pdf-parse");
-    const pdfParse = typeof _pdfMod === "function" ? _pdfMod : (_pdfMod.default || _pdfMod);
+    const pdfParse = require("pdf-parse");
     const data = await pdfParse(req.file.buffer);
     const text: string = data.text;
 
