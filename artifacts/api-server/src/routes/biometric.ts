@@ -9,7 +9,7 @@ import {
   biometricDevices, biometricLogs, branches, employees, attendanceRecords, shifts,
 } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
-import { loadDeptRules, findRule, timeToMins, calcOtHours } from "../lib/hr-rules.js";
+import { loadDeptRules, findRule, timeToMins, calcOtHours, isNightShiftRecord } from "../lib/hr-rules.js";
 
 const require = createRequire(join(process.cwd(), "package.json"));
 
@@ -98,10 +98,130 @@ router.get("/logs", async (req, res) => {
 
 // ─── SQLite Push DB Sync ─────────────────────────────────────────────────────
 
+/**
+ * Hours between two "HH:MM" strings.
+ * Handles midnight crossover automatically: if t2 < t1, assumes the span
+ * crosses midnight and adds 24 h to the difference.
+ */
 function diffHrs(t1: string, t2: string): number {
   const [h1, m1] = t1.split(":").map(Number);
   const [h2, m2] = t2.split(":").map(Number);
-  return ((h2 * 60 + m2) - (h1 * 60 + m1)) / 60;
+  let diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+  if (diff < 0) diff += 24 * 60; // midnight crossover
+  return diff / 60;
+}
+
+/**
+ * For night-shift employees, normalise a "HH:MM" minute value so that
+ * after-midnight times sort AFTER evening times.
+ * Uses noon (12:00 = 720 min) as the crossover boundary.
+ *   e.g. "01:30" (90 min) → 90 + 1440 = 1530   (sorts after "23:30" = 1410)
+ *        "20:00" (1200 min) → 1200               (unchanged)
+ */
+function nightNorm(hhmm: string): number {
+  const m = timeToMins(hhmm);
+  return m < 12 * 60 ? m + 24 * 60 : m;
+}
+
+/**
+ * Re-attribute a punch's calendar date to its "work date" for night-shift
+ * employees.  Any punch before noon belongs to the PREVIOUS night's shift.
+ */
+function nightWorkDate(calendarDate: string, timePart: string): string {
+  if (timeToMins(timePart) < 12 * 60) {
+    const d = new Date(calendarDate + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+  }
+  return calendarDate;
+}
+
+/**
+ * Compute Night Watcher OT hours from the FULL list of punch times for a
+ * single night's shift (all punches, not just 4 slots).
+ *
+ * OT window: otStart (default 05:00) → otEnd (default 08:00), max 3 hours.
+ * Base OT is determined from how late the last punch is:
+ *   ≥ 07:50 → 3 h,  ≥ 07:00 → 2 h,  ≥ 06:00 → 1 h,  < 06:00 → 0 h
+ * Each required hourly checkpoint (05:xx, 06:xx, 07:xx) that has NO punch
+ * within that 60-minute window deducts 1 h from OT.
+ */
+function nightWatcherOtFromPunches(
+  punchTimes: string[],
+  otStart = "05:00",
+  otEnd = "08:00",
+  nearEndGraceMinutes = 10,
+): number {
+  if (punchTimes.length === 0) return 0;
+
+  // Night-normalise the OT boundary times so they compare correctly against
+  // nightNorm(punch) values (e.g. 05:00 raw = 300 min → +1440 = 1740 norm).
+  const rawStart  = timeToMins(otStart);
+  const rawEnd    = timeToMins(otEnd);
+  const normStart = rawStart < 12 * 60 ? rawStart + 24 * 60 : rawStart; // e.g. 1740
+  const normEnd   = rawEnd   < 12 * 60 ? rawEnd   + 24 * 60 : rawEnd;   // e.g. 1920
+  const nearEnd   = normEnd - nearEndGraceMinutes;                        // e.g. 1910
+
+  const normMins = punchTimes.map(nightNorm);
+  const lastMins = Math.max(...normMins);
+
+  let baseOt = 0;
+  if (lastMins >= nearEnd)              baseOt = 3; // last punch ≥ 07:50
+  else if (lastMins >= normStart + 120) baseOt = 2; // last punch ≥ 07:00
+  else if (lastMins >= normStart + 60)  baseOt = 1; // last punch ≥ 06:00
+
+  if (baseOt === 0) return 0;
+
+  // Each required hourly checkpoint that has no punch deducts 1 h from OT
+  const checkpoints = [normStart, normStart + 60, normStart + 120]; // 05, 06, 07 (normalised)
+  let missing = 0;
+  for (let i = 0; i < baseOt; i++) {
+    const cp = checkpoints[i];
+    const hasPunch = normMins.some(p => p >= cp && p < cp + 60);
+    if (!hasPunch) missing++;
+  }
+
+  return Math.max(0, Math.min(3, baseOt - missing));
+}
+
+/**
+ * Build the 4 attendance time-slots from ALL punch times for a night shift.
+ * Slot strategy:
+ *   inTime1  = first punch  (shift start)
+ *   outTime1 = last punch before OT window  (< otStart)
+ *   inTime2  = first punch inside OT window (≥ otStart)
+ *   outTime2 = last punch  (shift end / OT end)
+ *
+ * This ensures calcNightWatcherPolicyOtHours receives the most useful
+ * timestamps in the 4 available slots.
+ */
+function nightSlots(sortedPunches: string[], otStartTime = "05:00"): {
+  inTime1: string;
+  outTime1: string | null;
+  inTime2: string | null;
+  outTime2: string | null;
+} {
+  const rawStart  = timeToMins(otStartTime);
+  // Night-normalise the OT boundary so it compares correctly with nightNorm() punch values.
+  // e.g. "05:00" raw = 300 → normalised = 1740 (after midnight → +1440)
+  const normOtStart = rawStart < 12 * 60 ? rawStart + 24 * 60 : rawStart;
+
+  // Separate pre-OT and OT-window punches using night-normalised minutes
+  const preOt  = sortedPunches.filter(t => nightNorm(t) < normOtStart);
+  const inOt   = sortedPunches.filter(t => nightNorm(t) >= normOtStart);
+
+  const inTime1  = sortedPunches[0];
+  const outTime1 = preOt.length >= 2 ? preOt[preOt.length - 1] : (preOt.length === 1 && preOt[0] !== inTime1 ? preOt[0] : null);
+  const inTime2  = inOt.length >= 1 ? inOt[0] : null;
+  const outTime2 = inOt.length >= 2 ? inOt[inOt.length - 1] : (inOt.length === 1 ? inOt[0] : null);
+
+  // De-duplicate adjacent identical slots
+  return {
+    inTime1,
+    outTime1: outTime1 !== inTime1 ? outTime1 : null,
+    inTime2,
+    outTime2: outTime2 !== inTime2 ? outTime2 : null,
+  };
 }
 
 type AttRow = { pin: string; time: string; status: string };
@@ -129,6 +249,13 @@ async function processAttRows(rows: AttRow[]) {
   const shiftMap = new Map(allShifts.map(s => [s.id, s]));
   const deptRules = await loadDeptRules();
 
+  // Pre-compute night-shift indicator per PIN so we can group correctly
+  const nightShiftPins = new Set<string>();
+  for (const [pin, emp] of empByBiometricId) {
+    const s = emp.shiftId ? shiftMap.get(emp.shiftId) : undefined;
+    if (isNightShiftRecord(s?.startTime1)) nightShiftPins.add(pin);
+  }
+
   type DayLog = { time: string; type: "in" | "out" };
   const grouped = new Map<string, Map<string, DayLog[]>>();
 
@@ -137,17 +264,22 @@ async function processAttRows(rows: AttRow[]) {
     const timeStr = (row.time || "").trim();
     if (!pin || !timeStr) continue;
 
-    const datePart = timeStr.slice(0, 10);
+    const calendarDate = timeStr.slice(0, 10);
     const timePart = timeStr.slice(11, 16);
-    if (!datePart || !timePart) continue;
+    if (!calendarDate || !timePart) continue;
 
     const status = String(row.status || "0");
     const punchType: "in" | "out" = (status === "1" || status === "255") ? "out" : "in";
 
+    // For night-shift employees: punches before noon belong to the previous shift's work date
+    const workDate = nightShiftPins.has(pin)
+      ? nightWorkDate(calendarDate, timePart)
+      : calendarDate;
+
     if (!grouped.has(pin)) grouped.set(pin, new Map());
     const byDate = grouped.get(pin)!;
-    if (!byDate.has(datePart)) byDate.set(datePart, []);
-    byDate.get(datePart)!.push({ time: timePart, type: punchType });
+    if (!byDate.has(workDate)) byDate.set(workDate, []);
+    byDate.get(workDate)!.push({ time: timePart, type: punchType });
   }
 
   for (const [pin, dateMap] of grouped) {
@@ -156,47 +288,84 @@ async function processAttRows(rows: AttRow[]) {
 
     const empShift = emp.shiftId ? shiftMap.get(emp.shiftId) : undefined;
     const rule = findRule(deptRules, emp.department ?? "", empShift?.name);
+    const isNightShift = isNightShiftRecord(empShift?.startTime1) || (rule.nightWatcherPayroll ?? false);
     const shiftStartMins = empShift?.startTime1 ? timeToMins(empShift.startTime1) : 8 * 60;
     const lateThresholdMins = shiftStartMins + (rule.lateGraceMinutes ?? 15);
 
     for (const [date, logs] of dateMap) {
-      const sorted = logs.sort((a, b) => a.time.localeCompare(b.time));
-      const count = sorted.length;
-      if (count === 0) { stats.skipped++; continue; }
+      if (logs.length === 0) { stats.skipped++; continue; }
 
-      // Derive Morning & Afternoon sessions from ALL punches:
-      //   1st punch          -> Morning IN
-      //   2nd punch          -> Morning OUT (Lunch)
-      //   second-last punch  -> Afternoon IN
-      //   last punch         -> Afternoon OUT
-      // Middle punches are ignored.
-      const inTime1: string = sorted[0].time;
-      const outTime1: string | null = count >= 2 ? sorted[1].time : null;
-      const inTime2: string | null = count >= 3 ? sorted[count - 2].time : null;
-      const outTime2: string | null = count >= 3 ? sorted[count - 1].time : null;
+      // Sort punches – for night shifts, after-midnight times sort after evening times
+      const sorted = isNightShift
+        ? logs.slice().sort((a, b) => nightNorm(a.time) - nightNorm(b.time))
+        : logs.slice().sort((a, b) => a.time.localeCompare(b.time));
 
+      const allTimes = sorted.map(l => l.time);
+
+      let inTime1: string, outTime1: string | null, inTime2: string | null, outTime2: string | null;
       let workHours1: number | null = null;
-      if (outTime1 && outTime1 !== inTime1) {
-        const d = diffHrs(inTime1, outTime1);
-        if (d > 0) workHours1 = Math.round(d * 100) / 100;
-      }
       let workHours2: number | null = null;
-      if (inTime2 && outTime2 && outTime2 !== inTime2) {
-        const d = diffHrs(inTime2, outTime2);
-        if (d > 0) workHours2 = Math.round(d * 100) / 100;
-      }
-
       let totalHours: number | null = null;
       let overtimeHours: number | null = null;
-      const sumHrs = (workHours1 ?? 0) + (workHours2 ?? 0);
-      if (sumHrs > 0) {
-        totalHours = Math.round(sumHrs * 100) / 100;
-        const earlyMins = timeToMins(inTime1) < shiftStartMins ? shiftStartMins - timeToMins(inTime1) : 0;
-        overtimeHours = Math.round(calcOtHours(totalHours, rule, earlyMins) * 100) / 100;
+
+      if (isNightShift) {
+        // ── Night Watcher special handling ──────────────────────────────
+        const otStart = rule.otStartTime ?? "05:00";
+        const slots = nightSlots(allTimes, otStart);
+        inTime1  = slots.inTime1;
+        outTime1 = slots.outTime1;
+        inTime2  = slots.inTime2;
+        outTime2 = slots.outTime2;
+
+        // Total hours = first punch to last punch (with midnight crossover)
+        const firstPunch = allTimes[0];
+        const lastPunch  = allTimes[allTimes.length - 1];
+        const th = diffHrs(firstPunch, lastPunch);
+        if (th > 0) totalHours = Math.round(th * 100) / 100;
+
+        // Regular shift hours (before OT window)
+        if (outTime1) {
+          const d = diffHrs(inTime1, outTime1);
+          if (d > 0) workHours1 = Math.round(d * 100) / 100;
+        }
+        // OT window hours
+        if (inTime2 && outTime2) {
+          const d = diffHrs(inTime2, outTime2);
+          if (d > 0) workHours2 = Math.round(d * 100) / 100;
+        }
+
+        // OT computed from ALL punches so no hourly checkpoint is missed
+        overtimeHours = nightWatcherOtFromPunches(allTimes, otStart);
+
+      } else {
+        // ── Regular / day-shift handling ─────────────────────────────────
+        inTime1  = allTimes[0];
+        const count = allTimes.length;
+        outTime1 = count >= 2 ? allTimes[1] : null;
+        inTime2  = count >= 3 ? allTimes[count - 2] : null;
+        outTime2 = count >= 3 ? allTimes[count - 1] : null;
+
+        if (outTime1 && outTime1 !== inTime1) {
+          const d = diffHrs(inTime1, outTime1);
+          if (d > 0) workHours1 = Math.round(d * 100) / 100;
+        }
+        if (inTime2 && outTime2 && outTime2 !== inTime2) {
+          const d = diffHrs(inTime2, outTime2);
+          if (d > 0) workHours2 = Math.round(d * 100) / 100;
+        }
+
+        const sumHrs = (workHours1 ?? 0) + (workHours2 ?? 0);
+        if (sumHrs > 0) {
+          totalHours = Math.round(sumHrs * 100) / 100;
+          const earlyMins = timeToMins(inTime1) < shiftStartMins ? shiftStartMins - timeToMins(inTime1) : 0;
+          overtimeHours = Math.round(calcOtHours(totalHours, rule, earlyMins) * 100) / 100;
+        }
       }
 
-      const arrivalMins = timeToMins(inTime1);
-      const status: "present" | "late" = arrivalMins > lateThresholdMins ? "late" : "present";
+      const arrivalMins = isNightShift ? nightNorm(inTime1) : timeToMins(inTime1);
+      const effectiveShiftStartMins = isNightShift ? nightNorm(empShift?.startTime1 ?? "20:00") : shiftStartMins;
+      const status: "present" | "late" = arrivalMins > effectiveShiftStartMins + (rule.lateGraceMinutes ?? 15)
+        ? "late" : "present";
 
       const record: any = {
         employeeId: emp.id,
@@ -204,13 +373,13 @@ async function processAttRows(rows: AttRow[]) {
         date,
         status,
         inTime1,
-        outTime1: outTime1,
-        workHours1: workHours1,
-        inTime2: inTime2,
-        outTime2: outTime2,
-        workHours2: workHours2,
-        totalHours: totalHours,
-        overtimeHours: overtimeHours,
+        outTime1,
+        workHours1,
+        inTime2,
+        outTime2,
+        workHours2,
+        totalHours,
+        overtimeHours,
         source: "biometric" as const,
       };
 
@@ -401,52 +570,87 @@ router.post("/import-pdf-rows", async (req, res) => {
     const deptRules = await loadDeptRules();
     const empShift = emp.shiftId ? shiftMap.get(emp.shiftId) : undefined;
     const rule = findRule(deptRules, emp.department ?? "", empShift?.name);
+    const isNightShift = isNightShiftRecord(empShift?.startTime1) || (rule.nightWatcherPayroll ?? false);
     const shiftStartMins = empShift?.startTime1 ? timeToMins(empShift.startTime1) : 8 * 60;
-    const lateThresholdMins = shiftStartMins + (rule.lateGraceMinutes ?? 15);
+    const otStart = rule.otStartTime ?? "05:00";
 
-    // Group by date
+    // Group punches by WORK date (night-shift aware)
     const byDate = new Map<string, string[]>();
     for (const row of rows) {
       if (!row.date || !row.time) continue;
       const timePart = row.time.slice(0, 5); // HH:MM
-      if (!byDate.has(row.date)) byDate.set(row.date, []);
-      byDate.get(row.date)!.push(timePart);
+      const workDate = isNightShift ? nightWorkDate(row.date, timePart) : row.date;
+      if (!byDate.has(workDate)) byDate.set(workDate, []);
+      byDate.get(workDate)!.push(timePart);
     }
 
     let created = 0, updated = 0, skipped = 0;
 
     for (const [date, times] of byDate) {
-      const sorted = [...times].sort();
-      const count = sorted.length;
-      if (count === 0) { skipped++; continue; }
+      if (times.length === 0) { skipped++; continue; }
 
-      const inTime1: string = sorted[0];
-      const outTime1: string | null = count >= 2 ? sorted[1] : null;
-      const inTime2: string | null = count >= 3 ? sorted[count - 2] : null;
-      const outTime2: string | null = count >= 3 ? sorted[count - 1] : null;
+      // Sort – night-shift aware
+      const sorted = isNightShift
+        ? [...times].sort((a, b) => nightNorm(a) - nightNorm(b))
+        : [...times].sort();
 
+      let inTime1: string, outTime1: string | null, inTime2: string | null, outTime2: string | null;
       let workHours1: number | null = null;
-      if (outTime1 && outTime1 !== inTime1) {
-        const d = diffHrs(inTime1, outTime1);
-        if (d > 0) workHours1 = Math.round(d * 100) / 100;
-      }
       let workHours2: number | null = null;
-      if (inTime2 && outTime2 && outTime2 !== inTime2) {
-        const d = diffHrs(inTime2, outTime2);
-        if (d > 0) workHours2 = Math.round(d * 100) / 100;
-      }
-
       let totalHours: number | null = null;
       let overtimeHours: number | null = null;
-      const sumHrs = (workHours1 ?? 0) + (workHours2 ?? 0);
-      if (sumHrs > 0) {
-        totalHours = Math.round(sumHrs * 100) / 100;
-        const earlyMins = timeToMins(inTime1) < shiftStartMins ? shiftStartMins - timeToMins(inTime1) : 0;
-        overtimeHours = Math.round(calcOtHours(totalHours, rule, earlyMins) * 100) / 100;
+
+      if (isNightShift) {
+        const slots = nightSlots(sorted, otStart);
+        inTime1  = slots.inTime1;
+        outTime1 = slots.outTime1;
+        inTime2  = slots.inTime2;
+        outTime2 = slots.outTime2;
+
+        // Total hours: first to last punch with midnight crossover
+        const th = diffHrs(sorted[0], sorted[sorted.length - 1]);
+        if (th > 0) totalHours = Math.round(th * 100) / 100;
+
+        if (outTime1) {
+          const d = diffHrs(inTime1, outTime1);
+          if (d > 0) workHours1 = Math.round(d * 100) / 100;
+        }
+        if (inTime2 && outTime2) {
+          const d = diffHrs(inTime2, outTime2);
+          if (d > 0) workHours2 = Math.round(d * 100) / 100;
+        }
+
+        overtimeHours = nightWatcherOtFromPunches(sorted, otStart);
+
+      } else {
+        const count = sorted.length;
+        inTime1  = sorted[0];
+        outTime1 = count >= 2 ? sorted[1] : null;
+        inTime2  = count >= 3 ? sorted[count - 2] : null;
+        outTime2 = count >= 3 ? sorted[count - 1] : null;
+
+        if (outTime1 && outTime1 !== inTime1) {
+          const d = diffHrs(inTime1, outTime1);
+          if (d > 0) workHours1 = Math.round(d * 100) / 100;
+        }
+        if (inTime2 && outTime2 && outTime2 !== inTime2) {
+          const d = diffHrs(inTime2, outTime2);
+          if (d > 0) workHours2 = Math.round(d * 100) / 100;
+        }
+
+        const sumHrs = (workHours1 ?? 0) + (workHours2 ?? 0);
+        if (sumHrs > 0) {
+          totalHours = Math.round(sumHrs * 100) / 100;
+          const earlyMins = timeToMins(inTime1) < shiftStartMins ? shiftStartMins - timeToMins(inTime1) : 0;
+          overtimeHours = Math.round(calcOtHours(totalHours, rule, earlyMins) * 100) / 100;
+        }
       }
 
-      const arrivalMins = timeToMins(inTime1);
-      const status: "present" | "late" = arrivalMins > lateThresholdMins ? "late" : "present";
+      const arrivalMins = isNightShift ? nightNorm(inTime1) : timeToMins(inTime1);
+      const lateThreshold = isNightShift
+        ? nightNorm(empShift?.startTime1 ?? "20:00") + (rule.lateGraceMinutes ?? 15)
+        : shiftStartMins + (rule.lateGraceMinutes ?? 15);
+      const status: "present" | "late" = arrivalMins > lateThreshold ? "late" : "present";
 
       const record: any = {
         employeeId: emp.id,
