@@ -501,7 +501,7 @@ function AttendanceReport() {
   const filtered = useMemo(() => (data?.records || []).filter((r: any) =>
     (!empType || r.employeeType === empType)
     && (!department || r.department === department)
-    && (!empName || (r.employeeName || "").toLowerCase().includes(empName.toLowerCase()))
+    && (!empName || (r.employeeName || "").toLowerCase().includes(empName.toLowerCase()) || String(r.employeeId || "").toLowerCase().includes(empName.toLowerCase()))
   ), [data, empType, department, empName]);
 
   const HEADERS = ["Date","Emp ID","Employee","Department","Branch","Designation","Status","In 1","Out 1 (Lunch)","In 2 (After Lunch)","Out 2","Lunch Break","Total Hrs","Late","OT Hrs","Remarks"];
@@ -973,7 +973,7 @@ function MonthlyReport({ initialEmpName="", initialMonth, initialYear }: { initi
   const filtered = useMemo(() => (data?.employees || []).filter((e: any) =>
     (!empType || e.employeeType === empType)
     && (!department || e.department === department)
-    && (!empName || (e.employeeName || "").toLowerCase().includes(empName.toLowerCase()))
+    && (!empName || (e.employeeName || "").toLowerCase().includes(empName.toLowerCase()) || String(e.employeeId || "").toLowerCase().includes(empName.toLowerCase()))
   ), [data, empType, department, empName]);
 
   const HEADERS = ["Emp ID","Employee","Department","Branch","Designation","Type","Present","Absent","Late (AM)","Lunch Late Days","Half Day","Leave","Holiday","Day Off","Work Hrs","OT Hrs","Late (AM) Min","Lunch Late Min","Att %","Remarks"];
@@ -1146,7 +1146,7 @@ function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { init
 
   const filtered = useMemo(() => (data?.employees || []).filter((e: any) =>
     (!empType || e.employeeType === empType)
-    && (!empName || (e.employeeName || "").toLowerCase().includes(empName.toLowerCase()))
+    && (!empName || (e.employeeName || "").toLowerCase().includes(empName.toLowerCase()) || String(e.employeeId || "").toLowerCase().includes(empName.toLowerCase()))
   ), [data, empType, empName]);
 
   const totalOT = filtered.reduce((s: number, e: any) => s + e.totalOvertimeHours, 0);
@@ -1293,7 +1293,7 @@ function PayrollReport() {
   const filtered = useMemo(() => data.filter(r =>
     (!empType || r.employee.employeeType === empType)
     && (!status || r.status === status)
-    && (!empName || (r.employee.fullName || "").toLowerCase().includes(empName.toLowerCase()))
+    && (!empName || (r.employee.fullName || "").toLowerCase().includes(empName.toLowerCase()) || String(r.employee.employeeId || "").toLowerCase().includes(empName.toLowerCase()))
   ), [data, empType, status, empName]);
 
   const totals = useMemo(() => ({
