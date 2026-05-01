@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { useListBiometricDevices, useCreateBiometricDevice, useUpdateBiometricDevice, useDeleteBiometricDevice, useTestBiometricDevice, useListBranches, useListBiometricLogs } from "@workspace/api-client-react";
 import { PageHeader, Card, Button, Input, Select, Label } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { Plus, Edit2, Trash2, Wifi, WifiOff, AlertCircle, RefreshCw, Info, Copy, Upload, Database, CheckCircle2, XCircle } from "lucide-react";
+import { Plus, Edit2, Trash2, Wifi, WifiOff, AlertCircle, RefreshCw, Info, Copy, Upload, Database, CheckCircle2, XCircle, FileText, User, Calendar, Clock } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -12,7 +12,7 @@ const DEVICE_STATUS: Record<string, { cls: string; icon: React.ElementType }> = 
   error: { cls: "bg-red-100 text-red-700", icon: AlertCircle },
 };
 
-type Tab = "devices" | "logs" | "setup" | "sqlite";
+type Tab = "devices" | "logs" | "pdf-import" | "sqlite" | "setup";
 
 interface DeviceForm {
   name: string; serialNumber: string; model: string;
@@ -33,15 +33,16 @@ export default function Biometric() {
     <div className="space-y-4">
       <PageHeader title="Biometric Devices" description="Manage ZKTeco biometric devices and ZK Push ADMS configuration." />
 
-      <div className="flex gap-1 border-b border-border">
+      <div className="flex gap-1 border-b border-border overflow-x-auto">
         {([
           { id: "devices", label: "Devices" },
           { id: "logs", label: "Push Logs" },
+          { id: "pdf-import", label: "PDF Import" },
           { id: "sqlite", label: "SQLite Sync" },
           { id: "setup", label: "ZK Push Setup Guide" },
         ] as const).map(({ id, label }) => (
           <button key={id} onClick={() => setTab(id)}
-            className={cn("px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
+            className={cn("px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap",
               tab === id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
             )}>
             {label}
@@ -51,6 +52,7 @@ export default function Biometric() {
 
       {tab === "devices" && <DevicesTab />}
       {tab === "logs" && <LogsTab />}
+      {tab === "pdf-import" && <PdfImportTab />}
       {tab === "sqlite" && <SqliteSyncTab />}
       {tab === "setup" && <SetupGuide />}
     </div>
@@ -357,10 +359,312 @@ type SyncResult = {
     created: number;
     updated: number;
     skipped: number;
-    unmatched: number;
+    unmatched?: number;
     totalPunches: number;
+    totalDays?: number;
   };
 };
+
+type ParsedRow = { date: string; time: string };
+
+function PdfImportTab() {
+  const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [step, setStep] = useState<"upload" | "preview" | "done">("upload");
+  const [parsing, setParsing] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
+  const [result, setResult] = useState<SyncResult | null>(null);
+
+  const [employees, setEmployees] = useState<{ id: number; fullName: string; employeeId: string }[]>([]);
+  const [empLoading, setEmpLoading] = useState(false);
+
+  async function loadEmployees() {
+    if (employees.length > 0) return;
+    setEmpLoading(true);
+    try {
+      const resp = await fetch(`${BASE_URL}/api/employees?limit=500&status=active`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("auth_token") || ""}` },
+      });
+      const data = await resp.json();
+      setEmployees((data.employees || []).map((e: any) => ({ id: e.id, fullName: e.fullName, employeeId: e.employeeId })));
+    } catch {}
+    finally { setEmpLoading(false); }
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0] ?? null;
+    setFile(f);
+    setParsedRows([]);
+    setParseError(null);
+    setStep("upload");
+    setResult(null);
+  }
+
+  async function handleParse() {
+    if (!file) return;
+    setParsing(true);
+    setParseError(null);
+    try {
+      const form = new FormData();
+      form.append("pdf", file);
+      const resp = await fetch(`${BASE_URL}/api/biometric/parse-pdf`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${localStorage.getItem("auth_token") || ""}` },
+        body: form,
+      });
+      const data = await resp.json();
+      if (!data.success) {
+        setParseError(data.message || "Failed to parse PDF.");
+      } else {
+        setParsedRows(data.rows || []);
+        setStep("preview");
+        loadEmployees();
+      }
+    } catch (err) {
+      setParseError("Network error: " + (err as Error).message);
+    } finally {
+      setParsing(false);
+    }
+  }
+
+  async function handleImport() {
+    if (!selectedEmployeeId || parsedRows.length === 0) return;
+    setImporting(true);
+    setResult(null);
+    try {
+      const resp = await fetch(`${BASE_URL}/api/biometric/import-pdf-rows`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("auth_token") || ""}`,
+        },
+        body: JSON.stringify({ employeeId: Number(selectedEmployeeId), rows: parsedRows }),
+      });
+      const data = await resp.json();
+      setResult(data);
+      if (data.success) setStep("done");
+    } catch (err) {
+      setResult({ success: false, message: "Network error: " + (err as Error).message });
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  function handleReset() {
+    setFile(null);
+    setParsedRows([]);
+    setParseError(null);
+    setSelectedEmployeeId("");
+    setResult(null);
+    setStep("upload");
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  // Group by date for preview
+  const byDate = parsedRows.reduce<Record<string, string[]>>((acc, r) => {
+    if (!acc[r.date]) acc[r.date] = [];
+    acc[r.date].push(r.time);
+    return acc;
+  }, {});
+  const dateKeys = Object.keys(byDate).sort();
+
+  const selectedEmp = employees.find(e => String(e.id) === selectedEmployeeId);
+
+  return (
+    <div className="space-y-4 max-w-3xl">
+      <Card className="p-5 space-y-4">
+        <div className="flex items-center gap-2 mb-1">
+          <FileText className="w-5 h-5 text-primary" />
+          <h3 className="font-semibold text-sm">Import from AccSoft Raw Data Report PDF</h3>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Upload a <strong>Raw Data Report</strong> exported from AccSoft Timetrack. The system will extract
+          date and time entries from the PDF, then you choose which employee to assign them to.
+        </p>
+
+        {step === "upload" && (
+          <>
+            <div
+              className="border-2 border-dashed border-border rounded-xl p-8 text-center space-y-3 cursor-pointer hover:border-primary/50 transition-colors"
+              onClick={() => fileRef.current?.click()}
+            >
+              <FileText className="w-10 h-10 text-muted-foreground mx-auto" />
+              <div>
+                <p className="text-sm font-medium">{file ? file.name : "Select AccSoft PDF report"}</p>
+                {file && <p className="text-xs text-muted-foreground mt-0.5">{(file.size / 1024).toFixed(1)} KB</p>}
+                {!file && <p className="text-xs text-muted-foreground mt-1">Click to browse or drag & drop a PDF file</p>}
+              </div>
+              {file && <p className="text-xs text-primary underline">Change file</p>}
+            </div>
+            <input ref={fileRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleFileChange} />
+
+            {parseError && (
+              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <XCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-red-700">{parseError}</p>
+              </div>
+            )}
+
+            <div className="border border-blue-200 bg-blue-50/30 rounded-lg p-3">
+              <p className="text-xs text-blue-800 font-medium mb-1">Supported format:</p>
+              <ul className="text-xs text-blue-700 space-y-0.5 list-disc list-inside">
+                <li>AccSoft Timetrack <strong>Raw Data Report</strong> PDF</li>
+                <li>Columns extracted: <strong>Trn Date</strong> and <strong>Time</strong> only</li>
+                <li>You will select the employee after parsing</li>
+              </ul>
+            </div>
+
+            <Button onClick={handleParse} disabled={!file || parsing} className="w-full">
+              {parsing
+                ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Parsing PDF...</>
+                : <><Upload className="w-4 h-4 mr-2" /> Parse PDF</>
+              }
+            </Button>
+          </>
+        )}
+
+        {step === "preview" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-green-600" />
+                <span className="text-sm font-medium text-green-800">
+                  Parsed {parsedRows.length} punch entries across {dateKeys.length} days
+                </span>
+              </div>
+              <button onClick={handleReset} className="text-xs text-muted-foreground hover:text-foreground underline">
+                Upload different file
+              </button>
+            </div>
+
+            {/* Employee selector */}
+            <div className="p-4 bg-muted/40 border border-border rounded-xl space-y-2">
+              <div className="flex items-center gap-2">
+                <User className="w-4 h-4 text-primary" />
+                <Label className="text-sm font-semibold">Assign to Employee</Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Select which employee these attendance records belong to. All {parsedRows.length} punches will be saved under this employee.
+              </p>
+              <Select
+                value={selectedEmployeeId}
+                onChange={e => setSelectedEmployeeId(e.target.value)}
+                className="w-full"
+              >
+                <option value="">-- Select Employee --</option>
+                {empLoading && <option disabled>Loading employees...</option>}
+                {employees.map(e => (
+                  <option key={e.id} value={String(e.id)}>
+                    {e.fullName} ({e.employeeId})
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            {/* Preview table */}
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5" /> Preview — date × punches
+              </p>
+              <div className="border border-border rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/50 sticky top-0">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-muted-foreground">Date</th>
+                      <th className="px-3 py-2 text-left font-semibold text-muted-foreground">Punches</th>
+                      <th className="px-3 py-2 text-left font-semibold text-muted-foreground">Times</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {dateKeys.map(date => {
+                      const times = byDate[date].sort();
+                      return (
+                        <tr key={date} className="hover:bg-muted/30">
+                          <td className="px-3 py-2 font-mono font-medium">{date}</td>
+                          <td className="px-3 py-2">
+                            <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-semibold">
+                              {times.length}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground">
+                            <div className="flex flex-wrap gap-1">
+                              {times.map((t, i) => (
+                                <span key={i} className="flex items-center gap-0.5 bg-muted px-1.5 py-0.5 rounded font-mono text-[10px]">
+                                  <Clock className="w-2.5 h-2.5" />{t}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {result && !result.success && (
+              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <XCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-red-700">{result.message}</p>
+              </div>
+            )}
+
+            <Button
+              onClick={handleImport}
+              disabled={!selectedEmployeeId || importing}
+              className="w-full"
+            >
+              {importing
+                ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Importing...</>
+                : <><Upload className="w-4 h-4 mr-2" /> Import {parsedRows.length} Punches for {selectedEmp?.fullName || "Selected Employee"}</>
+              }
+            </Button>
+          </div>
+        )}
+
+        {step === "done" && result && (
+          <div className="space-y-4">
+            <div className={cn("p-4 rounded-xl border flex items-start gap-3", result.success ? "bg-green-50/40 border-green-200" : "bg-red-50/40 border-red-200")}>
+              {result.success
+                ? <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
+                : <XCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+              }
+              <div className="flex-1">
+                <p className={cn("text-sm font-semibold", result.success ? "text-green-800" : "text-red-800")}>
+                  {result.success ? "Import Successful" : "Import Failed"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">{result.message}</p>
+                {result.stats && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+                    {[
+                      { label: "Total Punches", value: result.stats.totalPunches, color: "text-foreground" },
+                      { label: "Days Processed", value: result.stats.totalDays ?? 0, color: "text-blue-700" },
+                      { label: "Created", value: result.stats.created, color: "text-green-700" },
+                      { label: "Updated", value: result.stats.updated, color: "text-amber-700" },
+                    ].map(s => (
+                      <div key={s.label} className="bg-background border border-border rounded-lg p-3 text-center">
+                        <p className={cn("text-xl font-bold", s.color)}>{s.value}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <Button variant="outline" onClick={handleReset} className="w-full">
+              Import Another PDF
+            </Button>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
 
 function SqliteSyncTab() {
   const fileRef = useRef<HTMLInputElement>(null);

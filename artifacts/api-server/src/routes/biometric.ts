@@ -317,4 +317,177 @@ router.post("/sync-sqlite", upload.single("db"), async (req, res) => {
   }
 });
 
+// ─── AccSoft PDF Import ───────────────────────────────────────────────────────
+
+function to24h(time12: string): string {
+  const m = time12.match(/^(\d{1,2}):(\d{2}):(\d{2})(AM|PM)$/i);
+  if (!m) return time12.slice(0, 5);
+  let hours = parseInt(m[1], 10);
+  const mins = m[2];
+  const secs = m[3];
+  const period = m[4].toUpperCase();
+  if (period === "AM" && hours === 12) hours = 0;
+  if (period === "PM" && hours !== 12) hours += 12;
+  return `${String(hours).padStart(2, "0")}:${mins}:${secs}`;
+}
+
+/**
+ * POST /api/biometric/parse-pdf
+ * Upload an AccSoft Timetrack Raw Data Report PDF.
+ * Returns parsed date + time rows (employee selection happens on the frontend).
+ */
+router.post("/parse-pdf", upload.single("pdf"), async (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ success: false, message: "No PDF file uploaded." });
+    return;
+  }
+  try {
+    const _pdfMod = require("pdf-parse");
+    const pdfParse = typeof _pdfMod === "function" ? _pdfMod : (_pdfMod.default || _pdfMod);
+    const data = await pdfParse(req.file.buffer);
+    const text: string = data.text;
+
+    const rows: { date: string; time: string }[] = [];
+    for (const line of text.split(/\n/)) {
+      const dateMatch = line.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+      const timeMatch = line.match(/(\d{1,2}:\d{2}:\d{2}\s*[AP]M)/i);
+      if (dateMatch && timeMatch) {
+        const [, dd, mm, yyyy] = dateMatch;
+        const date = `${yyyy}-${mm}-${dd}`;
+        const time = to24h(timeMatch[1].replace(/\s+/g, ""));
+        rows.push({ date, time });
+      }
+    }
+
+    if (rows.length === 0) {
+      res.status(400).json({ success: false, message: "No valid date/time rows found in this PDF. Make sure it is an AccSoft Raw Data Report." });
+      return;
+    }
+
+    res.json({ success: true, rows, total: rows.length });
+  } catch (e) {
+    console.error("PDF parse error:", e);
+    res.status(500).json({ success: false, message: "PDF parse failed: " + (e as Error).message });
+  }
+});
+
+/**
+ * POST /api/biometric/import-pdf-rows
+ * Body: { employeeId: number, rows: [{ date: "YYYY-MM-DD", time: "HH:MM:SS" }] }
+ * Saves parsed PDF rows as attendance records for the chosen employee.
+ */
+router.post("/import-pdf-rows", async (req, res) => {
+  const { employeeId, rows } = req.body as { employeeId: number; rows: { date: string; time: string }[] };
+
+  if (!employeeId || !Array.isArray(rows) || rows.length === 0) {
+    res.status(400).json({ success: false, message: "employeeId and rows are required." });
+    return;
+  }
+
+  try {
+    const [emp] = await db.select({
+      id: employees.id,
+      branchId: employees.branchId,
+      department: employees.department,
+      shiftId: employees.shiftId,
+    }).from(employees).where(eq(employees.id, employeeId));
+
+    if (!emp) {
+      res.status(404).json({ success: false, message: "Employee not found." });
+      return;
+    }
+
+    const allShifts = await db.select().from(shifts);
+    const shiftMap = new Map(allShifts.map(s => [s.id, s]));
+    const deptRules = await loadDeptRules();
+    const empShift = emp.shiftId ? shiftMap.get(emp.shiftId) : undefined;
+    const rule = findRule(deptRules, emp.department ?? "", empShift?.name);
+    const shiftStartMins = empShift?.startTime1 ? timeToMins(empShift.startTime1) : 8 * 60;
+    const lateThresholdMins = shiftStartMins + (rule.lateGraceMinutes ?? 15);
+
+    // Group by date
+    const byDate = new Map<string, string[]>();
+    for (const row of rows) {
+      if (!row.date || !row.time) continue;
+      const timePart = row.time.slice(0, 5); // HH:MM
+      if (!byDate.has(row.date)) byDate.set(row.date, []);
+      byDate.get(row.date)!.push(timePart);
+    }
+
+    let created = 0, updated = 0, skipped = 0;
+
+    for (const [date, times] of byDate) {
+      const sorted = [...times].sort();
+      const count = sorted.length;
+      if (count === 0) { skipped++; continue; }
+
+      const inTime1: string = sorted[0];
+      const outTime1: string | null = count >= 2 ? sorted[1] : null;
+      const inTime2: string | null = count >= 3 ? sorted[count - 2] : null;
+      const outTime2: string | null = count >= 3 ? sorted[count - 1] : null;
+
+      let workHours1: number | null = null;
+      if (outTime1 && outTime1 !== inTime1) {
+        const d = diffHrs(inTime1, outTime1);
+        if (d > 0) workHours1 = Math.round(d * 100) / 100;
+      }
+      let workHours2: number | null = null;
+      if (inTime2 && outTime2 && outTime2 !== inTime2) {
+        const d = diffHrs(inTime2, outTime2);
+        if (d > 0) workHours2 = Math.round(d * 100) / 100;
+      }
+
+      let totalHours: number | null = null;
+      let overtimeHours: number | null = null;
+      const sumHrs = (workHours1 ?? 0) + (workHours2 ?? 0);
+      if (sumHrs > 0) {
+        totalHours = Math.round(sumHrs * 100) / 100;
+        const earlyMins = timeToMins(inTime1) < shiftStartMins ? shiftStartMins - timeToMins(inTime1) : 0;
+        overtimeHours = Math.round(calcOtHours(totalHours, rule, earlyMins) * 100) / 100;
+      }
+
+      const arrivalMins = timeToMins(inTime1);
+      const status: "present" | "late" = arrivalMins > lateThresholdMins ? "late" : "present";
+
+      const record: any = {
+        employeeId: emp.id,
+        branchId: emp.branchId,
+        date,
+        status,
+        inTime1,
+        outTime1,
+        workHours1,
+        inTime2,
+        outTime2,
+        workHours2,
+        totalHours,
+        overtimeHours,
+        source: "biometric" as const,
+        approvalStatus: "approved" as const,
+      };
+
+      const existing = await db.select({ id: attendanceRecords.id })
+        .from(attendanceRecords)
+        .where(and(eq(attendanceRecords.employeeId, emp.id), eq(attendanceRecords.date, date)));
+
+      if (existing.length > 0) {
+        await db.update(attendanceRecords).set(record).where(eq(attendanceRecords.id, existing[0].id));
+        updated++;
+      } else {
+        await db.insert(attendanceRecords).values(record);
+        created++;
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Import complete. ${created} records created, ${updated} updated, ${skipped} skipped.`,
+      stats: { created, updated, skipped, totalPunches: rows.length, totalDays: byDate.size },
+    });
+  } catch (e) {
+    console.error("PDF import error:", e);
+    res.status(500).json({ success: false, message: "Import failed: " + (e as Error).message });
+  }
+});
+
 export default router;
