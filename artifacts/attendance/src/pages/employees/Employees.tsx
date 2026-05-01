@@ -59,103 +59,69 @@ function useMut(method: string, path: string, qk: string[]) {
 
 // ── Mini Dashboard ─────────────────────────────────────────────────────────────
 function EmployeeMiniDashboard({ allEmployees, onFilter }: { allEmployees: any[]; onFilter: (status: string) => void }) {
-  const total = allEmployees.length;
-  const active = allEmployees.filter(e => e.status === "active").length;
-  const onLeave = allEmployees.filter(e => e.status === "on_leave").length;
-  const resigned = allEmployees.filter(e => e.status === "resigned").length;
+  const total      = allEmployees.length;
+  const active     = allEmployees.filter(e => e.status === "active").length;
+  const onLeave    = allEmployees.filter(e => e.status === "on_leave").length;
+  const resigned   = allEmployees.filter(e => e.status === "resigned").length;
   const terminated = allEmployees.filter(e => e.status === "terminated").length;
+  const permanent  = allEmployees.filter(e => e.employeeType === "permanent").length;
+  const contract   = allEmployees.filter(e => e.employeeType === "contract").length;
+  const casual     = allEmployees.filter(e => e.employeeType === "casual").length;
 
-  const permanent = allEmployees.filter(e => e.employeeType === "permanent").length;
-  const contract = allEmployees.filter(e => e.employeeType === "contract").length;
-  const casual = allEmployees.filter(e => e.employeeType === "casual").length;
-
-  const deptMap: Record<string, number> = {};
-  allEmployees.forEach(e => { if (e.department) deptMap[e.department] = (deptMap[e.department] || 0) + 1; });
-  const topDepts = Object.entries(deptMap).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const STATUS_ITEMS = [
+    { label: "Active",     val: active,     dot: "bg-green-500",  status: "active",      badge: "bg-green-100 text-green-700" },
+    { label: "On Leave",   val: onLeave,    dot: "bg-yellow-400", status: "on_leave",    badge: "bg-yellow-100 text-yellow-700" },
+    { label: "Resigned",   val: resigned,   dot: "bg-orange-400", status: "resigned",    badge: "bg-orange-100 text-orange-700" },
+    { label: "Terminated", val: terminated, dot: "bg-red-500",    status: "terminated",  badge: "bg-red-100 text-red-700" },
+  ];
 
   return (
-    <div className="grid grid-cols-12 gap-3 mb-1">
-      {/* Left: Status breakdown */}
-      <div className="col-span-12 md:col-span-5 bg-card border border-border rounded-xl p-4">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
-          <Users className="w-3.5 h-3.5" /> Employee Status
-        </p>
-        <div className="flex items-end gap-3 mb-3">
-          <span className="text-4xl font-bold text-foreground">{total}</span>
-          <span className="text-xs text-muted-foreground mb-1">Total Employees</span>
+    <div className="flex flex-wrap items-stretch gap-2">
+      {/* Total */}
+      <div className="bg-card border border-border rounded-lg px-3 py-2 flex items-center gap-2.5 min-w-[110px]">
+        <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+          <Users className="w-3.5 h-3.5 text-primary" />
         </div>
-        <div className="space-y-2">
-          {[
-            { label: "Active",     val: active,     color: "bg-green-500",  status: "active" },
-            { label: "On Leave",   val: onLeave,    color: "bg-yellow-400", status: "on_leave" },
-            { label: "Resigned",   val: resigned,   color: "bg-orange-400", status: "resigned" },
-            { label: "Terminated", val: terminated, color: "bg-red-500",    status: "terminated" },
-          ].map(s => (
-            <button key={s.label} onClick={() => onFilter(s.status)}
-              className="w-full flex items-center gap-2 text-xs hover:bg-muted/40 rounded px-1 py-0.5 transition-colors group">
-              <div className={cn("w-2 h-2 rounded-full shrink-0", s.color)} />
-              <span className="flex-1 text-left text-muted-foreground group-hover:text-foreground">{s.label}</span>
-              <span className="font-semibold text-foreground">{s.val}</span>
-              <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
-                <div className={cn("h-full rounded-full", s.color)} style={{ width: total ? `${(s.val / total) * 100}%` : "0%" }} />
-              </div>
-            </button>
-          ))}
+        <div>
+          <p className="text-[10px] text-muted-foreground font-medium leading-none mb-0.5">Total</p>
+          <p className="text-lg font-bold text-foreground leading-none">{total}</p>
         </div>
       </div>
 
-      {/* Middle: Employment Type */}
-      <div className="col-span-12 md:col-span-3">
-        <div className="bg-card border border-border rounded-xl p-4 h-full">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
-            <Briefcase className="w-3.5 h-3.5" /> Employment Type
-          </p>
-          <div className="space-y-3">
-            {[
-              { label: "Permanent", val: permanent, cls: "text-blue-600 bg-blue-50", bar: "bg-blue-400" },
-              { label: "Contract",  val: contract,  cls: "text-purple-600 bg-purple-50", bar: "bg-purple-400" },
-              { label: "Casual",    val: casual,    cls: "text-gray-600 bg-gray-50", bar: "bg-gray-400" },
-            ].map(t => (
-              <div key={t.label}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-muted-foreground">{t.label}</span>
-                  <span className={cn("text-xs font-bold px-2 py-0.5 rounded", t.cls)}>{t.val}</span>
-                </div>
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div className={cn("h-full rounded-full", t.bar)} style={{ width: total ? `${(t.val / total) * 100}%` : "0%" }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      {/* Divider */}
+      <div className="w-px bg-border self-stretch hidden md:block" />
 
-      {/* Right: Department breakdown */}
-      <div className="col-span-12 md:col-span-4 bg-card border border-border rounded-xl p-4">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
-          <Building2 className="w-3.5 h-3.5" /> Top Departments
-        </p>
-        {topDepts.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic">No data yet</p>
-        ) : (
-          <div className="space-y-3">
-            {topDepts.map(([dept, count]) => (
-              <div key={dept}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs truncate max-w-[160px] text-muted-foreground">{dept}</span>
-                  <span className="text-xs font-bold text-foreground">{count}</span>
-                </div>
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full" style={{ width: `${total ? (count / total) * 100 : 0}%` }} />
-                </div>
-              </div>
-            ))}
+      {/* Status badges */}
+      {STATUS_ITEMS.map(s => (
+        <button key={s.label} onClick={() => onFilter(s.status)}
+          className="bg-card border border-border rounded-lg px-3 py-2 flex items-center gap-2 hover:border-primary/40 hover:bg-muted/40 transition-all group">
+          <div className={cn("w-2 h-2 rounded-full shrink-0", s.dot)} />
+          <div className="text-left">
+            <p className="text-[10px] text-muted-foreground leading-none mb-0.5 group-hover:text-foreground">{s.label}</p>
+            <p className="text-sm font-bold text-foreground leading-none">{s.val}</p>
           </div>
-        )}
-        <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Active headcount</span>
-          <span className="text-xs font-bold text-green-600">{active} / {total}</span>
-        </div>
+          <div className="w-10 h-1 bg-muted rounded-full overflow-hidden ml-1 hidden sm:block">
+            <div className={cn("h-full rounded-full", s.dot)} style={{ width: total ? `${(s.val / total) * 100}%` : "0%" }} />
+          </div>
+        </button>
+      ))}
+
+      {/* Divider */}
+      <div className="w-px bg-border self-stretch hidden md:block" />
+
+      {/* Employment type compact */}
+      <div className="bg-card border border-border rounded-lg px-3 py-2 flex items-center gap-3">
+        <Briefcase className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        {[
+          { label: "Perm", val: permanent, cls: "bg-blue-100 text-blue-700" },
+          { label: "Contract", val: contract, cls: "bg-purple-100 text-purple-700" },
+          { label: "Casual", val: casual, cls: "bg-gray-100 text-gray-600" },
+        ].map(t => (
+          <div key={t.label} className="text-center">
+            <p className="text-[9px] text-muted-foreground leading-none mb-0.5">{t.label}</p>
+            <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", t.cls)}>{t.val}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
