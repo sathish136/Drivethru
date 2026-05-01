@@ -1869,7 +1869,7 @@ function IndividualReport() {
 <div class="summary-bar">${sumCardsHtml}</div>
 <table><thead><tr>
   <th>#</th><th>Day</th><th>Status</th>
-  <th>In 1</th><th>Out 1 (Lunch)</th><th>In 2</th><th>Out 2</th>
+  <th>1st In</th><th>1st Out</th><th>2nd In</th><th>2nd Out</th>
   <th>Lunch Break</th><th>Total Hrs</th><th>Late</th><th>OT</th><th>Remarks</th>
 </tr></thead><tbody>${rowsHtml}</tbody></table>
 <div class="footer">
@@ -1933,7 +1933,7 @@ function IndividualReport() {
 
   function handleExportExcel() {
     if (!selectedEmp || records.length === 0) return;
-    const HEADERS = ["#","Date","Day","Status","Morning In","Lunch Out","Lunch In","End Out","Lunch Break","Total Hrs","Late","OT Hrs","Remarks"];
+    const HEADERS = ["#","Date","Day","Status","1st In","1st Out","2nd In","2nd Out","Lunch Break","Total Hrs","Late","OT Hrs","Remarks"];
     const offDaysListXls = empOffDays.get(Number(selectedEmp.id)) || [];
     const rows = Array.from({ length: daysInMonth }, (_, i) => {
       const d = i + 1;
@@ -2109,8 +2109,8 @@ function IndividualReport() {
                       <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">Day</th>
                       <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">Date</th>
                       <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">Status</th>
-                      <th className="px-3 py-2.5 text-center font-semibold text-blue-600 bg-blue-50/50" colSpan={2}>Morning Session</th>
-                      <th className="px-3 py-2.5 text-center font-semibold text-orange-600 bg-orange-50/50" colSpan={2}>Afternoon Session</th>
+                      <th className="px-3 py-2.5 text-center font-semibold text-blue-600 bg-blue-50/50" colSpan={2}>1st Session</th>
+                      <th className="px-3 py-2.5 text-center font-semibold text-orange-600 bg-orange-50/50" colSpan={2}>2nd Session</th>
                       <th className="px-3 py-2.5 text-left font-semibold text-purple-600 bg-purple-50/50">Lunch</th>
                       <th className="px-3 py-2.5 text-left font-semibold text-green-700 bg-green-50/50">Total Hrs</th>
                       <th className="px-3 py-2.5 text-left font-semibold text-red-500">Late</th>
