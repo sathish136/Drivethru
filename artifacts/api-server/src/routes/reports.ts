@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { attendanceRecords, employees, branches, shifts, weekoffSchedules, holidays } from "@workspace/db/schema";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
-import { getDaysInMonth, today } from "../lib/helpers.js";
+import { getDaysInMonth, today, calcWorkHours } from "../lib/helpers.js";
 import { loadDeptRules, findRule, timeToMins, calcLunchLateMinutes, lateCutoffMins, calcOtHours, calcTimeBasedOtHours, isNightShiftRecord, DeptShiftRule, calcNightWatcherPolicyOtHours } from "../lib/hr-rules.js";
 import { processSalaryRow, resolveDayShift, type WeekOffInfo, type DayType } from "../lib/salary-engine.js";
 
@@ -86,13 +86,20 @@ function mergeNightShiftRecords<T extends {
 
         if (morning) {
           skipKey.add(`${empId}:${nd}`);
-          const combinedHours = (r.rec.totalHours ?? 0) + (morning.rec.totalHours ?? 0);
+          // Merge: inTime1/outTime1 from the evening record, inTime2 from evening,
+          // outTime2 from the morning record. Recalculate totalHours from the
+          // actual session pairs so the full overnight span is reflected correctly.
+          const mergedOutTime2 = morning.rec.outTime2 ?? r.rec.outTime2;
+          const mergedInTime2 = r.rec.inTime2;
+          const wh1 = calcWorkHours(r.rec.inTime1, r.rec.outTime1);
+          const wh2 = calcWorkHours(mergedInTime2, mergedOutTime2);
+          const combinedHours = Math.round((wh1 + wh2) * 100) / 100;
           result.push({
             ...r,
             rec: {
               ...r.rec,
               totalHours: combinedHours,
-              outTime2: morning.rec.outTime2 ?? r.rec.outTime2,
+              outTime2: mergedOutTime2,
               status: "present", // will be re-evaluated
             },
           } as T);
