@@ -4,8 +4,9 @@ export function calcWorkHours(inTime: string | null | undefined, outTime: string
   const [outH, outM] = outTime.split(":").map(Number);
   const inMins = inH * 60 + inM;
   const outMins = outH * 60 + outM;
-  const diff = outMins - inMins;
-  return Math.max(0, diff / 60);
+  let diff = outMins - inMins;
+  if (diff < 0) diff += 24 * 60; // midnight crossover (night shift)
+  return diff / 60;
 }
 
 export function getDaysInMonth(month: number, year: number): number {
