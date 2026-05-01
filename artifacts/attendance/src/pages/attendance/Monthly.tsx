@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Calendar as CalendarIcon, Clock, X, AlertTriangle, CheckCircle2, ClipboardEdit, BarChart2, Timer } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, X, AlertTriangle, CheckCircle2, ClipboardEdit, BarChart2, Timer, Building2 } from "lucide-react";
 import { PageHeader, Card, Select } from "@/components/ui";
 import { useMonthlySheet } from "@/hooks/use-attendance";
 import { cn } from "@/lib/utils";
@@ -503,7 +503,18 @@ export default function MonthlySheet() {
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear]   = useState(new Date().getFullYear());
   const [showTimes, setShowTimes] = useState(true);
-  const { data, isLoading, refetch } = useMonthlySheet({ month, year });
+  const [branchId, setBranchId] = useState<number | undefined>(undefined);
+  const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
+
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+  useEffect(() => {
+    fetch(`${BASE}/api/branches`)
+      .then(r => r.json())
+      .then(d => setBranches(Array.isArray(d) ? d : (d.branches ?? [])))
+      .catch(() => {});
+  }, [BASE]);
+
+  const { data, isLoading, refetch } = useMonthlySheet({ month, year, branchId });
 
   const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
 
@@ -666,6 +677,20 @@ export default function MonthlySheet() {
         <Select value={year} onChange={e => setYear(parseInt(e.target.value))} className="w-24">
           {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
         </Select>
+
+        <div className="flex items-center gap-1.5">
+          <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
+          <Select
+            value={branchId ?? ""}
+            onChange={e => setBranchId(e.target.value === "" ? undefined : Number(e.target.value))}
+            className="w-44"
+          >
+            <option value="">All Companies</option>
+            {branches.map(b => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </Select>
+        </div>
 
         <div className="ml-auto flex items-center gap-4">
           <div className="flex items-center gap-2">
