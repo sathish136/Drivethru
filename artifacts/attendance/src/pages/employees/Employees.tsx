@@ -64,10 +64,6 @@ function EmployeeMiniDashboard({ allEmployees, onFilter }: { allEmployees: any[]
   const onLeave    = allEmployees.filter(e => e.status === "on_leave").length;
   const resigned   = allEmployees.filter(e => e.status === "resigned").length;
   const terminated = allEmployees.filter(e => e.status === "terminated").length;
-  const permanent  = allEmployees.filter(e => e.employeeType === "permanent").length;
-  const contract   = allEmployees.filter(e => e.employeeType === "contract").length;
-  const casual     = allEmployees.filter(e => e.employeeType === "casual").length;
-
   const STATUS_ITEMS = [
     { label: "Active",     val: active,     dot: "bg-green-500",  status: "active",      badge: "bg-green-100 text-green-700" },
     { label: "On Leave",   val: onLeave,    dot: "bg-yellow-400", status: "on_leave",    badge: "bg-yellow-100 text-yellow-700" },
@@ -106,23 +102,6 @@ function EmployeeMiniDashboard({ allEmployees, onFilter }: { allEmployees: any[]
         </button>
       ))}
 
-      {/* Divider */}
-      <div className="w-px bg-border self-stretch hidden md:block" />
-
-      {/* Employment type compact */}
-      <div className="bg-card border border-border rounded-lg px-3 py-2 flex items-center gap-3">
-        <Briefcase className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-        {[
-          { label: "Perm", val: permanent, cls: "bg-blue-100 text-blue-700" },
-          { label: "Contract", val: contract, cls: "bg-purple-100 text-purple-700" },
-          { label: "Casual", val: casual, cls: "bg-gray-100 text-gray-600" },
-        ].map(t => (
-          <div key={t.label} className="text-center">
-            <p className="text-[9px] text-muted-foreground leading-none mb-0.5">{t.label}</p>
-            <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", t.cls)}>{t.val}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
