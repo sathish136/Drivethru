@@ -610,18 +610,19 @@ router.get("/monthly", async (req, res) => {
       }
 
       let presentDays = 0, absentDays = 0, lateDays = 0, halfDays = 0, leaveDays = 0, holidayDays = 0, offDays = 0, invalidDays = 0;
-      let totalWorkHours = 0, overtimeHours = 0;
+      let totalWorkHours = 0, overtimeHours = 0, regularOtHours = 0, holidayOtHours = 0, holidayWorkedDays = 0;
       let lunchLateDays = 0, totalMorningLateMinutes = 0, totalLunchLateMinutes = 0;
 
       for (const r of recs) {
         // Resolve day-wise shift variant (e.g. Kitchen on Sunday) from master.
         const dayShift = empShift ? resolveDayShift(empShift, r.date, shiftsByName as any) : undefined;
+        const holidayInfo = holidayByDate.get(r.date) ?? null;
         // Salary engine = single source of truth
         const sr = processSalaryRow({
           date: r.date,
           shift: { name: dayShift?.name, startTime: dayShift?.startTime1, endTime: dayShift?.endTime1 },
           weekoff: empWeekoff,
-          holiday: holidayByDate.get(r.date) ?? null,
+          holiday: holidayInfo,
           rec: {
             date: r.date,
             inTime1:  r.inTime1,
@@ -657,6 +658,18 @@ router.get("/monthly", async (req, res) => {
         totalWorkHours += r.totalHours || 0;
         overtimeHours += sr.otHours;
 
+        // Split OT into regular vs holiday
+        if (sr.holidayWorked && sr.otHours > 0) {
+          holidayOtHours += sr.otHours;
+          holidayWorkedDays++;
+        } else {
+          regularOtHours += sr.otHours;
+        }
+        // Count any day employee punched in on a holiday (even if OT is 0)
+        if (sr.holidayWorked && sr.otHours === 0) {
+          holidayWorkedDays++;
+        }
+
         const ll = calcLunchLateMinutes(r.outTime1, r.inTime2, rule);
         if (ll > 0) { lunchLateDays++; totalLunchLateMinutes += ll; }
       }
@@ -673,6 +686,9 @@ router.get("/monthly", async (req, res) => {
         presentDays, absentDays, lateDays, halfDays, leaveDays, holidayDays, offDays, invalidDays,
         totalWorkHours: Math.round(totalWorkHours * 10) / 10,
         overtimeHours: Math.round(overtimeHours * 10) / 10,
+        regularOtHours: Math.round(regularOtHours * 10) / 10,
+        holidayOtHours: Math.round(holidayOtHours * 10) / 10,
+        holidayWorkedDays,
         attendancePercentage,
         lunchLateDays,
         totalMorningLateMinutes,
@@ -695,6 +711,17 @@ router.get("/overtime", async (req, res) => {
       .leftJoin(employees, eq(attendanceRecords.employeeId, employees.id))
       .leftJoin(branches, eq(attendanceRecords.branchId, branches.id));
 
+    /* Load holidays so we can flag which OT days fall on a public/statutory holiday */
+    const allHolidaysData = await db.select().from(holidays);
+    const holidayByDate = new Map<string, { type: "statutory" | "poya" | "public"; name: string }>();
+    for (const h of allHolidaysData) {
+      const t = (h.type as string)?.toLowerCase();
+      if (t === "statutory" || t === "poya" || t === "public") {
+        holidayByDate.set(h.date, { type: t as any, name: h.name });
+      }
+    }
+    const MULTIPLIERS: Record<string, number> = { statutory: 2.0, poya: 1.5, public: 1.5 };
+
     let filtered = all.filter(r => (r.rec.overtimeHours || 0) > 0);
     if (startDate) filtered = filtered.filter(r => r.rec.date >= (startDate as string));
     if (endDate) filtered = filtered.filter(r => r.rec.date <= (endDate as string));
@@ -711,22 +738,47 @@ router.get("/overtime", async (req, res) => {
           designation: r.emp?.designation || "",
           employeeType: r.emp?.employeeType || "",
           totalOvertimeHours: 0,
+          regularOtHours: 0,
+          holidayOtHours: 0,
           overtimeDays: 0,
+          holidayOtDays: 0,
           records: [],
         });
       }
       const entry = empMap.get(r.rec.employeeId);
-      entry.totalOvertimeHours += r.rec.overtimeHours || 0;
+      const otHrs = r.rec.overtimeHours || 0;
+      const holidayInfo = holidayByDate.get(r.rec.date);
+      const multiplier = holidayInfo ? MULTIPLIERS[holidayInfo.type] ?? 1 : 1;
+      entry.totalOvertimeHours += otHrs;
       entry.overtimeDays++;
-      entry.records.push({ date: r.rec.date, overtimeHours: r.rec.overtimeHours || 0 });
+      if (holidayInfo) {
+        entry.holidayOtHours += otHrs;
+        entry.holidayOtDays++;
+      } else {
+        entry.regularOtHours += otHrs;
+      }
+      entry.records.push({
+        date: r.rec.date,
+        overtimeHours: otHrs,
+        holidayType: holidayInfo?.type ?? null,
+        holidayName: holidayInfo?.name ?? null,
+        holidayMultiplier: holidayInfo ? multiplier : null,
+      });
     }
 
     const totalOT = Array.from(empMap.values()).reduce((sum, e) => sum + e.totalOvertimeHours, 0);
+    const totalHolidayOT = Array.from(empMap.values()).reduce((sum, e) => sum + e.holidayOtHours, 0);
     res.json({
       startDate: startDate as string,
       endDate: endDate as string,
       totalOvertimeHours: Math.round(totalOT * 10) / 10,
-      employees: Array.from(empMap.values()).map(e => ({ ...e, totalOvertimeHours: Math.round(e.totalOvertimeHours * 10) / 10 })),
+      totalHolidayOtHours: Math.round(totalHolidayOT * 10) / 10,
+      employees: Array.from(empMap.values()).map(e => ({
+        ...e,
+        totalOvertimeHours: Math.round(e.totalOvertimeHours * 10) / 10,
+        regularOtHours: Math.round(e.regularOtHours * 10) / 10,
+        holidayOtHours: Math.round(e.holidayOtHours * 10) / 10,
+      })),
     });
   } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
 });

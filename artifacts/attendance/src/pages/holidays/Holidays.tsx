@@ -22,9 +22,9 @@ const BLANK: Omit<Holiday, "id" | "createdAt"> = {
 };
 
 const TYPE_META = {
-  statutory: { label: "Statutory",  badge: "bg-blue-100   text-blue-700   border-blue-200"   },
-  poya:      { label: "Poya Day",   badge: "bg-purple-100 text-purple-700 border-purple-200" },
-  public:    { label: "Public",     badge: "bg-amber-100  text-amber-700  border-amber-200"  },
+  statutory: { label: "Statutory",  badge: "bg-blue-100   text-blue-700   border-blue-200",   otRate: "×2.0", otColor: "bg-red-100 text-red-700"    },
+  poya:      { label: "Poya Day",   badge: "bg-purple-100 text-purple-700 border-purple-200", otRate: "×1.5", otColor: "bg-amber-100 text-amber-700" },
+  public:    { label: "Public",     badge: "bg-amber-100  text-amber-700  border-amber-200",  otRate: "×1.5", otColor: "bg-amber-100 text-amber-700" },
 };
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -394,6 +394,7 @@ export default function Holidays() {
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Date</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Holiday</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Type</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold text-red-600 bg-red-50/40" title="OT rate when working on this holiday">Working OT Rate</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Description</th>
                   <th className="px-4 py-3 text-xs font-semibold text-muted-foreground text-right">Actions</th>
                 </tr>
@@ -406,6 +407,11 @@ export default function Holidays() {
                     </td>
                     <td className="px-4 py-2.5 text-xs font-medium">{h.name}</td>
                     <td className="px-4 py-2.5"><TypeBadge type={h.type} /></td>
+                    <td className="px-4 py-2.5 text-center bg-red-50/20">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${TYPE_META[h.type].otColor}`}>
+                        {TYPE_META[h.type].otRate} OT
+                      </span>
+                    </td>
                     <td className="px-4 py-2.5 text-xs text-muted-foreground max-w-[200px] truncate">
                       {h.description || "—"}
                     </td>
@@ -422,7 +428,7 @@ export default function Holidays() {
                   </tr>
                 ))}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={5} className="px-4 py-12 text-center text-xs text-muted-foreground">
+                  <tr><td colSpan={6} className="px-4 py-12 text-center text-xs text-muted-foreground">
                     No holidays for {year}. Add manually or sync from Sri Lanka official calendar.
                   </td></tr>
                 )}
@@ -434,18 +440,22 @@ export default function Holidays() {
 
       {/* ── Legend ── */}
       <Card className="p-3">
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Working OT Rates — applies when an employee works on a holiday</p>
         <div className="flex flex-wrap gap-4 text-xs">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-blue-600" />
-            <span><b>Statutory</b> — National statutory holidays (2× OT applies)</span>
+            <span><b>Statutory</b> — National statutory holidays</span>
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">×2.0 OT</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-purple-600" />
-            <span><b>Poya Day</b> — Buddhist full moon holidays (1.5× OT applies)</span>
+            <span><b>Poya Day</b> — Buddhist full moon holidays</span>
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">×1.5 OT</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-amber-500" />
-            <span><b>Public</b> — General public holidays (1.5× OT applies)</span>
+            <span><b>Public</b> — General public holidays</span>
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">×1.5 OT</span>
           </div>
         </div>
       </Card>
@@ -492,6 +502,12 @@ export default function Holidays() {
                     <option value="poya">Poya Day (1.5× OT)</option>
                     <option value="public">Public (1.5× OT)</option>
                   </Select>
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    <span className="text-[10px] text-muted-foreground">Working OT rate:</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${TYPE_META[editing.type].otColor}`}>
+                      {TYPE_META[editing.type].otRate} OT applies
+                    </span>
+                  </div>
                 </div>
               </div>
               <div>

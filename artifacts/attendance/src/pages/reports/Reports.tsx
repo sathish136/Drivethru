@@ -976,7 +976,7 @@ function MonthlyReport({ initialEmpName="", initialMonth, initialYear }: { initi
     && (!empName || (e.employeeName || "").toLowerCase().includes(empName.toLowerCase()) || String(e.employeeId || "").toLowerCase().includes(empName.toLowerCase()))
   ), [data, empType, department, empName]);
 
-  const HEADERS = ["Emp ID","Employee","Department","Branch","Designation","Type","Present","Absent","Late (AM)","Lunch Late Days","Half Day","Leave","Holiday","Day Off","Work Hrs","OT Hrs","Late (AM) Min","Lunch Late Min","Att %","Remarks"];
+  const HEADERS = ["Emp ID","Employee","Department","Branch","Designation","Type","Present","Absent","Late (AM)","Lunch Late Days","Half Day","Leave","Holiday","Hol.Worked","Day Off","Work Hrs","OT Hrs","Reg OT","Holiday OT","Late (AM) Min","Lunch Late Min","Att %","Remarks"];
 
   const handleExport = async () => {
     const thead = `<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
@@ -985,8 +985,9 @@ function MonthlyReport({ initialEmpName="", initialMonth, initialYear }: { initi
       <td>${e.branchName}</td><td>${e.designation}</td><td>${e.employeeType||""}</td>
       <td>${e.presentDays}</td><td>${e.absentDays}</td><td>${e.lateDays}</td>
       <td>${e.lunchLateDays||0}</td><td>${e.halfDays}</td><td>${e.leaveDays}</td>
-      <td>${e.holidayDays}</td><td>${e.offDays||0}</td>
+      <td>${e.holidayDays}</td><td>${e.holidayWorkedDays||0}</td><td>${e.offDays||0}</td>
       <td>${e.totalWorkHours.toFixed(1)}h</td><td>${e.overtimeHours.toFixed(1)}h</td>
+      <td>${(e.regularOtHours||0).toFixed(1)}h</td><td>${(e.holidayOtHours||0).toFixed(1)}h</td>
       <td>${e.totalMorningLateMinutes||0} min</td><td>${e.totalLunchLateMinutes||0} min</td>
       <td>${e.attendancePercentage}%</td>
       <td>${getEmpRemarks(e)||"—"}</td>
@@ -1007,8 +1008,9 @@ function MonthlyReport({ initialEmpName="", initialMonth, initialYear }: { initi
     const rows = filtered.map((e: any) => [
       e.employeeCode, e.employeeName, e.department||"", e.branchName, e.designation, e.employeeType||"",
       e.presentDays, e.absentDays, e.lateDays, e.lunchLateDays||0, e.halfDays, e.leaveDays,
-      e.holidayDays, e.offDays||0,
+      e.holidayDays, e.holidayWorkedDays||0, e.offDays||0,
       e.totalWorkHours.toFixed(1), e.overtimeHours.toFixed(1),
+      (e.regularOtHours||0).toFixed(1), (e.holidayOtHours||0).toFixed(1),
       e.totalMorningLateMinutes||0, e.totalLunchLateMinutes||0,
       `${e.attendancePercentage}%`,
       getEmpRemarks(e),
@@ -1063,7 +1065,18 @@ function MonthlyReport({ initialEmpName="", initialMonth, initialYear }: { initi
             <table className="w-full text-xs">
               <thead className="bg-muted/50">
                 <tr>
-                  {HEADERS.filter(h => h !== "Remarks").map(h=><th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>)}
+                  {["Emp ID","Employee","Department","Branch","Designation","Type"].map(h=><th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>)}
+                  {["Present","Absent","Late (AM)","Lunch Late","Half Day","Leave"].map(h=><th key={h} className="px-3 py-2.5 text-center font-semibold text-muted-foreground whitespace-nowrap">{h}</th>)}
+                  <th className="px-3 py-2.5 text-center font-semibold text-gray-600 whitespace-nowrap bg-gray-50/50">Holiday</th>
+                  <th className="px-3 py-2.5 text-center font-semibold text-orange-600 whitespace-nowrap bg-orange-50/50" title="Days employee worked on a public holiday">Hol. Worked</th>
+                  <th className="px-3 py-2.5 text-center font-semibold text-violet-600 whitespace-nowrap">Day Off</th>
+                  <th className="px-3 py-2.5 text-center font-semibold text-muted-foreground whitespace-nowrap">Work Hrs</th>
+                  <th className="px-3 py-2.5 text-center font-semibold text-amber-600 whitespace-nowrap">OT Hrs</th>
+                  <th className="px-3 py-2.5 text-center font-semibold text-amber-500 whitespace-nowrap bg-amber-50/30">Reg OT</th>
+                  <th className="px-3 py-2.5 text-center font-semibold text-red-600 whitespace-nowrap bg-red-50/40" title="Overtime earned by working on public holidays">Holiday OT</th>
+                  <th className="px-3 py-2.5 text-center font-semibold text-red-500 whitespace-nowrap">Late (AM) Min</th>
+                  <th className="px-3 py-2.5 text-center font-semibold text-orange-500 whitespace-nowrap">Lunch Late Min</th>
+                  <th className="px-3 py-2.5 text-center font-semibold text-muted-foreground whitespace-nowrap">Att %</th>
                   <th className="px-3 py-2.5 text-left font-semibold text-indigo-600 whitespace-nowrap bg-indigo-50/30">Remarks</th>
                 </tr>
               </thead>
@@ -1087,9 +1100,20 @@ function MonthlyReport({ initialEmpName="", initialMonth, initialYear }: { initi
                     <td className="px-3 py-2 text-center whitespace-nowrap text-yellow-600 font-semibold">{e.halfDays}</td>
                     <td className="px-3 py-2 text-center whitespace-nowrap text-purple-600 font-semibold">{e.leaveDays}</td>
                     <td className="px-3 py-2 text-center whitespace-nowrap text-gray-600 font-semibold">{e.holidayDays}</td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap bg-orange-50/30">
+                      {(e.holidayWorkedDays||0) > 0
+                        ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-xs font-bold">{e.holidayWorkedDays}</span>
+                        : <span className="text-muted-foreground text-xs">—</span>}
+                    </td>
                     <td className="px-3 py-2 text-center whitespace-nowrap text-violet-600 font-semibold">{e.offDays||0}</td>
                     <td className="px-3 py-2 text-center font-mono whitespace-nowrap">{e.totalWorkHours.toFixed(1)}h</td>
-                    <td className="px-3 py-2 text-center font-mono whitespace-nowrap text-amber-600">{e.overtimeHours.toFixed(1)}h</td>
+                    <td className="px-3 py-2 text-center font-mono whitespace-nowrap text-amber-600 font-semibold">{e.overtimeHours.toFixed(1)}h</td>
+                    <td className="px-3 py-2 text-center font-mono whitespace-nowrap text-amber-500 bg-amber-50/20">{(e.regularOtHours||0).toFixed(1)}h</td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap bg-red-50/30">
+                      {(e.holidayOtHours||0) > 0
+                        ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-bold">{(e.holidayOtHours||0).toFixed(1)}h</span>
+                        : <span className="text-muted-foreground text-xs">—</span>}
+                    </td>
                     <td className="px-3 py-2 text-center font-mono whitespace-nowrap text-red-500">{e.totalMorningLateMinutes||0}m</td>
                     <td className="px-3 py-2 text-center font-mono whitespace-nowrap text-orange-500">{e.totalLunchLateMinutes||0}m</td>
                     <td className="px-3 py-2 text-center whitespace-nowrap">
@@ -1107,7 +1131,7 @@ function MonthlyReport({ initialEmpName="", initialMonth, initialYear }: { initi
                     </td>
                   </tr>
                 ))}
-                {!filtered.length&&<tr><td colSpan={20} className="text-center py-8 text-muted-foreground">No data available for the selected period.</td></tr>}
+                {!filtered.length&&<tr><td colSpan={23} className="text-center py-8 text-muted-foreground">No data available for the selected period.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -1150,8 +1174,9 @@ function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { init
   ), [data, empType, empName]);
 
   const totalOT = filtered.reduce((s: number, e: any) => s + e.totalOvertimeHours, 0);
+  const totalHolOT = filtered.reduce((s: number, e: any) => s + (e.holidayOtHours||0), 0);
 
-  const HEADERS = ["Emp ID","Employee","Branch","Designation","Type","OT Days","Total OT Hrs","Daily Breakdown"];
+  const HEADERS = ["Emp ID","Employee","Branch","Designation","Type","OT Days","Total OT Hrs","Regular OT","Holiday OT Days","Holiday OT Hrs","Daily Breakdown"];
 
   const handleExport = async () => {
     const thead = `<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
@@ -1159,15 +1184,19 @@ function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { init
       <td>${e.employeeCode}</td><td>${e.employeeName}</td><td>${e.branchName}</td>
       <td>${e.designation}</td><td>${e.employeeType||""}</td>
       <td>${e.overtimeDays}</td><td>${e.totalOvertimeHours.toFixed(1)}h</td>
-      <td>${e.records.slice(0,5).map((r:any)=>`${r.date}: ${r.overtimeHours.toFixed(1)}h`).join(" | ")}</td>
+      <td>${(e.regularOtHours||0).toFixed(1)}h</td>
+      <td>${e.holidayOtDays||0}</td>
+      <td>${(e.holidayOtHours||0).toFixed(1)}h</td>
+      <td>${e.records.slice(0,5).map((r:any)=>`${r.date}: ${r.overtimeHours.toFixed(1)}h${r.holidayName?" ["+r.holidayName+"]":""}`).join(" | ")}</td>
     </tr>`).join("");
     printReport({
       title: "Overtime Report",
       meta: [
-        { label:"Period",           value:`${dStart} – ${dEnd}` },
-        { label:"Total OT Hours",   value:`${totalOT.toFixed(1)}h` },
-        { label:"Employees with OT",value:String(filtered.length) },
-        { label:"Branch",           value:dBranch?(branches?.find(b=>String(b.id)===dBranch)?.name||"—"):"All Branches" },
+        { label:"Period",              value:`${dStart} – ${dEnd}` },
+        { label:"Total OT Hours",      value:`${totalOT.toFixed(1)}h` },
+        { label:"Holiday OT Hours",    value:`${totalHolOT.toFixed(1)}h` },
+        { label:"Employees with OT",   value:String(filtered.length) },
+        { label:"Branch",              value:dBranch?(branches?.find(b=>String(b.id)===dBranch)?.name||"—"):"All Branches" },
       ],
       tableHtml: `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`,
     });
@@ -1177,7 +1206,10 @@ function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { init
     const rows = filtered.map((e: any) => [
       e.employeeCode, e.employeeName, e.branchName, e.designation, e.employeeType||"",
       e.overtimeDays, e.totalOvertimeHours.toFixed(1),
-      e.records.map((r: any) => `${r.date}: ${r.overtimeHours.toFixed(1)}h`).join(" | "),
+      (e.regularOtHours||0).toFixed(1),
+      e.holidayOtDays||0,
+      (e.holidayOtHours||0).toFixed(1),
+      e.records.map((r: any) => `${r.date}: ${r.overtimeHours.toFixed(1)}h${r.holidayName?" ["+r.holidayName+"]":""}`).join(" | "),
     ]);
     exportCsv(HEADERS, rows, `overtime-report-${dStart}-${dEnd}.csv`);
   };
@@ -1207,8 +1239,10 @@ function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { init
       </FilterCard>
 
       {data && (
-        <Card className="p-3 flex gap-6 text-sm border-amber-200 bg-amber-50/30">
+        <Card className="p-3 flex flex-wrap gap-6 text-sm border-amber-200 bg-amber-50/30">
           <div><span className="text-muted-foreground">Total OT Hours: </span><strong className="text-amber-700">{totalOT.toFixed(1)}h</strong></div>
+          <div><span className="text-muted-foreground">Holiday OT Hours: </span><strong className="text-red-600">{totalHolOT.toFixed(1)}h</strong></div>
+          <div><span className="text-muted-foreground">Regular OT Hours: </span><strong className="text-amber-600">{(totalOT - totalHolOT).toFixed(1)}h</strong></div>
           <div><span className="text-muted-foreground">Employees with OT: </span><strong>{filtered.length}</strong></div>
         </Card>
       )}
@@ -1218,7 +1252,15 @@ function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { init
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-muted/50">
-                <tr>{HEADERS.map(h=><th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>)}</tr>
+                <tr>
+                  {["Emp ID","Employee","Branch","Designation","Type"].map(h=><th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>)}
+                  <th className="px-3 py-2.5 text-center font-semibold text-muted-foreground whitespace-nowrap">OT Days</th>
+                  <th className="px-3 py-2.5 text-center font-semibold text-amber-700 whitespace-nowrap">Total OT</th>
+                  <th className="px-3 py-2.5 text-center font-semibold text-amber-500 whitespace-nowrap bg-amber-50/40">Reg OT</th>
+                  <th className="px-3 py-2.5 text-center font-semibold text-orange-600 whitespace-nowrap bg-orange-50/40">Hol. Days</th>
+                  <th className="px-3 py-2.5 text-center font-semibold text-red-600 whitespace-nowrap bg-red-50/40">Holiday OT</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">Daily Breakdown</th>
+                </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.map((e:any)=>(
@@ -1234,13 +1276,35 @@ function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { init
                     </td>
                     <td className="px-3 py-2 text-center whitespace-nowrap font-semibold text-amber-600">{e.overtimeDays}</td>
                     <td className="px-3 py-2 text-center whitespace-nowrap font-bold text-amber-700">{e.totalOvertimeHours.toFixed(1)}h</td>
-                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground text-[10px]">
-                      {e.records.slice(0,3).map((r:any)=>`${r.date}: ${r.overtimeHours.toFixed(1)}h`).join(" | ")}
-                      {e.records.length>3&&` +${e.records.length-3} more`}
+                    <td className="px-3 py-2 text-center whitespace-nowrap font-semibold text-amber-500 bg-amber-50/20">{(e.regularOtHours||0).toFixed(1)}h</td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap bg-orange-50/20">
+                      {(e.holidayOtDays||0) > 0
+                        ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[10px] font-bold">{e.holidayOtDays}</span>
+                        : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap bg-red-50/20">
+                      {(e.holidayOtHours||0) > 0
+                        ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-bold">{(e.holidayOtHours||0).toFixed(1)}h</span>
+                        : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-[10px] max-w-[300px]">
+                      <div className="flex flex-wrap gap-1">
+                        {e.records.slice(0,6).map((r:any, i:number)=>(
+                          <span key={i} className={cn("px-1.5 py-0.5 rounded font-mono",
+                            r.holidayType==="statutory"?"bg-blue-100 text-blue-700":
+                            r.holidayType==="poya"?"bg-purple-100 text-purple-700":
+                            r.holidayType==="public"?"bg-amber-100 text-amber-700":
+                            "bg-muted text-muted-foreground"
+                          )} title={r.holidayName||undefined}>
+                            {r.date}: {r.overtimeHours.toFixed(1)}h{r.holidayType?" 🏖":""}
+                          </span>
+                        ))}
+                        {e.records.length>6&&<span className="text-muted-foreground px-1">+{e.records.length-6} more</span>}
+                      </div>
                     </td>
                   </tr>
                 ))}
-                {!filtered.length&&<tr><td colSpan={8} className="text-center py-8 text-muted-foreground">No overtime records found for this period.</td></tr>}
+                {!filtered.length&&<tr><td colSpan={11} className="text-center py-8 text-muted-foreground">No overtime records found for this period.</td></tr>}
               </tbody>
             </table>
           </div>
