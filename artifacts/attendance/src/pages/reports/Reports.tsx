@@ -1808,9 +1808,9 @@ function IndividualReport() {
           const r = recMap.get(dateStr);
           if (!r) {
             if (offDaysListPdf.includes(dow)) {
-              rowsHtml += `<tr style="background:#ede9fe"><td>${d}</td><td>${dayName}</td><td style="font-weight:700;color:#6d28d9">WEEK OFF</td><td colspan="8" style="text-align:center;color:#9ca3af">Scheduled week off</td></tr>`;
+              rowsHtml += `<tr style="background:#ede9fe"><td>${d}</td><td>${dayName}</td><td style="font-weight:700;color:#6d28d9">WEEK OFF</td><td colspan="9" style="text-align:center;color:#9ca3af">Scheduled week off</td></tr>`;
             } else {
-              rowsHtml += `<tr><td>${d}</td><td>${dayName}</td><td colspan="9" style="text-align:center;color:#ccc">—</td></tr>`;
+              rowsHtml += `<tr><td>${d}</td><td>${dayName}</td><td colspan="10" style="text-align:center;color:#ccc">—</td></tr>`;
             }
             continue;
           }
@@ -1825,10 +1825,10 @@ function IndividualReport() {
           const lateStr = lm > 0 ? (lm < 60 ? `${lm}m` : `${Math.floor(lm/60)}h${lm%60}m`) : "—";
           const isHolWorked = !!(r as any).holidayWorked;
           const holMultiplier = (r as any).holidayMultiplier;
+          const holName = (r as any).holidayName || "Holiday";
           const otVal = r.overtimeHours || 0;
-          const otStr = otVal > 0
-            ? `<span style="color:#ea580c;font-weight:600">${otVal.toFixed(1)}h</span>${isHolWorked ? `<br/><span style="font-size:7px;color:#9ca3af">Hol. OT ×${holMultiplier ?? ""}</span>` : ""}`
-            : "—";
+          const otStr = otVal > 0 ? `<span style="color:#ea580c;font-weight:600">${otVal.toFixed(1)}h</span>` : "—";
+          const remarksStr = isHolWorked ? `<span style="color:#b45309">Holiday OT ×${holMultiplier ?? ""} — ${holName}</span>` : "—";
           const lbMins = (() => {
             if (!r.outTime1 || !r.inTime2) return 0;
             const [oh,om] = r.outTime1.split(":").map(Number);
@@ -1842,7 +1842,7 @@ function IndividualReport() {
             <td>${r.inTime2||"—"}</td><td>${r.outTime2||"—"}</td>
             <td>${lbMins>0?fmtHM(lbMins):"—"}</td>
             <td>${fmtTotal(r.totalHours)}</td>
-            <td>${lateStr}</td><td>${otStr}</td>
+            <td>${lateStr}</td><td>${otStr}</td><td>${remarksStr}</td>
           </tr>`;
         }
 
@@ -1870,7 +1870,7 @@ function IndividualReport() {
 <table><thead><tr>
   <th>#</th><th>Day</th><th>Status</th>
   <th>In 1</th><th>Out 1 (Lunch)</th><th>In 2</th><th>Out 2</th>
-  <th>Lunch Break</th><th>Total Hrs</th><th>Late</th><th>OT</th>
+  <th>Lunch Break</th><th>Total Hrs</th><th>Late</th><th>OT</th><th>Remarks</th>
 </tr></thead><tbody>${rowsHtml}</tbody></table>
 <div class="footer">
   <div class="footer-note">System-generated report. For internal use only. © ${new Date().getFullYear()} Drivethru Pvt Ltd</div>
@@ -2115,6 +2115,7 @@ function IndividualReport() {
                       <th className="px-3 py-2.5 text-left font-semibold text-green-700 bg-green-50/50">Total Hrs</th>
                       <th className="px-3 py-2.5 text-left font-semibold text-red-500">Late</th>
                       <th className="px-3 py-2.5 text-left font-semibold text-orange-600">OT</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">Remarks</th>
                     </tr>
                     <tr className="border-b border-border">
                       <th className="px-3 py-1" colSpan={4}></th>
@@ -2124,7 +2125,7 @@ function IndividualReport() {
                       <th className="px-3 py-1 text-xs font-medium text-orange-500 bg-orange-50/30 text-center">Out</th>
                       <th className="px-3 py-1 bg-purple-50/30"></th>
                       <th className="px-3 py-1 bg-green-50/30"></th>
-                      <th className="px-3 py-1" colSpan={2}></th>
+                      <th className="px-3 py-1" colSpan={3}></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -2146,9 +2147,9 @@ function IndividualReport() {
                               <td className="px-3 py-2 text-muted-foreground">{dayName}</td>
                               <td className="px-3 py-2 font-mono text-muted-foreground">{dateStr}</td>
                               {isOff ? (
-                                <td className="px-3 py-2" colSpan={9}><span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-700">WEEK OFF</span></td>
+                                <td className="px-3 py-2" colSpan={10}><span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-700">WEEK OFF</span></td>
                               ) : (
-                                <td className="px-3 py-2" colSpan={9}><span className="text-muted-foreground text-[10px]">No record</span></td>
+                                <td className="px-3 py-2" colSpan={10}><span className="text-muted-foreground text-[10px]">No record</span></td>
                               )}
                             </tr>
                           );
@@ -2186,14 +2187,14 @@ function IndividualReport() {
                               ) : <span className="text-muted-foreground">—</span>}
                             </td>
                             <td className="px-3 py-2 font-mono">
-                              {(r.overtimeHours||0) > 0 ? (
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="text-orange-600 font-semibold">{r.overtimeHours.toFixed(1)}h</span>
-                                  {(r as any).holidayWorked && (
-                                    <span className="text-[9px] text-muted-foreground">Hol. OT ×{(r as any).holidayMultiplier ?? ""}</span>
-                                  )}
-                                </div>
-                              ) : <span className="text-muted-foreground">—</span>}
+                              {(r.overtimeHours||0) > 0
+                                ? <span className="text-orange-600 font-semibold">{r.overtimeHours.toFixed(1)}h</span>
+                                : <span className="text-muted-foreground">—</span>}
+                            </td>
+                            <td className="px-3 py-2 text-[10px] text-muted-foreground">
+                              {(r as any).holidayWorked
+                                ? <span className="text-amber-700">Holiday OT ×{(r as any).holidayMultiplier ?? ""} — {(r as any).holidayName || "Holiday"}</span>
+                                : "—"}
                             </td>
                           </tr>
                         );
