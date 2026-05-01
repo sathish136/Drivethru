@@ -194,12 +194,24 @@ async function printReport(opts: {
     const blob = new Blob([fullHtml], { type: "text/html" });
     if (blob.size <= 0) throw new Error("Generated report HTML is empty.");
     const blobUrl = URL.createObjectURL(blob);
-    const printWin = window.open(blobUrl, "_blank");
-    if (!printWin) throw new Error("Popup blocked while opening print preview.");
-    printWin.addEventListener("load", () => {
-      setTimeout(() => printWin.print(), 400);
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.top = "-9999px";
+    iframe.style.left = "-9999px";
+    iframe.style.width = "1px";
+    iframe.style.height = "1px";
+    iframe.style.opacity = "0";
+    iframe.src = blobUrl;
+    document.body.appendChild(iframe);
+    iframe.addEventListener("load", () => {
+      setTimeout(() => {
+        iframe.contentWindow?.print();
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+          URL.revokeObjectURL(blobUrl);
+        }, 2000);
+      }, 400);
     });
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
   } catch (err) {
     console.error("PDF export failed:", err);
     alert("PDF export failed. Please try again after filtering valid records.");
