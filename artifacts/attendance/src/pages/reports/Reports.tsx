@@ -2243,13 +2243,14 @@ ${nwOtTableHtml}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {calRows.map(({ date, dow, r }, idx) => {
+                    {calRows.filter(({ r }) => {
+                      const ot = r ? (r.overtimeHours || 0) : 0;
+                      return ot > 0;
+                    }).map(({ date, dow, r }, idx) => {
                       const ot = r ? (r.overtimeHours || 0) : 0;
                       const isHol = r ? !!r.holidayWorked : false;
-                      const isAbsent = !r || r.status === "absent" || r.status === "off_day" || r.status === "holiday";
-                      const isPresent = !isAbsent && ot > 0;
                       const amount = Math.round(ot * nwOtRate * 100) / 100;
-                      const rowCls = isHol ? "bg-blue-50" : isAbsent ? "bg-slate-50/50" : "hover:bg-muted/20";
+                      const rowCls = isHol ? "bg-blue-50" : "hover:bg-muted/20";
                       return (
                         <tr key={date} className={rowCls}>
                           <td className="px-3 py-1.5 text-muted-foreground font-mono">{idx + 1}</td>
@@ -2258,21 +2259,14 @@ ${nwOtTableHtml}
                             <span className="ml-1.5 text-muted-foreground text-[10px]">{DAY_NAMES[dow]}</span>
                           </td>
                           <td className="px-3 py-1.5 text-right font-mono font-semibold">
-                            {isPresent ? <span className={isHol ? "text-blue-700" : "text-orange-600"}>{ot.toFixed(1)}</span> : <span className="text-muted-foreground">—</span>}
+                            <span className={isHol ? "text-blue-700" : "text-orange-600"}>{ot.toFixed(1)}</span>
                           </td>
                           <td className="px-3 py-1.5 text-right font-mono text-blue-600">{nwOtRate.toFixed(2)}</td>
                           <td className="px-3 py-1.5 text-right font-mono font-semibold">
-                            {isPresent
-                              ? <span className={isHol ? "text-blue-700" : "text-emerald-700"}>{amount.toLocaleString("en-LK", { minimumFractionDigits: 2 })}</span>
-                              : <span className="text-muted-foreground">0.00</span>
-                            }
+                            <span className={isHol ? "text-blue-700" : "text-emerald-700"}>{amount.toLocaleString("en-LK", { minimumFractionDigits: 2 })}</span>
                           </td>
                           <td className="px-3 py-1.5">
-                            {r?.status === "absent" ? <span className="text-[10px] font-semibold text-red-600">ABSENT</span>
-                              : r?.status === "off_day" ? <span className="text-[10px] text-violet-600">DAY OFF</span>
-                              : r?.status === "holiday" ? <span className="text-[10px] text-gray-500">HOLIDAY</span>
-                              : isHol ? <span className="text-[10px] text-blue-700">Holiday worked</span>
-                              : null}
+                            {isHol ? <span className="text-[10px] text-blue-700">Holiday worked</span> : null}
                           </td>
                         </tr>
                       );
