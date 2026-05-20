@@ -1860,9 +1860,36 @@ function IndividualReport() {
           /night\s*watcher/i.test((emp as any).designation || "") ||
           /night\s*watcher/i.test(shiftOptions.find((s: any) => s.id === (emp as any).shiftId)?.name || "")
         );
-        const nwOtRecs = recs.filter((r: any) => (r.overtimeHours || 0) > 0);
-        const nwTotalOt = nwOtRecs.reduce((s: number, r: any) => s + (r.overtimeHours || 0), 0);
-        const nwOtTableHtml = empIsNW && nwOtRecs.length > 0 ? `
+        // Build full-calendar rows for PDF (all days, like reference screenshot)
+        const pdfRecMap = new Map(recs.map((r: any) => [r.date as string, r]));
+        const nwTotalOt = recs.reduce((s: number, r: any) => s + (r.overtimeHours || 0), 0);
+        const nwCalRows: string[] = [];
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dateStr = `${year}-${String(month).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+          const r = pdfRecMap.get(dateStr);
+          const ot = r ? (r.overtimeHours || 0) : 0;
+          const isHol = r ? !!(r as any).holidayWorked : false;
+          const isAbsent = !r || r.status === "absent";
+          const isOff = r?.status === "off_day";
+          const isHoliday = r?.status === "holiday";
+          const isPresent = !isAbsent && !isOff && !isHoliday && ot > 0;
+          const amount = Math.round(ot * empNwOtRate * 100) / 100;
+          const dow2 = new Date(dateStr + "T00:00:00Z").getUTCDay();
+          const bgStyle = isHol ? 'background:#dbeafe' : isAbsent || isOff || isHoliday ? 'background:#f8fafc' : 'background:#f9fafb';
+          const absenceLabel = isAbsent ? '<span style="color:#dc2626;font-weight:700">ABSENT</span>'
+            : isOff ? '<span style="color:#7c3aed">DAY OFF</span>'
+            : isHoliday ? '<span style="color:#6b7280">HOLIDAY</span>'
+            : isHol ? '<span style="color:#1d4ed8">Holiday worked</span>' : '';
+          nwCalRows.push(`<tr style="${bgStyle}">
+            <td style="padding:3px 8px;font-size:8.5px;border-bottom:1px solid #f0f0f0">${d}</td>
+            <td style="padding:3px 8px;font-size:8.5px;border-bottom:1px solid #f0f0f0;font-family:monospace">${dateStr}</td>
+            <td style="padding:3px 8px;font-size:8.5px;border-bottom:1px solid #f0f0f0;text-align:right;color:#ea580c;font-weight:700">${isPresent ? ot.toFixed(1) : '—'}</td>
+            <td style="padding:3px 8px;font-size:8.5px;border-bottom:1px solid #f0f0f0;text-align:right;color:#1d4ed8">${empNwOtRate.toFixed(2)}</td>
+            <td style="padding:3px 8px;font-size:8.5px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:700;color:${isHol?'#1d4ed8':'#15803d'}">${isPresent ? amount.toFixed(2) : '0.00'}</td>
+            <td style="padding:3px 8px;font-size:8.5px;border-bottom:1px solid #f0f0f0">${absenceLabel}</td>
+          </tr>`);
+        }
+        const nwOtTableHtml = empIsNW ? `
 <div style="margin-top:14px;border:1px solid #fde68a;border-radius:6px;overflow:hidden">
   <div style="background:#fffbeb;padding:8px 14px;border-bottom:1px solid #fde68a;display:flex;justify-content:space-between;align-items:center">
     <span style="font-weight:700;color:#92400e;font-size:10px">NIGHT WATCHER OT SUMMARY</span>
@@ -1870,34 +1897,19 @@ function IndividualReport() {
   </div>
   <table style="width:100%;border-collapse:collapse">
     <thead><tr style="background:#1565a8">
-      <th style="color:#fff;padding:5px 9px;text-align:left;font-size:9px">Date</th>
-      <th style="color:#fff;padding:5px 9px;text-align:left;font-size:9px">Day</th>
-      <th style="color:#fff;padding:5px 9px;text-align:left;font-size:9px">Status</th>
-      <th style="color:#fff;padding:5px 9px;text-align:right;font-size:9px">OT Hours</th>
-      <th style="color:#fff;padding:5px 9px;text-align:right;font-size:9px">OT Rate (Rs.)</th>
-      <th style="color:#fff;padding:5px 9px;text-align:right;font-size:9px">OT Amount (Rs.)</th>
-      <th style="color:#fff;padding:5px 9px;text-align:left;font-size:9px">Remarks</th>
+      <th style="color:#fff;padding:5px 8px;text-align:left;font-size:8.5px">#</th>
+      <th style="color:#fff;padding:5px 8px;text-align:left;font-size:8.5px">Date</th>
+      <th style="color:#fff;padding:5px 8px;text-align:right;font-size:8.5px">OT Hours</th>
+      <th style="color:#fff;padding:5px 8px;text-align:right;font-size:8.5px">OT Rate</th>
+      <th style="color:#fff;padding:5px 8px;text-align:right;font-size:8.5px">Amount</th>
+      <th style="color:#fff;padding:5px 8px;text-align:left;font-size:8.5px">Absence</th>
     </tr></thead>
-    <tbody>${nwOtRecs.map((r: any) => {
-      const ot = r.overtimeHours || 0;
-      const isHol = !!(r as any).holidayWorked;
-      const dow2 = new Date(r.date + "T00:00:00Z").getUTCDay();
-      const bgStyle = isHol ? 'background:#dbeafe' : 'background:#f9fafb';
-      return `<tr style="${bgStyle}">
-        <td style="padding:4px 9px;font-size:9px;border-bottom:1px solid #f0f0f0">${r.date}</td>
-        <td style="padding:4px 9px;font-size:9px;border-bottom:1px solid #f0f0f0">${DAY_NAMES[dow2]}</td>
-        <td style="padding:4px 9px;font-size:9px;border-bottom:1px solid #f0f0f0;font-weight:700;color:${isHol?'#1d4ed8':'#15803d'}">${isHol ? 'HOLIDAY WORKED' : 'PRESENT'}</td>
-        <td style="padding:4px 9px;font-size:9px;border-bottom:1px solid #f0f0f0;text-align:right;color:#ea580c;font-weight:700">${ot.toFixed(1)}</td>
-        <td style="padding:4px 9px;font-size:9px;border-bottom:1px solid #f0f0f0;text-align:right;color:#1d4ed8">${empNwOtRate.toFixed(2)}</td>
-        <td style="padding:4px 9px;font-size:9px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:700;color:#15803d">${(Math.round(ot * empNwOtRate * 100)/100).toFixed(2)}</td>
-        <td style="padding:4px 9px;font-size:9px;border-bottom:1px solid #f0f0f0;color:${isHol?'#1d4ed8':'#6b7280'}">${isHol ? 'Holiday: 8 base + 3 = 11 OT hrs' : 'Regular night OT'}</td>
-      </tr>`;
-    }).join("")}</tbody>
+    <tbody>${nwCalRows.join("")}</tbody>
     <tfoot><tr style="background:#e8f0fe">
-      <td colspan="3" style="padding:5px 9px;font-size:9.5px;font-weight:700;border-top:2px solid #1565a8">TOTAL — Absence: ${absent}</td>
-      <td style="padding:5px 9px;font-size:9.5px;font-weight:700;text-align:right;color:#ea580c;border-top:2px solid #1565a8">${nwTotalOt.toFixed(1)}</td>
+      <td colspan="2" style="padding:5px 8px;font-size:9px;font-weight:700;border-top:2px solid #1565a8">TOTAL — Absence: ${absent}</td>
+      <td style="padding:5px 8px;font-size:9px;font-weight:700;text-align:right;color:#ea580c;border-top:2px solid #1565a8">${nwTotalOt.toFixed(1)}</td>
       <td style="border-top:2px solid #1565a8"></td>
-      <td style="padding:5px 9px;font-size:9.5px;font-weight:700;text-align:right;color:#15803d;border-top:2px solid #1565a8">${(Math.round(nwTotalOt * empNwOtRate * 100)/100).toFixed(2)}</td>
+      <td style="padding:5px 8px;font-size:9px;font-weight:700;text-align:right;color:#15803d;border-top:2px solid #1565a8">${(Math.round(nwTotalOt * empNwOtRate * 100)/100).toFixed(2)}</td>
       <td style="border-top:2px solid #1565a8"></td>
     </tr></tfoot>
   </table>
@@ -1991,28 +2003,27 @@ ${nwOtTableHtml}
 
   function handleExportExcel() {
     if (!selectedEmp || records.length === 0) return;
-    // Night Watcher: export OT summary sheet instead of regular format
+    // Night Watcher: export full-calendar OT summary matching the reference format
     if (isNightWatcher) {
-      const NW_HEADERS = ["Date","Day","Status","OT Hours","OT Rate (Rs.)","OT Amount (Rs.)","Remarks"];
-      const nwRows = records
-        .filter((r: any) => (r.overtimeHours || 0) > 0)
-        .map((r: any) => {
-          const ot = r.overtimeHours || 0;
-          const isHol = !!r.holidayWorked;
-          const dow = new Date(r.date + "T00:00:00Z").getUTCDay();
-          return [
-            r.date,
-            DAY_NAMES[dow],
-            isHol ? "HOLIDAY WORKED" : fmtStatus(r.status),
-            ot.toFixed(1),
-            nwOtRate.toFixed(2),
-            (Math.round(ot * nwOtRate * 100) / 100).toFixed(2),
-            isHol ? "Holiday: 8 base + 3 = 11 OT hrs" : "Regular night OT",
-          ];
-        });
-      // Add totals row
+      const NW_HEADERS = ["#","Date","OT Hours","OT Rate","Amount","Absence"];
+      const recMap = new Map(records.map((r: any) => [r.date, r]));
+      const nwRows: (string | number)[][] = [];
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${year}-${String(month).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+        const dow = new Date(dateStr + "T00:00:00Z").getUTCDay();
+        const r = recMap.get(dateStr);
+        const ot = r ? (r.overtimeHours || 0) : 0;
+        const isHol = r ? !!r.holidayWorked : false;
+        const isAbsent = !r || r.status === "absent";
+        const isOff = r?.status === "off_day";
+        const isHoliday = r?.status === "holiday";
+        const amount = Math.round(ot * nwOtRate * 100) / 100;
+        const absenceNote = isAbsent ? "ABSENT" : isOff ? "DAY OFF" : isHoliday ? "HOLIDAY" : isHol ? "Holiday worked" : "";
+        const otHrsStr = ot > 0 ? ot.toFixed(1) : "";
+        nwRows.push([d, `'${dateStr}`, otHrsStr, nwOtRate.toFixed(2), amount.toFixed(2), absenceNote]);
+      }
       const totalOt = records.reduce((s: number, r: any) => s + (r.overtimeHours || 0), 0);
-      nwRows.push(["TOTAL", "", "", totalOt.toFixed(1), "", (Math.round(totalOt * nwOtRate * 100) / 100).toFixed(2), `Absence: ${summary.absent}`]);
+      nwRows.push(["TOTAL", "", totalOt.toFixed(1), "", (Math.round(totalOt * nwOtRate * 100) / 100).toFixed(2), `Absence: ${summary.absent}`]);
       const safeMonth = `${getMonthName(month)}-${year}`;
       exportCsv(NW_HEADERS, nwRows, `night-watcher-ot-${(selectedEmp as any).employeeId}-${safeMonth}.csv`);
       return;
@@ -2199,7 +2210,16 @@ ${nwOtTableHtml}
             </div>
           )}
 
-          {isNightWatcher && !isLoading && records.length > 0 && (
+          {isNightWatcher && !isLoading && records.length > 0 && (() => {
+            // Build a full calendar map: date → record (API synthesises absent rows for all days)
+            const recMap = new Map(records.map((r: any) => [r.date, r]));
+            const calRows: { date: string; dow: number; r: any | null }[] = [];
+            for (let d = 1; d <= daysInMonth; d++) {
+              const dateStr = `${year}-${String(month).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+              const dow = new Date(dateStr + "T00:00:00Z").getUTCDay();
+              calRows.push({ date: dateStr, dow, r: recMap.get(dateStr) ?? null });
+            }
+            return (
             <Card className="overflow-hidden">
               <div className="px-4 py-3 border-b border-border bg-amber-50 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -2208,68 +2228,74 @@ ${nwOtTableHtml}
                     OT Rate = Basic / 240 × 1.5 = Rs. {nwOtRate.toFixed(2)} / hr
                   </span>
                 </div>
-                <span className="text-[10px] text-amber-600">Normal day: 3 hrs · Holiday: 11 hrs (8+3) · Cap: 11 hrs</span>
+                <span className="text-[10px] text-amber-600">Normal: 3 hrs · Holiday: 11 hrs (8+3) · Cap: 11 hrs</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-muted/50">
                     <tr>
-                      <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">Date</th>
-                      <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">Day</th>
-                      <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">Status</th>
-                      <th className="px-3 py-2.5 text-right font-semibold text-orange-600">OT Hours</th>
-                      <th className="px-3 py-2.5 text-right font-semibold text-blue-600">OT Rate (Rs.)</th>
-                      <th className="px-3 py-2.5 text-right font-semibold text-emerald-700">OT Amount (Rs.)</th>
-                      <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">Remarks</th>
+                      <th className="px-3 py-2 text-left font-semibold text-muted-foreground w-8">#</th>
+                      <th className="px-3 py-2 text-left font-semibold text-muted-foreground">Date</th>
+                      <th className="px-3 py-2 text-right font-semibold text-orange-600">OT Hours</th>
+                      <th className="px-3 py-2 text-right font-semibold text-blue-600">OT Rate</th>
+                      <th className="px-3 py-2 text-right font-semibold text-emerald-700">Amount</th>
+                      <th className="px-3 py-2 text-left font-semibold text-red-600">Absence</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {records.filter((r: any) => (r.overtimeHours || 0) > 0).map((r: any) => {
-                      const ot = r.overtimeHours || 0;
-                      const isHol = !!r.holidayWorked;
+                    {calRows.map(({ date, dow, r }, idx) => {
+                      const ot = r ? (r.overtimeHours || 0) : 0;
+                      const isHol = r ? !!r.holidayWorked : false;
+                      const isAbsent = !r || r.status === "absent" || r.status === "off_day" || r.status === "holiday";
+                      const isPresent = !isAbsent && ot > 0;
                       const amount = Math.round(ot * nwOtRate * 100) / 100;
-                      const dow = new Date(r.date + "T00:00:00Z").getUTCDay();
+                      const rowCls = isHol ? "bg-blue-50" : isAbsent ? "bg-slate-50/50" : "hover:bg-muted/20";
                       return (
-                        <tr key={r.date} className={isHol ? "bg-blue-50 hover:bg-blue-100" : "hover:bg-muted/30"}>
-                          <td className="px-3 py-2 font-mono">{r.date}</td>
-                          <td className="px-3 py-2 text-muted-foreground">{DAY_NAMES[dow]}</td>
-                          <td className="px-3 py-2">
-                            <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-semibold", isHol ? "bg-blue-100 text-blue-700" : statusColor(r.status))}>
-                              {isHol ? "HOLIDAY WORKED" : fmtStatus(r.status)}
-                            </span>
+                        <tr key={date} className={rowCls}>
+                          <td className="px-3 py-1.5 text-muted-foreground font-mono">{idx + 1}</td>
+                          <td className="px-3 py-1.5 font-mono whitespace-nowrap">
+                            {date}
+                            <span className="ml-1.5 text-muted-foreground text-[10px]">{DAY_NAMES[dow]}</span>
                           </td>
-                          <td className="px-3 py-2 text-right font-mono font-semibold text-orange-600">{ot.toFixed(1)}</td>
-                          <td className="px-3 py-2 text-right font-mono text-blue-600">{nwOtRate.toFixed(2)}</td>
-                          <td className="px-3 py-2 text-right font-mono font-semibold text-emerald-700">{amount.toLocaleString("en-LK", { minimumFractionDigits: 2 })}</td>
-                          <td className="px-3 py-2 text-[10px] text-muted-foreground">
-                            {isHol ? <span className="text-blue-700">Holiday: 8 base + 3 = 11 OT hrs</span> : "Regular night OT"}
+                          <td className="px-3 py-1.5 text-right font-mono font-semibold">
+                            {isPresent ? <span className={isHol ? "text-blue-700" : "text-orange-600"}>{ot.toFixed(1)}</span> : <span className="text-muted-foreground">—</span>}
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-mono text-blue-600">{nwOtRate.toFixed(2)}</td>
+                          <td className="px-3 py-1.5 text-right font-mono font-semibold">
+                            {isPresent
+                              ? <span className={isHol ? "text-blue-700" : "text-emerald-700"}>{amount.toLocaleString("en-LK", { minimumFractionDigits: 2 })}</span>
+                              : <span className="text-muted-foreground">0.00</span>
+                            }
+                          </td>
+                          <td className="px-3 py-1.5">
+                            {r?.status === "absent" ? <span className="text-[10px] font-semibold text-red-600">ABSENT</span>
+                              : r?.status === "off_day" ? <span className="text-[10px] text-violet-600">DAY OFF</span>
+                              : r?.status === "holiday" ? <span className="text-[10px] text-gray-500">HOLIDAY</span>
+                              : isHol ? <span className="text-[10px] text-blue-700">Holiday worked</span>
+                              : null}
                           </td>
                         </tr>
                       );
                     })}
-                    {records.filter((r: any) => (r.overtimeHours || 0) > 0).length === 0 && (
-                      <tr><td colSpan={7} className="text-center py-6 text-muted-foreground">No OT records this month</td></tr>
-                    )}
                   </tbody>
-                  {records.filter((r: any) => (r.overtimeHours || 0) > 0).length > 0 && (
-                    <tfoot className="bg-muted/70">
-                      <tr>
-                        <td colSpan={3} className="px-3 py-2 text-xs font-bold">TOTAL</td>
-                        <td className="px-3 py-2 text-right font-mono font-bold text-orange-600">{summary.totalOT.toFixed(1)}</td>
-                        <td className="px-3 py-2"></td>
-                        <td className="px-3 py-2 text-right font-mono font-bold text-emerald-700">
-                          {(Math.round(summary.totalOT * nwOtRate * 100) / 100).toLocaleString("en-LK", { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-muted-foreground">
-                          Abs: <span className="font-semibold text-red-600">{summary.absent}</span>
-                        </td>
-                      </tr>
-                    </tfoot>
-                  )}
+                  <tfoot className="bg-muted/70">
+                    <tr>
+                      <td colSpan={2} className="px-3 py-2 text-xs font-bold">TOTAL</td>
+                      <td className="px-3 py-2 text-right font-mono font-bold text-orange-600">{summary.totalOT.toFixed(1)}</td>
+                      <td className="px-3 py-2"></td>
+                      <td className="px-3 py-2 text-right font-mono font-bold text-emerald-700">
+                        {(Math.round(summary.totalOT * nwOtRate * 100) / 100).toLocaleString("en-LK", { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">
+                        Abs: <span className="font-semibold text-red-600">{summary.absent}</span>
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             </Card>
-          )}
+            );
+          })()}
 
           <Card className="overflow-hidden">
             {isLoading ? (

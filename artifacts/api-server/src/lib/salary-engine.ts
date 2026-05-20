@@ -182,35 +182,14 @@ export function nightShiftOt(rec: {
   inTime2?: string | null;
   outTime2?: string | null;
 }): { otHours: number; missedBlocks: number; deductedHours: number } {
-  const start = 20 * 60;     // 20:00
-  const end   = 5 * 60 + 24 * 60; // 05:00 next day, normalized
-
-  // Normalize each stored punch to the night-window timeline (add 24h if before start)
-  const punches: number[] = [];
-  for (const p of [rec.inTime1, rec.outTime1, rec.inTime2, rec.outTime2]) {
-    if (!p) continue;
-    let m = timeToMins(p);
-    if (m < start) m += 24 * 60; // crossed midnight
-    punches.push(m);
-  }
-
-  // Hourly blocks: [20-21, 21-22, …, 04-05]  → 9 blocks
-  let covered = 0;
-  let missed = 0;
-  for (let blockStart = start; blockStart < end; blockStart += 60) {
-    const blockEnd = blockStart + 60;
-    const has = punches.some((m) => m >= blockStart && m < blockEnd);
-    if (has) covered++;
-    else missed++;
-  }
-
-  // No punches at all → no OT
-  if (covered === 0) return { otHours: 0, missedBlocks: missed, deductedHours: 0 };
-
-  const baseOt = 3;
-  const deducted = missed === 0 ? 0 : missed === 1 ? 1 : 2;
-  const otHours = Math.max(0, baseOt - deducted);
-  return { otHours, missedBlocks: missed, deductedHours: deducted };
+  // Night Watcher policy (revised):
+  //   • Any punches present → 3 OT hours (flat, no deduction).
+  //     The lunch/break gap between sessions must NOT be counted as missed time.
+  //     Holiday override (11 hrs) is applied in processSalaryRow.
+  //   • No punches → 0 OT hours.
+  const hasPunches = !!(rec.inTime1 || rec.outTime1 || rec.inTime2 || rec.outTime2);
+  if (!hasPunches) return { otHours: 0, missedBlocks: 0, deductedHours: 0 };
+  return { otHours: 3, missedBlocks: 0, deductedHours: 0 };
 }
 
 /* ── Inputs the engine needs from the caller ──────────────────────────── */
