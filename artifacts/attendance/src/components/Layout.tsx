@@ -37,6 +37,7 @@ import {
   Gift,
   CalendarOff,
   Fingerprint,
+  Calculator,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -72,6 +73,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/leave-balances",   label: "Leave Balances",   icon: CalendarClock },
       { href: "/loans",            label: "Loans & Advances", icon: Banknote      },
       { href: "/incentives",       label: "Incentives",       icon: Gift          },
+      { href: "/manual-salary",    label: "Manual Salary",    icon: Calculator    },
     ],
   },
   {

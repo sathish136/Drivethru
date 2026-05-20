@@ -24,6 +24,7 @@ import loansRouter from "./loans.js";
 import incentivesRouter from "./incentives.js";
 import backupRouter from "./backup.js";
 import weekoffsRouter from "./weekoffs.js";
+import manualSalaryRouter from "./manual-salary.js";
 
 const router: IRouter = Router();
 
@@ -52,5 +53,6 @@ router.use("/loans", loansRouter);
 router.use("/incentives", incentivesRouter);
 router.use("/backup", backupRouter);
 router.use("/weekoffs", weekoffsRouter);
+router.use("/manual-salary", manualSalaryRouter);
 
 export default router;
