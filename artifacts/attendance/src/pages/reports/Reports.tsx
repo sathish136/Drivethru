@@ -544,16 +544,21 @@ function AttendanceReport() {
     const [y, m, d] = dateStr.split("-");
     return `${d}-${m}-${y}`;
   }
-  function otHoursToPolicy(otHours: number): string {
+  function otHoursToPolicy(otHours: number, isHoliday = false): string {
     if (!otHours || otHours <= 0) return "—";
-    // Night Watcher final OT is discrete only: 0h,1h,2h,3h.
+    if (isHoliday) {
+      // Holiday: 11 OT hrs (8 base + 3), cap 11
+      return `${Math.min(11, Math.round(otHours))}.0 hrs`;
+    }
+    // Night Watcher regular OT: 0/1/2/3 discrete hours
     const discrete = Math.max(0, Math.min(3, Math.round(otHours)));
-    return `${discrete}:00 hrs`;
+    return `${discrete}.0 hrs`;
   }
-  function policyRemark(status: string, otHours: number): string {
+  function policyRemark(status: string, otHours: number, isHoliday = false): string {
     if (status === "no_record") return "No punch data";
     if (status === "half_day") return "Half day record; needs manual check against normal night shift policy";
     if (status === "absent") return "Absent/invalid against policy shift; manual review needed";
+    if (isHoliday && otHours > 0) return "Holiday worked: 8 base + 3 = 11 OT hrs";
     if (otHours <= 0) return "No OT eligible by off time";
     const discrete = Math.max(0, Math.min(3, Math.round(otHours)));
     if (discrete >= 3) return "All hourly checkpoints satisfied (05:00/06:00/07:00)";
@@ -580,18 +585,19 @@ function AttendanceReport() {
       const st = r.status;
       const statusLabel = st === "late" ? "PRESENT" : st === "half_day" ? "HALF DAY" : st === "off_day" ? "DAY OFF" : st.replace("_", " ").toUpperCase();
       const offPunch = r.outTime2 || r.outTime1 || "—";
+      const isHol = !!(r as any).holidayWorked;
       rows.push([
         toDdMmYyyy(dateStr),
         day,
-        statusLabel,
+        statusLabel + (isHol ? " (HOLIDAY)" : ""),
         r.shiftName || shift,
         r.inTime1 || "—",
         r.outTime1 || "—",
         r.inTime2 || "—",
         offPunch,
         fmtTotal(r.totalHours),
-        otHoursToPolicy(r.overtimeHours || 0),
-        policyRemark(st, r.overtimeHours || 0),
+        otHoursToPolicy(r.overtimeHours || 0, isHol),
+        policyRemark(st, r.overtimeHours || 0, isHol),
       ]);
     }
     return rows;
@@ -1846,6 +1852,57 @@ function IndividualReport() {
           </tr>`;
         }
 
+        // Night Watcher OT table for PDF
+        const empBasicForNW = (emp as any).basicSalary ?? 0;
+        const empNwOtRate = Math.round((empBasicForNW / 240 * 1.5) * 100) / 100;
+        const empIsNW = !!(
+          clientFindRule(hrRules, (emp as any).department ?? "", shiftOptions.find((s: any) => s.id === (emp as any).shiftId)?.name ?? null)?.nightWatcherPayroll ||
+          /night\s*watcher/i.test((emp as any).designation || "") ||
+          /night\s*watcher/i.test(shiftOptions.find((s: any) => s.id === (emp as any).shiftId)?.name || "")
+        );
+        const nwOtRecs = recs.filter((r: any) => (r.overtimeHours || 0) > 0);
+        const nwTotalOt = nwOtRecs.reduce((s: number, r: any) => s + (r.overtimeHours || 0), 0);
+        const nwOtTableHtml = empIsNW && nwOtRecs.length > 0 ? `
+<div style="margin-top:14px;border:1px solid #fde68a;border-radius:6px;overflow:hidden">
+  <div style="background:#fffbeb;padding:8px 14px;border-bottom:1px solid #fde68a;display:flex;justify-content:space-between;align-items:center">
+    <span style="font-weight:700;color:#92400e;font-size:10px">NIGHT WATCHER OT SUMMARY</span>
+    <span style="font-size:9px;color:#b45309">OT Rate = Basic/240×1.5 = Rs. ${empNwOtRate.toFixed(2)}/hr &nbsp;|&nbsp; Normal: 3 hrs · Holiday: 11 hrs (8+3)</span>
+  </div>
+  <table style="width:100%;border-collapse:collapse">
+    <thead><tr style="background:#1565a8">
+      <th style="color:#fff;padding:5px 9px;text-align:left;font-size:9px">Date</th>
+      <th style="color:#fff;padding:5px 9px;text-align:left;font-size:9px">Day</th>
+      <th style="color:#fff;padding:5px 9px;text-align:left;font-size:9px">Status</th>
+      <th style="color:#fff;padding:5px 9px;text-align:right;font-size:9px">OT Hours</th>
+      <th style="color:#fff;padding:5px 9px;text-align:right;font-size:9px">OT Rate (Rs.)</th>
+      <th style="color:#fff;padding:5px 9px;text-align:right;font-size:9px">OT Amount (Rs.)</th>
+      <th style="color:#fff;padding:5px 9px;text-align:left;font-size:9px">Remarks</th>
+    </tr></thead>
+    <tbody>${nwOtRecs.map((r: any) => {
+      const ot = r.overtimeHours || 0;
+      const isHol = !!(r as any).holidayWorked;
+      const dow2 = new Date(r.date + "T00:00:00Z").getUTCDay();
+      const bgStyle = isHol ? 'background:#dbeafe' : 'background:#f9fafb';
+      return `<tr style="${bgStyle}">
+        <td style="padding:4px 9px;font-size:9px;border-bottom:1px solid #f0f0f0">${r.date}</td>
+        <td style="padding:4px 9px;font-size:9px;border-bottom:1px solid #f0f0f0">${DAY_NAMES[dow2]}</td>
+        <td style="padding:4px 9px;font-size:9px;border-bottom:1px solid #f0f0f0;font-weight:700;color:${isHol?'#1d4ed8':'#15803d'}">${isHol ? 'HOLIDAY WORKED' : 'PRESENT'}</td>
+        <td style="padding:4px 9px;font-size:9px;border-bottom:1px solid #f0f0f0;text-align:right;color:#ea580c;font-weight:700">${ot.toFixed(1)}</td>
+        <td style="padding:4px 9px;font-size:9px;border-bottom:1px solid #f0f0f0;text-align:right;color:#1d4ed8">${empNwOtRate.toFixed(2)}</td>
+        <td style="padding:4px 9px;font-size:9px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:700;color:#15803d">${(Math.round(ot * empNwOtRate * 100)/100).toFixed(2)}</td>
+        <td style="padding:4px 9px;font-size:9px;border-bottom:1px solid #f0f0f0;color:${isHol?'#1d4ed8':'#6b7280'}">${isHol ? 'Holiday: 8 base + 3 = 11 OT hrs' : 'Regular night OT'}</td>
+      </tr>`;
+    }).join("")}</tbody>
+    <tfoot><tr style="background:#e8f0fe">
+      <td colspan="3" style="padding:5px 9px;font-size:9.5px;font-weight:700;border-top:2px solid #1565a8">TOTAL — Absence: ${absent}</td>
+      <td style="padding:5px 9px;font-size:9.5px;font-weight:700;text-align:right;color:#ea580c;border-top:2px solid #1565a8">${nwTotalOt.toFixed(1)}</td>
+      <td style="border-top:2px solid #1565a8"></td>
+      <td style="padding:5px 9px;font-size:9.5px;font-weight:700;text-align:right;color:#15803d;border-top:2px solid #1565a8">${(Math.round(nwTotalOt * empNwOtRate * 100)/100).toFixed(2)}</td>
+      <td style="border-top:2px solid #1565a8"></td>
+    </tr></tfoot>
+  </table>
+</div>` : "";
+
         pagesHtml.push(`<div class="report-wrap">
 <div class="header">
   <div class="header-left">
@@ -1872,6 +1929,7 @@ function IndividualReport() {
   <th>1st In</th><th>1st Out</th><th>2nd In</th><th>2nd Out</th>
   <th>Lunch Break</th><th>Total Hrs</th><th>Late</th><th>OT</th><th>Remarks</th>
 </tr></thead><tbody>${rowsHtml}</tbody></table>
+${nwOtTableHtml}
 <div class="footer">
   <div class="footer-note">System-generated report. For internal use only. © ${new Date().getFullYear()} Drivethru Pvt Ltd</div>
   <div class="footer-right">
@@ -1933,6 +1991,32 @@ function IndividualReport() {
 
   function handleExportExcel() {
     if (!selectedEmp || records.length === 0) return;
+    // Night Watcher: export OT summary sheet instead of regular format
+    if (isNightWatcher) {
+      const NW_HEADERS = ["Date","Day","Status","OT Hours","OT Rate (Rs.)","OT Amount (Rs.)","Remarks"];
+      const nwRows = records
+        .filter((r: any) => (r.overtimeHours || 0) > 0)
+        .map((r: any) => {
+          const ot = r.overtimeHours || 0;
+          const isHol = !!r.holidayWorked;
+          const dow = new Date(r.date + "T00:00:00Z").getUTCDay();
+          return [
+            r.date,
+            DAY_NAMES[dow],
+            isHol ? "HOLIDAY WORKED" : fmtStatus(r.status),
+            ot.toFixed(1),
+            nwOtRate.toFixed(2),
+            (Math.round(ot * nwOtRate * 100) / 100).toFixed(2),
+            isHol ? "Holiday: 8 base + 3 = 11 OT hrs" : "Regular night OT",
+          ];
+        });
+      // Add totals row
+      const totalOt = records.reduce((s: number, r: any) => s + (r.overtimeHours || 0), 0);
+      nwRows.push(["TOTAL", "", "", totalOt.toFixed(1), "", (Math.round(totalOt * nwOtRate * 100) / 100).toFixed(2), `Absence: ${summary.absent}`]);
+      const safeMonth = `${getMonthName(month)}-${year}`;
+      exportCsv(NW_HEADERS, nwRows, `night-watcher-ot-${(selectedEmp as any).employeeId}-${safeMonth}.csv`);
+      return;
+    }
     const HEADERS = ["#","Date","Day","Status","1st In","1st Out","2nd In","2nd Out","Lunch Break","Total Hrs","Late","OT Hrs","Remarks"];
     const offDaysListXls = empOffDays.get(Number(selectedEmp.id)) || [];
     const rows = Array.from({ length: daysInMonth }, (_, i) => {
@@ -1971,6 +2055,26 @@ function IndividualReport() {
 
 
   const selectedEmps = useMemo(() => empIds.map(id => employees.find((e: any) => String(e.id) === id)).filter(Boolean), [employees, empIds]);
+
+  // Night Watcher detection for selected employee
+  const empShiftNameForRule = useMemo(() => {
+    if (!selectedEmp) return null;
+    return shiftOptions.find((s: any) => s.id === (selectedEmp as any).shiftId)?.name ?? null;
+  }, [selectedEmp, shiftOptions]);
+  const empRuleForNW = useMemo(() => {
+    if (!selectedEmp) return null;
+    return clientFindRule(hrRules, (selectedEmp as any).department ?? "", empShiftNameForRule);
+  }, [selectedEmp, hrRules, empShiftNameForRule]);
+  const isNightWatcher = !!(
+    empRuleForNW?.nightWatcherPayroll ||
+    /night\s*watcher/i.test((selectedEmp as any)?.designation || "") ||
+    /night\s*watcher/i.test(empShiftNameForRule || "")
+  );
+  const nwOtRate = useMemo(() => {
+    if (!isNightWatcher) return 0;
+    const basic = (selectedEmp as any)?.basicSalary ?? 0;
+    return Math.round((basic / 240 * 1.5) * 100) / 100;
+  }, [isNightWatcher, selectedEmp]);
 
   return (
     <div className="space-y-4">
@@ -2093,6 +2197,78 @@ function IndividualReport() {
                 </Card>
               ))}
             </div>
+          )}
+
+          {isNightWatcher && !isLoading && records.length > 0 && (
+            <Card className="overflow-hidden">
+              <div className="px-4 py-3 border-b border-border bg-amber-50 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-amber-900">Night Watcher OT Summary</span>
+                  <span className="text-[10px] text-amber-700 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded font-mono">
+                    OT Rate = Basic / 240 × 1.5 = Rs. {nwOtRate.toFixed(2)} / hr
+                  </span>
+                </div>
+                <span className="text-[10px] text-amber-600">Normal day: 3 hrs · Holiday: 11 hrs (8+3) · Cap: 11 hrs</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">Date</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">Day</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">Status</th>
+                      <th className="px-3 py-2.5 text-right font-semibold text-orange-600">OT Hours</th>
+                      <th className="px-3 py-2.5 text-right font-semibold text-blue-600">OT Rate (Rs.)</th>
+                      <th className="px-3 py-2.5 text-right font-semibold text-emerald-700">OT Amount (Rs.)</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground">Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {records.filter((r: any) => (r.overtimeHours || 0) > 0).map((r: any) => {
+                      const ot = r.overtimeHours || 0;
+                      const isHol = !!r.holidayWorked;
+                      const amount = Math.round(ot * nwOtRate * 100) / 100;
+                      const dow = new Date(r.date + "T00:00:00Z").getUTCDay();
+                      return (
+                        <tr key={r.date} className={isHol ? "bg-blue-50 hover:bg-blue-100" : "hover:bg-muted/30"}>
+                          <td className="px-3 py-2 font-mono">{r.date}</td>
+                          <td className="px-3 py-2 text-muted-foreground">{DAY_NAMES[dow]}</td>
+                          <td className="px-3 py-2">
+                            <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-semibold", isHol ? "bg-blue-100 text-blue-700" : statusColor(r.status))}>
+                              {isHol ? "HOLIDAY WORKED" : fmtStatus(r.status)}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-right font-mono font-semibold text-orange-600">{ot.toFixed(1)}</td>
+                          <td className="px-3 py-2 text-right font-mono text-blue-600">{nwOtRate.toFixed(2)}</td>
+                          <td className="px-3 py-2 text-right font-mono font-semibold text-emerald-700">{amount.toLocaleString("en-LK", { minimumFractionDigits: 2 })}</td>
+                          <td className="px-3 py-2 text-[10px] text-muted-foreground">
+                            {isHol ? <span className="text-blue-700">Holiday: 8 base + 3 = 11 OT hrs</span> : "Regular night OT"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {records.filter((r: any) => (r.overtimeHours || 0) > 0).length === 0 && (
+                      <tr><td colSpan={7} className="text-center py-6 text-muted-foreground">No OT records this month</td></tr>
+                    )}
+                  </tbody>
+                  {records.filter((r: any) => (r.overtimeHours || 0) > 0).length > 0 && (
+                    <tfoot className="bg-muted/70">
+                      <tr>
+                        <td colSpan={3} className="px-3 py-2 text-xs font-bold">TOTAL</td>
+                        <td className="px-3 py-2 text-right font-mono font-bold text-orange-600">{summary.totalOT.toFixed(1)}</td>
+                        <td className="px-3 py-2"></td>
+                        <td className="px-3 py-2 text-right font-mono font-bold text-emerald-700">
+                          {(Math.round(summary.totalOT * nwOtRate * 100) / 100).toLocaleString("en-LK", { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                          Abs: <span className="font-semibold text-red-600">{summary.absent}</span>
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </Card>
           )}
 
           <Card className="overflow-hidden">

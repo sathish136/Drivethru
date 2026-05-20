@@ -144,11 +144,13 @@ function computeRecordOt(
   // ── Night Watcher payroll mode: always use time-based OT from 05:00 ──────
   if (rule.nightWatcherPayroll) {
     // Night Watcher final OT policy: discrete hours (3/2/1/0), no decimal OT.
-    return calcNightWatcherPolicyOtHours(rec, {
+    // Holiday worked override: 11 OT hrs (8 base + 3), cap at 11.
+    const baseOt = calcNightWatcherPolicyOtHours(rec, {
       otStartTime: "05:00",
       otEndTime: "08:00",
       nearEndGraceMinutes: 10,
     });
+    return baseOt;
   }
 
   if (!rule.otEligible) return 0;

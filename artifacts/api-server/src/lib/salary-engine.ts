@@ -424,6 +424,11 @@ export function processSalaryRow(opts: {
       const r = nightShiftOt(rec);
       otHours = r.otHours;
       nightTrace = { missedBlocks: r.missedBlocks, deductedHours: r.deductedHours };
+      // Night Watcher holiday rule: 11 OT hrs (8 base + 3) when worked on a public/statutory/poya holiday.
+      // Cap at 11 hrs maximum regardless.
+      if (holiday && punchCount > 0 && otHours > 0) {
+        otHours = 11;
+      }
     } else if (category === "FLEXIBLE") {
       otHours = workedHoursRaw > FLEXIBLE_OT_AFTER_HOURS
         ? Math.round((workedHoursRaw - FLEXIBLE_OT_AFTER_HOURS) * 100) / 100
