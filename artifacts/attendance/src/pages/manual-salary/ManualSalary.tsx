@@ -2,13 +2,13 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Calculator, Plus, Search, Pencil, Trash2, CheckCircle2, Clock,
   FileText, X, AlertCircle, DollarSign, UserRound, Banknote,
-  RefreshCw, Lock, Loader2, TrendingDown,
+  Loader2, TrendingDown, Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PageHeader, Card, Button, Input, Select, Label, Table, Th, Td, Tr, Badge } from "@/components/ui";
+import { PageHeader, Card, Button, Input, Select, Badge } from "@/components/ui";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-function api(path: string) { return `${BASE}/api/${path}`; }
+function api(p: string) { return `${BASE}/api/${p}`; }
 
 const MONTHS = [
   "January","February","March","April","May","June",
@@ -18,94 +18,55 @@ const MONTHS = [
 type Status = "draft" | "finalized" | "paid";
 
 interface Employee {
-  id: number;
-  employeeId: string;
-  fullName: string;
-  designation: string;
-  department: string;
-  branchId: number;
+  id: number; employeeId: string; fullName: string;
+  designation: string; department: string; branchId: number;
 }
 
 interface SalaryRow {
-  id: number;
-  month: number;
-  year: number;
-  presentDays: number;
-  absentDays: number;
-  otHours: number;
-  otAmount: number;
-  basicSalary: number;
-  transportAllowance: number;
-  lunchAllowance: number;
-  housingAllowance: number;
-  otherAllowances: number;
-  epfDeduction: number;
-  loanDeduction: number;
-  absenceDeduction: number;
-  otherDeductions: number;
-  grossSalary: number;
-  netSalary: number;
-  status: Status;
-  notes: string | null;
-  createdAt: string;
-  employeeId: number;
-  employeeCode: string;
-  employeeName: string;
-  designation: string;
-  department: string;
+  id: number; month: number; year: number;
+  presentDays: number; absentDays: number; otHours: number; otAmount: number;
+  basicSalary: number; transportAllowance: number; lunchAllowance: number;
+  housingAllowance: number; otherAllowances: number;
+  epfDeduction: number; loanDeduction: number; absenceDeduction: number; otherDeductions: number;
+  grossSalary: number; netSalary: number; status: Status; notes: string | null; createdAt: string;
+  employeeId: number; employeeCode: string; employeeName: string; designation: string; department: string;
 }
 
-interface AttendanceSummary {
-  presentDays: number;
-  absentDays: number;
-  otHours: number;
-}
+interface AttendanceSummary { presentDays: number; absentDays: number; otHours: number; }
+
+interface EarningItem  { component?: string; name?: string; amount?: number; type?: string; percentage?: number; formula?: string; }
+interface DeductionItem { component?: string; name?: string; amount?: number; percentage?: number; type?: string; }
 
 interface StructureData {
-  structureId: number;
-  structureName: string;
-  basicAmount: number;
-  transportAllowance: number;
-  lunchAllowance: number;
-  housingAllowance: number;
-  otherAllowances: number;
+  structureId: number; structureName: string; basicAmount: number;
+  transportAllowance: number; lunchAllowance: number;
+  housingAllowance: number; otherAllowances: number;
+  earnings: EarningItem[]; deductions: DeductionItem[];
 }
 
 const now = new Date();
 
 const EMPTY_FORM = {
-  employeeId: "",
-  month: String(now.getMonth() + 1),
-  year: String(now.getFullYear()),
-  presentDays: "",
-  absentDays: "",
-  otHours: "",
-  otAmount: "",
-  basicSalary: "",
-  transportAllowance: "",
-  lunchAllowance: "",
-  housingAllowance: "",
-  otherAllowances: "",
-  epfDeduction: "",
-  loanDeduction: "",
-  absenceDeduction: "",
-  otherDeductions: "",
-  status: "draft" as Status,
-  notes: "",
+  employeeId: "", month: String(now.getMonth() + 1), year: String(now.getFullYear()),
+  presentDays: "", absentDays: "", otHours: "", otAmount: "",
+  basicSalary: "", transportAllowance: "", lunchAllowance: "",
+  housingAllowance: "", otherAllowances: "",
+  epfDeduction: "", loanDeduction: "", absenceDeduction: "", otherDeductions: "",
+  status: "draft" as Status, notes: "",
 };
 
 function fmtRs(n: number) {
   return "Rs. " + n.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-
-function fmtRsShort(n: number) {
+function fmtShort(n: number) {
   return n.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+function num(v: string | number) { return Number(v) || 0; }
 
 const STATUS_CFG: Record<Status, { cls: string; label: string }> = {
-  draft:     { cls: "bg-amber-100 text-amber-700 border border-amber-200",   label: "Draft"     },
-  finalized: { cls: "bg-blue-100 text-blue-700 border border-blue-200",      label: "Finalized" },
-  paid:      { cls: "bg-emerald-100 text-emerald-700 border border-emerald-200", label: "Paid"  },
+  draft:     { cls: "bg-amber-100 text-amber-700 border border-amber-200",       label: "Draft"     },
+  finalized: { cls: "bg-blue-100 text-blue-700 border border-blue-200",          label: "Finalized" },
+  paid:      { cls: "bg-emerald-100 text-emerald-700 border border-emerald-200", label: "Paid"      },
 };
 
 function StatusPill({ status }: { status: Status }) {
@@ -120,65 +81,62 @@ function StatusPill({ status }: { status: Status }) {
   );
 }
 
-function SectionTitle({ icon, children, color = "green" }: {
-  icon?: React.ReactNode; children: React.ReactNode; color?: "green" | "blue" | "red" | "slate";
-}) {
-  const colors = {
-    green: "text-green-700 border-green-200",
-    blue:  "text-blue-600 border-blue-200",
-    red:   "text-red-600 border-red-200",
-    slate: "text-slate-500 border-slate-200",
-  };
+/* ── Section header ── */
+function SectionHead({ icon, title, badge }: { icon: React.ReactNode; title: string; badge?: React.ReactNode }) {
   return (
-    <div className={cn("flex items-center gap-1.5 pb-2 mb-3 border-b text-[11px] font-bold uppercase tracking-widest", colors[color])}>
-      {icon}
+    <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-200">
+      <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-green-700">
+        {icon}{title}
+      </div>
+      {badge}
+    </div>
+  );
+}
+
+/* ── Field wrapper ── */
+function Field({ label, hint, children }: { label: string; hint?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{label}</label>
+        {hint}
+      </div>
       {children}
     </div>
   );
 }
 
-function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between mb-1">
-      <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{children}</label>
-      {hint}
-    </div>
-  );
-}
-
-function ReadonlyField({ prefix, value, loading, onUnlock }: {
-  prefix: string; value: number; loading?: boolean; onUnlock?: () => void;
+/* ── Editable number field with prefix ── */
+function NumField({ prefix, name, value, onChange, disabled }: {
+  prefix: string; name: string; value: string;
+  onChange: (n: string, v: string) => void; disabled?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm shadow-sm">
-      <span className="text-xs text-slate-400 font-medium mr-1">{prefix}</span>
-      <span className="flex-1 text-slate-700 font-semibold">
-        {loading ? <Loader2 size={12} className="animate-spin inline" /> : value}
-      </span>
-      {onUnlock && (
-        <button type="button" onClick={onUnlock} title="Override"
-          className="ml-1 p-0.5 rounded hover:bg-amber-100 text-slate-400 hover:text-amber-600 transition-colors">
-          <Lock size={10} />
-        </button>
-      )}
-    </div>
-  );
-}
-
-function EditableField({ prefix, name, value, onChange }: {
-  prefix: string; name: string; value: string; onChange: (n: string, v: string) => void;
-}) {
-  return (
-    <div className="flex items-center rounded-lg border border-slate-200 bg-white shadow-sm focus-within:ring-2 focus-within:ring-green-500/30 focus-within:border-green-400 transition-all overflow-hidden">
-      <span className="px-2.5 text-xs text-slate-400 font-medium bg-slate-50 border-r border-slate-200 py-2 shrink-0">{prefix}</span>
+    <div className={cn(
+      "flex items-center rounded-lg border overflow-hidden transition-all",
+      disabled
+        ? "border-slate-100 bg-slate-50"
+        : "border-slate-200 bg-white shadow-sm focus-within:ring-2 focus-within:ring-green-500/25 focus-within:border-green-400"
+    )}>
+      <span className="px-2.5 text-xs text-slate-400 font-medium bg-slate-50 border-r border-slate-200 py-2 shrink-0 select-none">{prefix}</span>
       <input
         type="number" min="0" step="0.01"
         value={value}
+        disabled={disabled}
         onChange={e => onChange(name, e.target.value)}
-        className="flex-1 px-2.5 py-2 text-sm text-slate-700 outline-none bg-white placeholder:text-slate-300"
+        className="flex-1 px-2.5 py-2 text-sm text-slate-700 outline-none bg-transparent placeholder:text-slate-300 disabled:text-slate-400"
         placeholder="0.00"
       />
     </div>
+  );
+}
+
+/* ── Inline formula hint chip ── */
+function FormulaHint({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] text-slate-400 bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5">
+      <Info size={8} className="shrink-0" /> {children}
+    </span>
   );
 }
 
@@ -199,15 +157,10 @@ export default function ManualSalary() {
   const [form,      setForm]      = useState({ ...EMPTY_FORM });
   const [deleteId,  setDeleteId]  = useState<number | null>(null);
 
-  // Attendance auto-fill
-  const [attData,     setAttData]     = useState<AttendanceSummary | null>(null);
-  const [attLoading,  setAttLoading]  = useState(false);
-  const [attOverride, setAttOverride] = useState(false);
-
-  // Salary structure auto-fill
-  const [structData,     setStructData]     = useState<StructureData | null>(null);
-  const [structLoading,  setStructLoading]  = useState(false);
-  const [structOverride, setStructOverride] = useState(false);
+  const [attData,    setAttData]    = useState<AttendanceSummary | null>(null);
+  const [attLoading, setAttLoading] = useState(false);
+  const [structData, setStructData] = useState<StructureData | null>(null);
+  const [structLoading, setStructLoading] = useState(false);
 
   const token   = localStorage.getItem("auth_token") ?? "";
   const headers = useMemo(() => ({
@@ -215,6 +168,7 @@ export default function ManualSalary() {
     Authorization: `Bearer ${token}`,
   }), [token]);
 
+  /* ── Load rows & employees ── */
   const loadRows = useCallback(async () => {
     setLoading(true);
     try {
@@ -240,13 +194,12 @@ export default function ManualSalary() {
   useEffect(() => { loadRows(); },      [loadRows]);
   useEffect(() => { loadEmployees(); }, [loadEmployees]);
 
-  // Auto-fetch attendance when employee + month + year all set
+  /* ── Auto-fetch attendance → pre-fill (always editable) ── */
   const attRef = useRef(0);
   useEffect(() => {
     if (!form.employeeId || !form.month || !form.year) { setAttData(null); return; }
     const id = ++attRef.current;
     setAttLoading(true);
-    setAttData(null);
     const p = new URLSearchParams({ employeeId: form.employeeId, month: form.month, year: form.year });
     fetch(`${api("manual-salary/attendance-lookup")}?${p}`, { headers })
       .then(r => r.ok ? r.json() : null)
@@ -254,41 +207,129 @@ export default function ManualSalary() {
         if (attRef.current !== id) return;
         if (data) {
           setAttData(data);
-          if (!attOverride)
-            setForm(f => ({ ...f, presentDays: String(data.presentDays), absentDays: String(data.absentDays), otHours: String(data.otHours) }));
+          setForm(f => ({
+            ...f,
+            presentDays: String(data.presentDays),
+            absentDays:  String(data.absentDays),
+            otHours:     String(data.otHours),
+          }));
         }
       })
       .catch(() => {})
       .finally(() => { if (attRef.current === id) setAttLoading(false); });
   }, [form.employeeId, form.month, form.year, headers]);
 
-  // Auto-fetch salary structure when employee changes
+  /* ── Auto-fetch salary structure → pre-fill ── */
   const structRef = useRef(0);
   useEffect(() => {
     if (!form.employeeId) { setStructData(null); return; }
     const id = ++structRef.current;
     setStructLoading(true);
-    setStructData(null);
     fetch(`${api(`salary-structures/assignment/${form.employeeId}`)}`, { headers })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (structRef.current !== id) return;
-        if (data && !data.error && !data.message) {
+        if (data && !data.error) {
           setStructData(data);
-          if (!structOverride)
-            setForm(f => ({
-              ...f,
-              basicSalary:        String(data.basicAmount),
-              transportAllowance: String(data.transportAllowance),
-              lunchAllowance:     String(data.lunchAllowance),
-              housingAllowance:   String(data.housingAllowance),
-              otherAllowances:    String(data.otherAllowances),
-            }));
+          // Pre-fill salary components from structure
+          setForm(f => ({
+            ...f,
+            basicSalary:        String(data.basicAmount ?? 0),
+            transportAllowance: String(data.transportAllowance ?? 0),
+            lunchAllowance:     String(data.lunchAllowance ?? 0),
+            housingAllowance:   String(data.housingAllowance ?? 0),
+            otherAllowances:    String(data.otherAllowances ?? 0),
+          }));
+          // Also auto-calc EPF from structure deductions
+          const epfItem = (data.deductions as DeductionItem[]).find(d => {
+            const n = (d.component ?? d.name ?? "").toLowerCase();
+            return n.includes("epf") || n.includes("pf");
+          });
+          if (epfItem) {
+            const pct = epfItem.percentage ?? (epfItem.amount && data.basicAmount ? (epfItem.amount / data.basicAmount) * 100 : 8);
+            const epfAmt = (data.basicAmount ?? 0) * (pct / 100);
+            setForm(f => ({ ...f, epfDeduction: String(Math.round(epfAmt * 100) / 100) }));
+          } else {
+            // Default 8%
+            const epfAmt = (data.basicAmount ?? 0) * 0.08;
+            setForm(f => ({ ...f, epfDeduction: String(Math.round(epfAmt * 100) / 100) }));
+          }
         }
       })
       .catch(() => {})
       .finally(() => { if (structRef.current === id) setStructLoading(false); });
   }, [form.employeeId, headers]);
+
+  /* ── Auto-calc OT amount when OT hours or basic changes ── */
+  const otAutoCalcRef = useRef(false);
+  useEffect(() => {
+    if (!otAutoCalcRef.current) return; // only auto-update when user changes fields interactively
+    const basic   = num(form.basicSalary);
+    const otHours = num(form.otHours);
+    if (basic > 0 && otHours > 0) {
+      const dailyRate  = basic / 26;
+      const hourlyRate = dailyRate / 8;
+      const otAmt      = Math.round(otHours * hourlyRate * 1.5 * 100) / 100;
+      setForm(f => ({ ...f, otAmount: String(otAmt) }));
+    }
+  }, [form.basicSalary, form.otHours]);
+
+  /* ── Auto-recalc EPF when basic changes ── */
+  useEffect(() => {
+    if (!structData) return;
+    const basic = num(form.basicSalary);
+    if (basic <= 0) return;
+    const epfItem = structData.deductions.find(d => {
+      const n = (d.component ?? d.name ?? "").toLowerCase();
+      return n.includes("epf") || n.includes("pf");
+    });
+    const pct    = epfItem?.percentage ?? 8;
+    const epfAmt = Math.round(basic * (pct / 100) * 100) / 100;
+    setForm(f => ({ ...f, epfDeduction: String(epfAmt) }));
+  }, [form.basicSalary, structData]);
+
+  /* ── Derived calculations ── */
+  const gross = useMemo(() =>
+    [form.basicSalary, form.transportAllowance, form.lunchAllowance,
+     form.housingAllowance, form.otherAllowances, form.otAmount]
+    .reduce((s, v) => s + num(v), 0), [form]);
+
+  const totalDed = useMemo(() =>
+    [form.epfDeduction, form.loanDeduction, form.absenceDeduction, form.otherDeductions]
+    .reduce((s, v) => s + num(v), 0), [form]);
+
+  const net = gross - totalDed;
+
+  /* ── EPF % for hint display ── */
+  const epfRate = useMemo(() => {
+    if (!structData) return 8;
+    const epfItem = structData.deductions.find(d => {
+      const n = (d.component ?? d.name ?? "").toLowerCase();
+      return n.includes("epf") || n.includes("pf");
+    });
+    return epfItem?.percentage ?? 8;
+  }, [structData]);
+
+  /* ── OT formula hint values ── */
+  const otHourlyRate = useMemo(() => {
+    const basic = num(form.basicSalary);
+    if (!basic) return 0;
+    return basic / 26 / 8;
+  }, [form.basicSalary]);
+
+  /* ── Lunch component type hint ── */
+  const lunchItem = useMemo(() => {
+    if (!structData) return null;
+    return structData.earnings.find(e => {
+      const n = (e.component ?? e.name ?? "").toLowerCase();
+      return n.includes("lunch") || n.includes("incentive");
+    }) ?? null;
+  }, [structData]);
+
+  function setField(name: string, value: string) {
+    otAutoCalcRef.current = true;
+    setForm(f => ({ ...f, [name]: value }));
+  }
 
   const filtered = useMemo(() => {
     if (!search.trim()) return rows;
@@ -301,36 +342,22 @@ export default function ManualSalary() {
   }, [rows, search]);
 
   const summary = useMemo(() => ({
-    total:    rows.length,
-    draft:    rows.filter(r => r.status === "draft").length,
-    finalized:rows.filter(r => r.status === "finalized").length,
-    paid:     rows.filter(r => r.status === "paid").length,
-    totalNet: rows.reduce((s, r) => s + r.netSalary, 0),
+    total:     rows.length,
+    draft:     rows.filter(r => r.status === "draft").length,
+    finalized: rows.filter(r => r.status === "finalized").length,
+    paid:      rows.filter(r => r.status === "paid").length,
+    totalNet:  rows.reduce((s, r) => s + r.netSalary, 0),
   }), [rows]);
-
-  const gross = useMemo(() =>
-    [form.basicSalary, form.transportAllowance, form.lunchAllowance,
-     form.housingAllowance, form.otherAllowances, form.otAmount]
-    .reduce((s, v) => s + Number(v || 0), 0), [form]);
-
-  const totalDed = useMemo(() =>
-    [form.epfDeduction, form.loanDeduction, form.absenceDeduction, form.otherDeductions]
-    .reduce((s, v) => s + Number(v || 0), 0), [form]);
-
-  const net = gross - totalDed;
-
-  function setField(name: string, value: string) { setForm(f => ({ ...f, [name]: value })); }
 
   function openAdd() {
     setEditId(null); setForm({ ...EMPTY_FORM });
     setAttData(null); setStructData(null);
-    setAttOverride(false); setStructOverride(false);
+    otAutoCalcRef.current = false;
     setModalOpen(true);
   }
 
   function openEdit(row: SalaryRow) {
-    setEditId(row.id);
-    setAttOverride(true); setStructOverride(true);
+    setEditId(row.id); otAutoCalcRef.current = false;
     setForm({
       employeeId: String(row.employeeId), month: String(row.month), year: String(row.year),
       presentDays: String(row.presentDays), absentDays: String(row.absentDays),
@@ -372,43 +399,44 @@ export default function ManualSalary() {
   }
 
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
-
-  // Selected employee info (for modal header)
   const selectedEmp = employees.find(e => String(e.id) === form.employeeId);
 
   return (
     <div className="p-6 space-y-6">
-
       <PageHeader
         title="Manual Salary"
         description="Manage employee salary entries — attendance and structure auto-filled"
         action={
-          <Button onClick={openAdd} size="sm" className="gap-1.5">
+          <button
+            onClick={openAdd}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white shadow-sm transition-all hover:brightness-110"
+            style={{ background: "linear-gradient(135deg,#166534,#16a34a)" }}
+          >
             <Plus size={14} /> Add Entry
-          </Button>
+          </button>
         }
       />
 
       {error && (
         <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
           <AlertCircle size={14} className="shrink-0" /> {error}
-          <button onClick={() => setError(null)} className="ml-auto p-0.5 rounded hover:bg-red-100"><X size={13} /></button>
+          <button onClick={() => setError(null)} className="ml-auto"><X size={13} /></button>
         </div>
       )}
 
-      {/* Summary */}
+      {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Total Entries", value: summary.total,     icon: <FileText size={16} />,      color: "text-slate-700",  bg: "bg-white",      iconBg: "bg-slate-100  text-slate-500"   },
-          { label: "Draft",         value: summary.draft,     icon: <Clock size={16} />,         color: "text-amber-700",  bg: "bg-amber-50",   iconBg: "bg-amber-100  text-amber-600"   },
-          { label: "Finalized",     value: summary.finalized, icon: <FileText size={16} />,      color: "text-blue-700",   bg: "bg-blue-50",    iconBg: "bg-blue-100   text-blue-600"    },
-          { label: "Paid",          value: summary.paid,      icon: <CheckCircle2 size={16} />,  color: "text-emerald-700",bg: "bg-emerald-50", iconBg: "bg-emerald-100 text-emerald-600"},
+          { label: "Total Entries", value: summary.total,     icon: <FileText size={15} />,      clr: "text-slate-700",   ib: "bg-slate-100 text-slate-500"    },
+          { label: "Draft",         value: summary.draft,     icon: <Clock size={15} />,         clr: "text-amber-700",   ib: "bg-amber-100 text-amber-600"    },
+          { label: "Finalized",     value: summary.finalized, icon: <FileText size={15} />,      clr: "text-blue-700",    ib: "bg-blue-100 text-blue-600"      },
+          { label: "Paid",          value: summary.paid,      icon: <CheckCircle2 size={15} />,  clr: "text-emerald-700", ib: "bg-emerald-100 text-emerald-600"},
         ].map(c => (
-          <Card key={c.label} className={cn("p-4 flex items-center gap-3 border", c.bg)}>
-            <div className={cn("p-2 rounded-lg", c.iconBg)}>{c.icon}</div>
+          <Card key={c.label} className="p-4 flex items-center gap-3">
+            <div className={cn("p-2 rounded-lg shrink-0", c.ib)}>{c.icon}</div>
             <div>
               <p className="text-xs text-slate-500 font-medium">{c.label}</p>
-              <p className={cn("text-2xl font-bold", c.color)}>{c.value}</p>
+              <p className={cn("text-2xl font-bold", c.clr)}>{c.value}</p>
             </div>
           </Card>
         ))}
@@ -424,106 +452,98 @@ export default function ManualSalary() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center">
-        <Select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="w-32 text-sm">
-          {MONTHS.map((m, i) => <option key={m} value={String(i + 1)}>{m}</option>)}
-        </Select>
-        <Select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="w-24 text-sm">
-          {years.map(y => <option key={y} value={String(y)}>{y}</option>)}
-        </Select>
-        <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-32 text-sm">
-          <option value="">All Status</option>
-          <option value="draft">Draft</option>
-          <option value="finalized">Finalized</option>
-          <option value="paid">Paid</option>
-        </Select>
-        <div className="flex items-center gap-2 flex-1 min-w-[200px] rounded-lg border border-border bg-card px-3 py-2 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all">
+        {[
+          <select key="m" value={filterMonth} onChange={e => setFilterMonth(e.target.value)}
+            className="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 appearance-none">
+            {MONTHS.map((m, i) => <option key={m} value={String(i + 1)}>{m}</option>)}
+          </select>,
+          <select key="y" value={filterYear} onChange={e => setFilterYear(e.target.value)}
+            className="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 appearance-none">
+            {years.map(y => <option key={y} value={String(y)}>{y}</option>)}
+          </select>,
+          <select key="s" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+            className="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 appearance-none">
+            <option value="">All Status</option>
+            <option value="draft">Draft</option>
+            <option value="finalized">Finalized</option>
+            <option value="paid">Paid</option>
+          </select>,
+        ]}
+        <div className="flex items-center gap-2 flex-1 min-w-[200px] rounded-lg border border-border bg-card px-3 py-2 focus-within:ring-2 focus-within:ring-primary/20 transition-all">
           <Search size={13} className="text-slate-400 shrink-0" />
-          <input
-            value={search} onChange={e => setSearch(e.target.value)}
+          <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search employee…"
-            className="flex-1 text-sm outline-none bg-transparent text-foreground placeholder:text-muted-foreground"
-          />
+            className="flex-1 text-sm outline-none bg-transparent placeholder:text-muted-foreground" />
         </div>
       </div>
 
       {/* Table */}
       <Card>
         {loading ? (
-          <div className="p-10 text-center text-sm text-slate-400">Loading…</div>
+          <div className="p-10 text-center text-sm text-slate-400 flex items-center justify-center gap-2">
+            <Loader2 size={16} className="animate-spin" /> Loading…
+          </div>
         ) : filtered.length === 0 ? (
-          <div className="p-10 text-center">
+          <div className="p-12 text-center">
             <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
               <Calculator size={20} className="text-slate-400" />
             </div>
             <p className="text-sm font-medium text-slate-500">No entries found</p>
-            <p className="text-xs text-slate-400 mt-1">Click "Add Entry" to create a manual salary entry</p>
+            <p className="text-xs text-slate-400 mt-1">Click "Add Entry" to create a manual salary record</p>
           </div>
         ) : (
-          <Table>
-            <thead>
-              <tr>
-                <Th>Employee</Th>
-                <Th>Period</Th>
-                <Th className="text-right">Present</Th>
-                <Th className="text-right">OT Hrs</Th>
-                <Th className="text-right">Basic</Th>
-                <Th className="text-right">Allowances</Th>
-                <Th className="text-right">Deductions</Th>
-                <Th className="text-right">Net Salary</Th>
-                <Th className="text-center">Status</Th>
-                <Th></Th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(row => {
-                const allowTotal = row.transportAllowance + row.lunchAllowance + row.housingAllowance + row.otherAllowances;
-                const dedTotal   = row.epfDeduction + row.loanDeduction + row.absenceDeduction + row.otherDeductions;
-                return (
-                  <Tr key={row.id}>
-                    <Td>
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-xs font-bold shrink-0">
-                          {row.employeeName.charAt(0)}
+          <div className="overflow-x-auto rounded-xl">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  {["Employee","Period","Present","OT Hrs","Basic","Allowances","Deductions","Net Salary","Status",""].map((h, i) => (
+                    <th key={i} className={cn("px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap", i >= 2 && i <= 7 ? "text-right" : i === 8 ? "text-center" : "")}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filtered.map(row => {
+                  const allowTotal = row.transportAllowance + row.lunchAllowance + row.housingAllowance + row.otherAllowances;
+                  const dedTotal   = row.epfDeduction + row.loanDeduction + row.absenceDeduction + row.otherDeductions;
+                  return (
+                    <tr key={row.id} className="hover:bg-slate-50 transition-colors group">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-xs font-bold shrink-0">
+                            {row.employeeName.charAt(0)}
+                          </div>
+                          <div>
+                            <div className="text-sm font-semibold text-slate-800 leading-tight">{row.employeeName}</div>
+                            <div className="text-[11px] text-slate-400">{row.employeeCode} · {row.department}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-sm font-semibold text-slate-800">{row.employeeName}</div>
-                          <div className="text-[11px] text-slate-400">{row.employeeCode} · {row.department}</div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600 whitespace-nowrap">{MONTHS[row.month - 1]} {row.year}</td>
+                      <td className="px-4 py-3 text-right text-sm font-medium">{row.presentDays}</td>
+                      <td className="px-4 py-3 text-right text-sm text-slate-500">{row.otHours}</td>
+                      <td className="px-4 py-3 text-right text-sm whitespace-nowrap">{fmtRs(row.basicSalary)}</td>
+                      <td className="px-4 py-3 text-right text-sm text-blue-600 whitespace-nowrap">{fmtRs(allowTotal)}</td>
+                      <td className="px-4 py-3 text-right text-sm text-red-500 whitespace-nowrap">{fmtRs(dedTotal)}</td>
+                      <td className="px-4 py-3 text-right text-sm font-bold text-emerald-700 whitespace-nowrap">{fmtRs(row.netSalary)}</td>
+                      <td className="px-4 py-3 text-center"><StatusPill status={row.status} /></td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                          {row.status === "draft"     && <button onClick={() => handleStatus(row.id,"finalized")} title="Finalize" className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-500"><FileText size={13}/></button>}
+                          {row.status === "finalized" && <button onClick={() => handleStatus(row.id,"paid")}      title="Mark Paid" className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600"><CheckCircle2 size={13}/></button>}
+                          <button onClick={() => openEdit(row)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><Pencil size={13}/></button>
+                          <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-400"><Trash2 size={13}/></button>
                         </div>
-                      </div>
-                    </Td>
-                    <Td className="text-sm text-slate-600">{MONTHS[row.month - 1]} {row.year}</Td>
-                    <Td className="text-right text-sm font-medium">{row.presentDays}</Td>
-                    <Td className="text-right text-sm">{row.otHours}</Td>
-                    <Td className="text-right text-sm">{fmtRs(row.basicSalary)}</Td>
-                    <Td className="text-right text-sm text-blue-600">{fmtRs(allowTotal)}</Td>
-                    <Td className="text-right text-sm text-red-500">{fmtRs(dedTotal)}</Td>
-                    <Td className="text-right text-sm font-bold text-emerald-700">{fmtRs(row.netSalary)}</Td>
-                    <Td className="text-center"><StatusPill status={row.status} /></Td>
-                    <Td>
-                      <div className="flex items-center gap-1 justify-end">
-                        {row.status === "draft" && (
-                          <button onClick={() => handleStatus(row.id, "finalized")} title="Mark Finalized"
-                            className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-500 transition-colors"><FileText size={13} /></button>
-                        )}
-                        {row.status === "finalized" && (
-                          <button onClick={() => handleStatus(row.id, "paid")} title="Mark Paid"
-                            className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600 transition-colors"><CheckCircle2 size={13} /></button>
-                        )}
-                        <button onClick={() => openEdit(row)}
-                          className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors"><Pencil size={13} /></button>
-                        <button onClick={() => setDeleteId(row.id)}
-                          className="p-1.5 rounded-lg hover:bg-red-50 text-red-400 transition-colors"><Trash2 size={13} /></button>
-                      </div>
-                    </Td>
-                  </Tr>
-                );
-              })}
-            </tbody>
-          </Table>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
 
-      {/* ── ADD / EDIT MODAL ── */}
+      {/* ═══════════════════════ MODAL ═══════════════════════ */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-start justify-center p-4 overflow-y-auto"
           onClick={() => setModalOpen(false)}>
@@ -532,13 +552,12 @@ export default function ManualSalary() {
             style={{ fontFamily: "'Inter', system-ui, sans-serif" }}
             onClick={e => e.stopPropagation()}
           >
-            {/* Gradient header */}
-            <div style={{ background: "linear-gradient(135deg, #14532d 0%, #166534 55%, #16a34a 100%)" }}
-              className="px-6 py-5 shrink-0">
+            {/* ── Gradient header ── */}
+            <div style={{ background: "linear-gradient(135deg,#14532d 0%,#166534 55%,#16a34a 100%)" }} className="px-6 py-5 shrink-0">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4">
                   <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center text-white font-bold text-lg shadow-inner">
-                    {selectedEmp ? selectedEmp.fullName.charAt(0) : <Calculator size={20} />}
+                    {selectedEmp ? selectedEmp.fullName.charAt(0) : <Calculator size={20}/>}
                   </div>
                   <div>
                     <h2 className="text-white font-bold text-base leading-tight">
@@ -547,268 +566,308 @@ export default function ManualSalary() {
                     <p className="text-white/60 text-xs mt-0.5">
                       {selectedEmp
                         ? `${selectedEmp.fullName} · ${selectedEmp.designation}`
-                        : "Select an employee to begin"}
+                        : "Select an employee to auto-fill attendance & structure"}
                     </p>
                   </div>
                 </div>
                 <button onClick={() => setModalOpen(false)}
                   className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-white/80">
-                  <X size={18} />
+                  <X size={18}/>
                 </button>
               </div>
 
-              {/* Key figures strip — only when we have values */}
+              {/* Live summary strip */}
               {(gross > 0 || totalDed > 0) && (
                 <div className="mt-4 grid grid-cols-3 gap-3">
                   {[
-                    { label: "Gross",       value: fmtRsShort(gross) },
-                    { label: "Deductions",  value: fmtRsShort(totalDed) },
-                    { label: "Net Salary",  value: fmtRsShort(net) },
+                    { label: "Gross Salary",    value: fmtShort(gross) },
+                    { label: "Total Deductions",value: fmtShort(totalDed) },
+                    { label: "Net Salary",       value: fmtShort(net) },
                   ].map(s => (
-                    <div key={s.label} className="bg-white/10 rounded-xl px-3 py-2 text-center backdrop-blur-sm">
+                    <div key={s.label} className="bg-white/10 rounded-xl px-3 py-2.5 text-center backdrop-blur-sm">
                       <p className="text-white/60 text-[10px] font-semibold uppercase tracking-wide">{s.label}</p>
-                      <p className="text-white font-bold text-sm mt-0.5">{s.value}</p>
+                      <p className="text-white font-bold text-sm mt-0.5">Rs. {s.value}</p>
                     </div>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Scrollable body */}
-            <div className="overflow-y-auto flex-1 p-6 space-y-6 bg-slate-50">
+            {/* ── Scrollable body ── */}
+            <div className="overflow-y-auto flex-1 p-6 space-y-6">
 
-              {/* Employee & Period */}
+              {/* EMPLOYEE & PERIOD */}
               <section>
-                <SectionTitle icon={<UserRound size={12} />} color="slate">Employee &amp; Period</SectionTitle>
+                <SectionHead icon={<UserRound size={12}/>} title="Employee & Period" />
                 <div className="grid grid-cols-3 gap-3">
                   <div className="col-span-3 sm:col-span-1">
-                    <FieldLabel>Employee *</FieldLabel>
-                    <Select
-                      value={form.employeeId}
-                      onChange={e => setField("employeeId", e.target.value)}
-                      disabled={!!editId}
-                      className="text-sm"
-                    >
-                      <option value="">Select employee…</option>
-                      {employees.map(e => (
-                        <option key={e.id} value={String(e.id)}>{e.fullName} ({e.employeeId})</option>
-                      ))}
-                    </Select>
+                    <Field label="Employee *">
+                      <select
+                        value={form.employeeId}
+                        onChange={e => setField("employeeId", e.target.value)}
+                        disabled={!!editId}
+                        className="w-full rounded-lg border border-slate-200 bg-white shadow-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500/25 focus:border-green-400 appearance-none disabled:bg-slate-50 disabled:text-slate-400"
+                      >
+                        <option value="">Select employee…</option>
+                        {employees.map(e => (
+                          <option key={e.id} value={String(e.id)}>{e.fullName} ({e.employeeId})</option>
+                        ))}
+                      </select>
+                    </Field>
                   </div>
                   <div>
-                    <FieldLabel>Month *</FieldLabel>
-                    <Select value={form.month} onChange={e => setField("month", e.target.value)} className="text-sm">
-                      {MONTHS.map((m, i) => <option key={m} value={String(i + 1)}>{m}</option>)}
-                    </Select>
+                    <Field label="Month *">
+                      <select value={form.month} onChange={e => setField("month", e.target.value)}
+                        className="w-full rounded-lg border border-slate-200 bg-white shadow-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500/25 focus:border-green-400 appearance-none">
+                        {MONTHS.map((m, i) => <option key={m} value={String(i+1)}>{m}</option>)}
+                      </select>
+                    </Field>
                   </div>
                   <div>
-                    <FieldLabel>Year *</FieldLabel>
-                    <Select value={form.year} onChange={e => setField("year", e.target.value)} className="text-sm">
-                      {years.map(y => <option key={y} value={String(y)}>{y}</option>)}
-                    </Select>
+                    <Field label="Year *">
+                      <select value={form.year} onChange={e => setField("year", e.target.value)}
+                        className="w-full rounded-lg border border-slate-200 bg-white shadow-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500/25 focus:border-green-400 appearance-none">
+                        {years.map(y => <option key={y} value={String(y)}>{y}</option>)}
+                      </select>
+                    </Field>
                   </div>
                 </div>
               </section>
 
-              {/* Attendance */}
+              {/* ATTENDANCE */}
               <section>
-                <div className="flex items-center justify-between mb-3 pb-2 border-b border-green-200">
-                  <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-green-700">
-                    <UserRound size={12} /> Attendance
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {attLoading && <Loader2 size={11} className="animate-spin text-green-500" />}
-                    {attData && !attOverride && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200">
-                        <RefreshCw size={9} /> From Attendance
-                      </span>
-                    )}
-                    {attData && attOverride && (
-                      <>
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200">
-                          <Lock size={9} /> Override
+                <SectionHead
+                  icon={<UserRound size={12}/>}
+                  title="Attendance"
+                  badge={
+                    <div className="flex items-center gap-2">
+                      {attLoading && <Loader2 size={11} className="animate-spin text-green-500"/>}
+                      {attData && !attLoading && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200">
+                          Auto-filled from attendance records
                         </span>
-                        <button type="button" onClick={() => {
-                          setAttOverride(false);
-                          if (attData) setForm(f => ({ ...f, presentDays: String(attData.presentDays), absentDays: String(attData.absentDays), otHours: String(attData.otHours) }));
-                        }} className="text-[10px] text-green-600 hover:underline flex items-center gap-0.5">
-                          <RefreshCw size={9} /> Reset
-                        </button>
-                      </>
-                    )}
-                    {!attData && !attLoading && form.employeeId && (
-                      <span className="text-[10px] text-slate-400">No attendance records</span>
-                    )}
-                  </div>
-                </div>
-
+                      )}
+                      {!attData && !attLoading && form.employeeId && (
+                        <span className="text-[10px] text-slate-400">No attendance records found</span>
+                      )}
+                    </div>
+                  }
+                />
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {/* Present Days */}
                   <div>
-                    <FieldLabel hint={attData && !attOverride ? <button type="button" onClick={() => setAttOverride(true)} className="p-0.5 rounded hover:bg-amber-100 text-slate-400 hover:text-amber-600 transition-colors"><Lock size={9} /></button> : undefined}>
-                      Present Days
-                    </FieldLabel>
-                    {attData && !attOverride
-                      ? <ReadonlyField prefix="Days" value={attData.presentDays} loading={attLoading} />
-                      : <EditableField prefix="Days" name="presentDays" value={form.presentDays} onChange={setField} />
-                    }
+                    <Field label="Present Days">
+                      <NumField prefix="Days" name="presentDays" value={form.presentDays} onChange={setField}/>
+                    </Field>
                   </div>
-                  {/* Absent Days */}
                   <div>
-                    <FieldLabel hint={attData && !attOverride ? <button type="button" onClick={() => setAttOverride(true)} className="p-0.5 rounded hover:bg-amber-100 text-slate-400 hover:text-amber-600 transition-colors"><Lock size={9} /></button> : undefined}>
-                      Absent Days
-                    </FieldLabel>
-                    {attData && !attOverride
-                      ? <ReadonlyField prefix="Days" value={attData.absentDays} loading={attLoading} />
-                      : <EditableField prefix="Days" name="absentDays" value={form.absentDays} onChange={setField} />
-                    }
+                    <Field label="Absent Days">
+                      <NumField prefix="Days" name="absentDays" value={form.absentDays} onChange={setField}/>
+                    </Field>
                   </div>
-                  {/* OT Hours */}
                   <div>
-                    <FieldLabel hint={attData && !attOverride ? <button type="button" onClick={() => setAttOverride(true)} className="p-0.5 rounded hover:bg-amber-100 text-slate-400 hover:text-amber-600 transition-colors"><Lock size={9} /></button> : undefined}>
-                      OT Hours
-                    </FieldLabel>
-                    {attData && !attOverride
-                      ? <ReadonlyField prefix="Hrs" value={attData.otHours} loading={attLoading} />
-                      : <EditableField prefix="Hrs" name="otHours" value={form.otHours} onChange={setField} />
-                    }
+                    <Field label="OT Hours">
+                      <NumField prefix="Hrs" name="otHours" value={form.otHours} onChange={setField}/>
+                    </Field>
                   </div>
-                  {/* OT Amount always editable */}
                   <div>
-                    <FieldLabel>OT Amount</FieldLabel>
-                    <EditableField prefix="Rs." name="otAmount" value={form.otAmount} onChange={setField} />
+                    <Field
+                      label="OT Amount"
+                      hint={otHourlyRate > 0
+                        ? <FormulaHint>× Rs.{otHourlyRate.toFixed(0)}/hr × 1.5</FormulaHint>
+                        : undefined
+                      }
+                    >
+                      <NumField prefix="Rs." name="otAmount" value={form.otAmount} onChange={setField}/>
+                    </Field>
+                    {num(form.otHours) > 0 && otHourlyRate > 0 && (
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        = {num(form.otHours)} hrs × Rs.{otHourlyRate.toFixed(2)} × 1.5
+                      </p>
+                    )}
                   </div>
                 </div>
               </section>
 
-              {/* Salary Components */}
+              {/* SALARY COMPONENTS */}
               <section>
-                <div className="flex items-center justify-between mb-3 pb-2 border-b border-green-200">
-                  <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-green-700">
-                    <DollarSign size={12} /> Salary Components
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {structLoading && <Loader2 size={11} className="animate-spin text-green-500" />}
-                    {structData && !structOverride && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200">
-                        <RefreshCw size={9} /> {structData.structureName}
-                      </span>
-                    )}
-                    {structData && structOverride && (
-                      <>
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200">
-                          <Lock size={9} /> Override
+                <SectionHead
+                  icon={<DollarSign size={12}/>}
+                  title="Salary Components"
+                  badge={
+                    <div className="flex items-center gap-2">
+                      {structLoading && <Loader2 size={11} className="animate-spin text-green-500"/>}
+                      {structData && !structLoading && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                          From: {structData.structureName}
                         </span>
-                        <button type="button" onClick={() => {
-                          setStructOverride(false);
-                          if (structData) setForm(f => ({
-                            ...f,
-                            basicSalary: String(structData.basicAmount),
-                            transportAllowance: String(structData.transportAllowance),
-                            lunchAllowance: String(structData.lunchAllowance),
-                            housingAllowance: String(structData.housingAllowance),
-                            otherAllowances: String(structData.otherAllowances),
-                          }));
-                        }} className="text-[10px] text-green-600 hover:underline flex items-center gap-0.5">
-                          <RefreshCw size={9} /> Reset
-                        </button>
-                      </>
-                    )}
-                    {!structData && !structLoading && form.employeeId && (
-                      <span className="text-[10px] text-slate-400">No structure assigned</span>
-                    )}
-                  </div>
-                </div>
+                      )}
+                      {!structData && !structLoading && form.employeeId && (
+                        <span className="text-[10px] text-slate-400">No structure assigned</span>
+                      )}
+                    </div>
+                  }
+                />
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {[
-                    { label: "Basic Salary",        name: "basicSalary",        structVal: structData?.basicAmount },
-                    { label: "Transport Allowance", name: "transportAllowance", structVal: structData?.transportAllowance },
-                    { label: "Lunch Allowance",     name: "lunchAllowance",     structVal: structData?.lunchAllowance },
-                    { label: "Housing Allowance",   name: "housingAllowance",   structVal: structData?.housingAllowance },
-                    { label: "Other Allowances",    name: "otherAllowances",    structVal: structData?.otherAllowances },
-                  ].map(({ label, name, structVal }) => (
-                    <div key={name}>
-                      <FieldLabel hint={structData && !structOverride
-                        ? <button type="button" onClick={() => setStructOverride(true)} className="p-0.5 rounded hover:bg-amber-100 text-slate-400 hover:text-amber-600 transition-colors"><Lock size={9} /></button>
-                        : undefined}>
-                        {label}
-                      </FieldLabel>
-                      {structData && !structOverride && structVal !== undefined
-                        ? <ReadonlyField prefix="Rs." value={structVal} />
-                        : <EditableField prefix="Rs." name={name} value={(form as any)[name]} onChange={setField} />
+
+                  {/* Basic Salary */}
+                  <div>
+                    <Field label="Basic Salary">
+                      <NumField prefix="Rs." name="basicSalary" value={form.basicSalary} onChange={setField}/>
+                    </Field>
+                  </div>
+
+                  {/* Transport Allowance */}
+                  <div>
+                    <Field label="Transport Allowance">
+                      <NumField prefix="Rs." name="transportAllowance" value={form.transportAllowance} onChange={setField}/>
+                    </Field>
+                    {structData && (
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        {structData.earnings.find(e => (e.component ?? e.name ?? "").toLowerCase().includes("transport"))
+                          ? `Fixed · ${structData.earnings.find(e => (e.component ?? e.name ?? "").toLowerCase().includes("transport"))?.type ?? "Flat Amount"}`
+                          : "Flat Amount"}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Lunch Allowance */}
+                  <div>
+                    <Field
+                      label="Lunch Allowance"
+                      hint={lunchItem
+                        ? <FormulaHint>{lunchItem.type ?? (lunchItem.percentage ? `${lunchItem.percentage}%` : "Fixed")}</FormulaHint>
+                        : undefined
                       }
-                    </div>
-                  ))}
+                    >
+                      <NumField prefix="Rs." name="lunchAllowance" value={form.lunchAllowance} onChange={setField}/>
+                    </Field>
+                    {lunchItem && (
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        {lunchItem.percentage
+                          ? `${lunchItem.percentage}% of Basic = Rs.${(num(form.basicSalary) * lunchItem.percentage / 100).toFixed(2)}`
+                          : `Fixed · Rs.${lunchItem.amount?.toFixed(2) ?? "0.00"} / month`}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Housing Allowance */}
+                  <div>
+                    <Field label="Housing Allowance">
+                      <NumField prefix="Rs." name="housingAllowance" value={form.housingAllowance} onChange={setField}/>
+                    </Field>
+                  </div>
+
+                  {/* Other Allowances */}
+                  <div>
+                    <Field label="Other Allowances">
+                      <NumField prefix="Rs." name="otherAllowances" value={form.otherAllowances} onChange={setField}/>
+                    </Field>
+                  </div>
+
                 </div>
               </section>
 
-              {/* Deductions */}
+              {/* DEDUCTIONS */}
               <section>
-                <SectionTitle icon={<TrendingDown size={12} />} color="red">Deductions</SectionTitle>
+                <SectionHead icon={<TrendingDown size={12}/>} title="Deductions" />
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {[
-                    { label: "EPF (Employee)",    name: "epfDeduction"     },
-                    { label: "Loan Deduction",    name: "loanDeduction"    },
-                    { label: "Absence Deduction", name: "absenceDeduction" },
-                    { label: "Other Deductions",  name: "otherDeductions"  },
-                  ].map(({ label, name }) => (
-                    <div key={name}>
-                      <FieldLabel>{label}</FieldLabel>
-                      <EditableField prefix="Rs." name={name} value={(form as any)[name]} onChange={setField} />
-                    </div>
-                  ))}
+
+                  {/* EPF — auto-calculated from structure % */}
+                  <div>
+                    <Field
+                      label="EPF (Employee)"
+                      hint={<FormulaHint>{epfRate}% of Basic</FormulaHint>}
+                    >
+                      <NumField prefix="Rs." name="epfDeduction" value={form.epfDeduction} onChange={setField}/>
+                    </Field>
+                    {num(form.basicSalary) > 0 && (
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        {epfRate}% × Rs.{fmtShort(num(form.basicSalary))} = Rs.{fmtShort(num(form.basicSalary) * epfRate / 100)}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <Field label="Loan Deduction">
+                      <NumField prefix="Rs." name="loanDeduction" value={form.loanDeduction} onChange={setField}/>
+                    </Field>
+                  </div>
+                  <div>
+                    <Field label="Absence Deduction">
+                      <NumField prefix="Rs." name="absenceDeduction" value={form.absenceDeduction} onChange={setField}/>
+                    </Field>
+                  </div>
+                  <div>
+                    <Field label="Other Deductions">
+                      <NumField prefix="Rs." name="otherDeductions" value={form.otherDeductions} onChange={setField}/>
+                    </Field>
+                  </div>
+
                 </div>
               </section>
 
-              {/* Status & Notes */}
+              {/* STATUS & NOTES */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <FieldLabel>Status</FieldLabel>
-                  <Select value={form.status} onChange={e => setField("status", e.target.value)} className="text-sm">
-                    <option value="draft">Draft</option>
-                    <option value="finalized">Finalized</option>
-                    <option value="paid">Paid</option>
-                  </Select>
+                  <Field label="Status">
+                    <select value={form.status} onChange={e => setField("status", e.target.value)}
+                      className="w-full rounded-lg border border-slate-200 bg-white shadow-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500/25 focus:border-green-400 appearance-none">
+                      <option value="draft">Draft</option>
+                      <option value="finalized">Finalized</option>
+                      <option value="paid">Paid</option>
+                    </select>
+                  </Field>
                 </div>
                 <div>
-                  <FieldLabel>Notes</FieldLabel>
-                  <Input value={form.notes} onChange={e => setField("notes", e.target.value)}
-                    placeholder="Optional notes…" className="text-sm" />
+                  <Field label="Notes">
+                    <input value={form.notes} onChange={e => setField("notes", e.target.value)}
+                      placeholder="Optional notes…"
+                      className="w-full rounded-lg border border-slate-200 bg-white shadow-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500/25 focus:border-green-400" />
+                  </Field>
                 </div>
               </div>
-            </div>
 
-            {/* Footer */}
+            </div>{/* end body */}
+
+            {/* ── Footer ── */}
             <div className="shrink-0 flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-white rounded-b-2xl">
-              <div className="text-sm text-slate-500">
-                Net: <span className="font-bold text-emerald-700">{fmtRs(net)}</span>
+              <div className="text-sm text-slate-500 flex items-center gap-2">
+                Net:
+                <span className="font-bold text-emerald-700 text-base">{fmtRs(net)}</span>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setModalOpen(false)}>Cancel</Button>
-                <Button size="sm" onClick={handleSave} disabled={saving}>
+                <button onClick={() => setModalOpen(false)}
+                  className="px-4 py-2 rounded-lg text-sm font-medium border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 transition-colors">
+                  Cancel
+                </button>
+                <button onClick={handleSave} disabled={saving}
+                  className="px-4 py-2 rounded-lg text-sm font-semibold text-white shadow-sm transition-all hover:brightness-110 disabled:opacity-50"
+                  style={{ background: "linear-gradient(135deg,#166534,#16a34a)" }}>
                   {saving ? "Saving…" : editId ? "Update Entry" : "Save Entry"}
-                </Button>
+                </button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Delete Confirm */}
+      {/* Delete confirm */}
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-xs">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-xs" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
-                <AlertCircle size={18} className="text-red-500" />
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <AlertCircle size={18} className="text-red-500"/>
               </div>
               <h3 className="text-sm font-bold text-slate-800">Delete Entry?</h3>
             </div>
             <p className="text-xs text-slate-500 mb-5">This will permanently remove this manual salary entry and cannot be undone.</p>
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" size="sm" onClick={() => setDeleteId(null)}>Cancel</Button>
-              <Button variant="danger" size="sm" onClick={handleDelete}>Delete</Button>
+              <button onClick={() => setDeleteId(null)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 hover:bg-slate-50 text-slate-600">Cancel</button>
+              <button onClick={handleDelete}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-red-500 hover:bg-red-600">Delete</button>
             </div>
           </div>
         </div>
