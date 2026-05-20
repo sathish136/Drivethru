@@ -93,6 +93,58 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
+/* GET /salary-structures/assignment/:employeeId  — single employee */
+router.get("/assignment/:employeeId", async (req, res) => {
+  try {
+    const empId = parseInt(req.params.employeeId);
+    const rows = await db
+      .select({
+        assignment: employeeSalaryAssignments,
+        structure: salaryStructures,
+      })
+      .from(employeeSalaryAssignments)
+      .innerJoin(salaryStructures, eq(employeeSalaryAssignments.salaryStructureId, salaryStructures.id))
+      .where(eq(employeeSalaryAssignments.employeeId, empId))
+      .limit(1);
+
+    if (!rows.length) return res.status(404).json({ error: "No salary structure assigned" });
+
+    const { assignment, structure } = rows[0];
+    const earnings   = JSON.parse(structure.earnings)   as any[];
+    const deductions = JSON.parse(structure.deductions) as any[];
+
+    // Map earnings components to named salary fields
+    let transportAllowance = 0;
+    let lunchAllowance     = 0;
+    let housingAllowance   = 0;
+    let otherAllowances    = 0;
+
+    for (const e of earnings) {
+      const name = (e.component ?? e.name ?? "").toLowerCase();
+      if (name === "basic") continue; // handled via basicAmount
+      if      (name.includes("transport") || name.includes("travel")) transportAllowance += Number(e.amount) || 0;
+      else if (name.includes("lunch")     || name.includes("incentive")) lunchAllowance   += Number(e.amount) || 0;
+      else if (name.includes("housing")   || name.includes("rent"))    housingAllowance   += Number(e.amount) || 0;
+      else                                                               otherAllowances   += Number(e.amount) || 0;
+    }
+
+    res.json({
+      structureId:   structure.id,
+      structureName: structure.name,
+      basicAmount:   assignment.basicAmount,
+      transportAllowance,
+      lunchAllowance,
+      housingAllowance,
+      otherAllowances,
+      earnings,
+      deductions,
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Failed to fetch assignment" });
+  }
+});
+
 /* GET /salary-structures/assignments/all */
 router.get("/assignments/all", async (_req, res) => {
   try {

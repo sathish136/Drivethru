@@ -1,9 +1,55 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { manualSalaryEntries, employees } from "@workspace/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { manualSalaryEntries, employees, attendanceRecords } from "@workspace/db/schema";
+import { eq, and, desc, gte, lte } from "drizzle-orm";
 
 const router = Router();
+
+/* GET /manual-salary/attendance-lookup?employeeId=&month=&year= */
+router.get("/attendance-lookup", async (req, res) => {
+  try {
+    const { employeeId, month, year } = req.query as Record<string, string>;
+    if (!employeeId || !month || !year) {
+      return res.status(400).json({ error: "employeeId, month and year are required" });
+    }
+
+    const m = Number(month);
+    const y = Number(year);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const firstDay = `${y}-${String(m).padStart(2, "0")}-01`;
+    const lastDay  = `${y}-${String(m).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`;
+
+    const recs = await db
+      .select({
+        status: attendanceRecords.status,
+        overtimeHours: attendanceRecords.overtimeHours,
+      })
+      .from(attendanceRecords)
+      .where(
+        and(
+          eq(attendanceRecords.employeeId, Number(employeeId)),
+          gte(attendanceRecords.date, firstDay),
+          lte(attendanceRecords.date, lastDay),
+        )
+      );
+
+    let presentDays = 0;
+    let absentDays  = 0;
+    let otHours     = 0;
+
+    for (const r of recs) {
+      if (r.status === "present" || r.status === "late") presentDays += 1;
+      else if (r.status === "half_day")                  presentDays += 0.5;
+      else if (r.status === "absent")                    absentDays  += 1;
+      otHours += r.overtimeHours ?? 0;
+    }
+
+    res.json({ presentDays, absentDays, otHours: Math.round(otHours * 100) / 100 });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch attendance summary" });
+  }
+});
 
 /* GET /manual-salary */
 router.get("/", async (req, res) => {
