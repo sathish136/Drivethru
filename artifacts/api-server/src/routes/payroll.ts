@@ -396,7 +396,10 @@ router.post("/generate", async (req, res) => {
       } else {
         basicSalary = cfg.employeeOverrides[String(emp.id)] ?? cfg.salaryScale[emp.designation] ?? 40000;
         transportAllowance = cfg.transportAllowance;
-        lunchIncentive = cfg.lunchIncentive ?? 0;
+        {
+          const lunchPerDay = cfg.lunchIncentivePerDay ?? 125;
+          lunchIncentive = Math.round(lunchPerDay * (presentDays + halfDaysCount));
+        }
         housingAllowance =
           basicSalary >= cfg.housingHighThreshold ? cfg.housingAllowanceHigh :
           basicSalary >= cfg.housingMidThreshold ? cfg.housingAllowanceMid :

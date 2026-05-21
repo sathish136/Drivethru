@@ -37,6 +37,7 @@ const DEFAULT_SALARY_SCALE: Record<string, number> = {
 interface PayrollConfig {
   epfEmployeePercent: number; epfEmployerPercent: number; etfEmployerPercent: number;
   transportAllowance: number;
+  lunchIncentivePerDay: number;
   housingAllowanceLow: number; housingAllowanceMid: number; housingAllowanceHigh: number;
   housingMidThreshold: number; housingHighThreshold: number;
   otherAllowances: number;
@@ -53,6 +54,7 @@ interface PayrollConfig {
 const DEFAULTS: PayrollConfig = {
   epfEmployeePercent: 8, epfEmployerPercent: 12, etfEmployerPercent: 3,
   transportAllowance: 5000,
+  lunchIncentivePerDay: 125,
   housingAllowanceLow: 3000, housingAllowanceMid: 7000, housingAllowanceHigh: 10000,
   housingMidThreshold: 50000, housingHighThreshold: 80000,
   otherAllowances: 1500,
@@ -186,6 +188,7 @@ export default function PayrollSettings() {
           setCfg({
             epfEmployeePercent: d.epfEmployeePercent, epfEmployerPercent: d.epfEmployerPercent,
             etfEmployerPercent: d.etfEmployerPercent, transportAllowance: d.transportAllowance,
+            lunchIncentivePerDay: d.lunchIncentivePerDay ?? 125,
             housingAllowanceLow: d.housingAllowanceLow, housingAllowanceMid: d.housingAllowanceMid,
             housingAllowanceHigh: d.housingAllowanceHigh, housingMidThreshold: d.housingMidThreshold,
             housingHighThreshold: d.housingHighThreshold, otherAllowances: d.otherAllowances,
@@ -517,10 +520,10 @@ export default function PayrollSettings() {
                 <p className="text-[10px] text-muted-foreground mt-1">Same fixed amount for all employees</p>
               </div>
               <div>
-                <Label className="text-xs font-semibold">Lunch Incentive Money (Rs.)</Label>
-                <Input type="number" min="0" value={cfg.lunchIncentive ?? 0}
-                  onChange={e => set("lunchIncentive", parseInt(e.target.value))} className="mt-1.5" />
-                <p className="text-[10px] text-muted-foreground mt-1">Fixed monthly lunch incentive for all employees</p>
+                <Label className="text-xs font-semibold">Lunch Incentive Per Day (Rs.)</Label>
+                <Input type="number" min="0" value={cfg.lunchIncentivePerDay ?? 125}
+                  onChange={e => set("lunchIncentivePerDay", parseInt(e.target.value))} className="mt-1.5" />
+                <p className="text-[10px] text-muted-foreground mt-1">Rs. per working day (present + half days). Default: Rs. 125/day</p>
               </div>
               <div>
                 <Label className="text-xs font-semibold">Other Allowances (Rs.)</Label>

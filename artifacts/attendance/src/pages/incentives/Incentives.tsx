@@ -65,7 +65,7 @@ const EMPTY_FORM = {
   employeeId: "",
   month: String(now.getMonth() + 1),
   year: String(now.getFullYear()),
-  type: "performance" as IncentiveType,
+  type: "lunch" as IncentiveType,
   amount: "",
   reason: "",
   status: "pending" as IncentiveStatus,

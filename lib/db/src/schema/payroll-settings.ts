@@ -11,6 +11,7 @@ export const payrollSettings = pgTable("payroll_settings", {
 
   transportAllowance: real("transport_allowance").notNull().default(0),
   lunchIncentive: real("lunch_incentive").notNull().default(0),
+  lunchIncentivePerDay: real("lunch_incentive_per_day").notNull().default(125),
   housingAllowanceLow: real("housing_allowance_low").notNull().default(0),
   housingAllowanceMid: real("housing_allowance_mid").notNull().default(0),
   housingAllowanceHigh: real("housing_allowance_high").notNull().default(0),
