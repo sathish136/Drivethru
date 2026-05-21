@@ -751,8 +751,12 @@ function AttendanceReport() {
     exportCsv(HEADERS, rows, `attendance-report-${dStart}-${dEnd}.csv`);
   };
 
+  const _attMonth = startDate ? new Date(startDate + "T00:00:00").getMonth()+1 : new Date().getMonth()+1;
+  const _attYear  = startDate ? new Date(startDate + "T00:00:00").getFullYear() : new Date().getFullYear();
+
   return (
     <div className="space-y-4">
+      <SeasonBadge month={_attMonth} year={_attYear} />
       <FilterCard title="Attendance Report Filters" onExport={handleExport} onExportExcel={handleExportExcel}>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
           <div><Label className="text-xs">Start Date</Label>
@@ -1026,6 +1030,7 @@ function MonthlyReport({ initialEmpName="", initialMonth, initialYear }: { initi
 
   return (
     <div className="space-y-4">
+      <SeasonBadge month={month} year={year} />
       <FilterCard title="Monthly Report Filters" onExport={handleExport} onExportExcel={handleExportExcel}>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <div><Label className="text-xs">Month</Label>
@@ -1220,8 +1225,12 @@ function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { init
     exportCsv(HEADERS, rows, `overtime-report-${dStart}-${dEnd}.csv`);
   };
 
+  const _otMonth = startDate ? new Date(startDate + "T00:00:00").getMonth()+1 : new Date().getMonth()+1;
+  const _otYear  = startDate ? new Date(startDate + "T00:00:00").getFullYear() : new Date().getFullYear();
+
   return (
     <div className="space-y-4">
+      <SeasonBadge month={_otMonth} year={_otYear} />
       <FilterCard title="Overtime Report Filters" onExport={handleExport} onExportExcel={handleExportExcel}>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           <div><Label className="text-xs">Start Date</Label>
@@ -1334,21 +1343,40 @@ interface PayrollRecord {
   employee:{ id:number; employeeId:string; fullName:string; designation:string; department:string; employeeType?:string };
 }
 
-function useOffSeasonStatus(month: number, year: number) {
-  const [offSeason, setOffSeason] = useState<{ enabled: boolean; start: string; end: string } | null>(null);
+function useOffSeasonStatus(month: number, _year?: number) {
+  const [settings, setSettings] = useState<{ enabled: boolean; months: number[] } | null>(null);
   useEffect(() => {
     const token = localStorage.getItem("auth_token") || "";
     fetch(apiUrl("/payroll-settings"), { credentials: "include", headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
-      .then(d => setOffSeason({ enabled: d.offSeasonEnabled ?? false, start: d.offSeasonStart ?? "", end: d.offSeasonEnd ?? "" }))
+      .then(d => {
+        let months: number[] = [5,6,7,8,9];
+        if (Array.isArray(d.offSeasonMonths)) months = d.offSeasonMonths;
+        else try { months = JSON.parse(d.offSeasonMonths ?? "[5,6,7,8,9]"); } catch {}
+        setSettings({ enabled: d.offSeasonEnabled ?? false, months });
+      })
       .catch(() => {});
   }, []);
   return useMemo(() => {
-    if (!offSeason?.enabled || !offSeason.start || !offSeason.end) return false;
-    const firstDay = `${year}-${String(month).padStart(2,"0")}-01`;
-    const lastDay  = `${year}-${String(month).padStart(2,"0")}-${String(new Date(year, month, 0).getDate()).padStart(2,"0")}`;
-    return firstDay <= offSeason.end && lastDay >= offSeason.start;
-  }, [offSeason, month, year]);
+    if (!settings?.enabled) return false;
+    return settings.months.includes(month);
+  }, [settings, month]);
+}
+
+function SeasonBadge({ month, year }: { month: number; year?: number }) {
+  const isOff = useOffSeasonStatus(month, year);
+  const label = isOff ? "Off Season" : "Main Season";
+  const cls   = isOff
+    ? "bg-blue-50 border-blue-200 text-blue-800"
+    : "bg-green-50 border-green-200 text-green-800";
+  const icon  = isOff ? "⛅" : "🌿";
+  return (
+    <div className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm ${cls}`}>
+      <span>{icon}</span>
+      <span className="font-semibold">{label}</span>
+      {isOff && <span className="text-xs opacity-75">— No OT, no late deductions, no incomplete hours deduction</span>}
+    </div>
+  );
 }
 
 function PayrollReport() {
@@ -1490,12 +1518,7 @@ function PayrollReport() {
 
   return (
     <div className="space-y-4">
-      {isOffSeason && (
-        <div className="flex items-center gap-2 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-          <span className="font-semibold">⛅ Off-Season Mode</span>
-          <span className="text-blue-600 text-xs">— No OT, no late deductions, no incomplete hours deduction applied for this period</span>
-        </div>
-      )}
+      <SeasonBadge month={month} year={year} />
       <FilterCard title="Payroll Report Filters" onExport={handleExport} onExportExcel={handleExportExcel}>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           <div><Label className="text-xs">Month</Label>
@@ -2116,12 +2139,7 @@ ${nwOtTableHtml}
 
   return (
     <div className="space-y-4">
-      {isOffSeasonInd && (
-        <div className="flex items-center gap-2 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-          <span className="font-semibold">⛅ Off-Season Mode</span>
-          <span className="text-blue-600 text-xs">— No OT, no late deductions, no incomplete hours deduction for this period</span>
-        </div>
-      )}
+      <SeasonBadge month={month} year={year} />
       <Card className="p-0 overflow-visible">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30 rounded-t-xl">
           <span className="text-sm font-semibold text-foreground">Individual Monthly Report</span>

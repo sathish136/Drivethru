@@ -28,6 +28,7 @@ export const payrollSettings = pgTable("payroll_settings", {
   offSeasonEnabled: boolean("off_season_enabled").notNull().default(false),
   offSeasonStart: text("off_season_start"),
   offSeasonEnd: text("off_season_end"),
+  offSeasonMonths: text("off_season_months").notNull().default("[5,6,7,8,9]"),
 
   salaryScale: text("salary_scale").notNull().default(JSON.stringify({
     "General Manager":       150000,

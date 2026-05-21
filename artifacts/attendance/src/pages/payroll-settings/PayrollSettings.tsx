@@ -49,6 +49,7 @@ interface PayrollConfig {
   offSeasonEnabled: boolean;
   offSeasonStart: string;
   offSeasonEnd: string;
+  offSeasonMonths: number[];
   salaryScale: Record<string, number>; employeeOverrides: Record<string, number>;
 }
 const DEFAULTS: PayrollConfig = {
@@ -66,6 +67,7 @@ const DEFAULTS: PayrollConfig = {
   offSeasonEnabled: false,
   offSeasonStart: "",
   offSeasonEnd: "",
+  offSeasonMonths: [5,6,7,8,9],
   salaryScale: { ...DEFAULT_SALARY_SCALE }, employeeOverrides: {},
 };
 
@@ -200,6 +202,7 @@ export default function PayrollSettings() {
             offSeasonEnabled: d.offSeasonEnabled ?? false,
             offSeasonStart: d.offSeasonStart ?? "",
             offSeasonEnd: d.offSeasonEnd ?? "",
+            offSeasonMonths: Array.isArray(d.offSeasonMonths) ? d.offSeasonMonths : (() => { try { return JSON.parse(d.offSeasonMonths ?? "[5,6,7,8,9]"); } catch { return [5,6,7,8,9]; } })(),
             salaryScale: d.salaryScale && typeof d.salaryScale === "object" ? d.salaryScale : { ...DEFAULT_SALARY_SCALE },
             employeeOverrides: d.employeeOverrides && typeof d.employeeOverrides === "object" ? d.employeeOverrides : {},
           });
@@ -653,23 +656,47 @@ export default function PayrollSettings() {
                 )} />
               </button>
             </div>
-            {cfg.offSeasonEnabled && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {(() => {
+              const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+              const toggleMonth = (m: number) => {
+                const current: number[] = cfg.offSeasonMonths ?? [5,6,7,8,9];
+                const next = current.includes(m) ? current.filter(x => x !== m) : [...current, m].sort((a,b)=>a-b);
+                set("offSeasonMonths", next);
+              };
+              return (
                 <div>
-                  <Label className="text-xs font-semibold">Off-Season Start Date</Label>
-                  <Input type="date" value={cfg.offSeasonStart}
-                    onChange={e => set("offSeasonStart", e.target.value)} className="mt-1.5" />
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Click months to toggle between <span className="text-blue-600 font-medium">Off Season</span> (blue) and <span className="text-green-600 font-medium">Main Season</span> (green).
+                  </p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {MONTHS.map((name, i) => {
+                      const m = i + 1;
+                      const isOff = (cfg.offSeasonMonths ?? [5,6,7,8,9]).includes(m);
+                      return (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => toggleMonth(m)}
+                          className={cn(
+                            "py-2 rounded-lg text-xs font-semibold border transition-all",
+                            isOff
+                              ? "bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200"
+                              : "bg-green-50 border-green-200 text-green-800 hover:bg-green-100"
+                          )}
+                        >
+                          {name}
+                          <div className="text-[10px] font-normal opacity-70 mt-0.5">{isOff ? "Off" : "Main"}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-3 flex gap-4 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-blue-300 inline-block"/> Off Season — May · Jun · Jul · Aug · Sep (default)</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-green-300 inline-block"/> Main Season — Jan · Feb · Mar · Apr · Oct · Nov · Dec (default)</span>
+                  </div>
                 </div>
-                <div>
-                  <Label className="text-xs font-semibold">Off-Season End Date</Label>
-                  <Input type="date" value={cfg.offSeasonEnd}
-                    onChange={e => set("offSeasonEnd", e.target.value)} className="mt-1.5" />
-                </div>
-              </div>
-            )}
-            {!cfg.offSeasonEnabled && (
-              <p className="text-xs text-muted-foreground">Enable to set a date range during which OT, late deductions and incomplete hours deductions are all suppressed.</p>
-            )}
+              );
+            })()}
           </Card>
         </div>
       )}

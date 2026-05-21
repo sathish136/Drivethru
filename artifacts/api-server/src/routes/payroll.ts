@@ -442,9 +442,11 @@ router.post("/generate", async (req, res) => {
 
       /* ── Off-season: skip OT, late deductions and incomplete hours ── */
       /* Doc: "Off Season — No overtime, no late hour deductions"       */
-      const isOffSeason = cfg.offSeasonEnabled && empAtt.some(rec =>
-        isDateInOffSeason(rec.date, cfg.offSeasonStart, cfg.offSeasonEnd)
-      );
+      const offSeasonMonthsList: number[] = (() => {
+        try { return JSON.parse((cfg as any).offSeasonMonths ?? "[5,6,7,8,9]") as number[]; }
+        catch { return [5,6,7,8,9]; }
+      })();
+      const isOffSeason = cfg.offSeasonEnabled && offSeasonMonthsList.includes(Number(month));
 
       /* ── STANDARD deductions (skipped for Night Watcher and Off Season) ── */
       /* Morning late: per-record from the salary engine (policy-driven cutoff) */
@@ -504,8 +506,7 @@ router.post("/generate", async (req, res) => {
 
       for (const rec of empAtt) {
         const rawHrs = rec.totalHours ?? 0;
-        const recInOffSeason = cfg.offSeasonEnabled &&
-          isDateInOffSeason(rec.date, cfg.offSeasonStart, cfg.offSeasonEnd);
+        const recInOffSeason = isOffSeason;
 
         if (rec.status === "holiday") {
           /* Holiday pay: hours worked × hourly rate × holiday multiplier

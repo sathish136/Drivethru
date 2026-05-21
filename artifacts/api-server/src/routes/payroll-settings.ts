@@ -13,10 +13,13 @@ async function getOrCreate() {
 }
 
 function parseSettings(s: typeof payrollSettings.$inferSelect) {
+  let offSeasonMonths: number[] = [5,6,7,8,9];
+  try { offSeasonMonths = JSON.parse(s.offSeasonMonths ?? "[5,6,7,8,9]") as number[]; } catch {}
   return {
     ...s,
     salaryScale: JSON.parse(s.salaryScale) as Record<string, number>,
     employeeOverrides: JSON.parse(s.employeeOverrides) as Record<string, number>,
+    offSeasonMonths,
   };
 }
 
@@ -32,13 +35,14 @@ router.get("/", async (_req, res) => {
 
 router.put("/", async (req, res) => {
   try {
-    const { salaryScale, employeeOverrides, ...rest } = req.body;
+    const { salaryScale, employeeOverrides, offSeasonMonths, ...rest } = req.body;
     const existing = await getOrCreate();
     const [updated] = await db.update(payrollSettings)
       .set({
         ...rest,
         salaryScale: JSON.stringify(salaryScale ?? {}),
         employeeOverrides: JSON.stringify(employeeOverrides ?? {}),
+        offSeasonMonths: JSON.stringify(Array.isArray(offSeasonMonths) ? offSeasonMonths : [5,6,7,8,9]),
         updatedAt: new Date(),
       })
       .where(eq(payrollSettings.id, existing.id))
