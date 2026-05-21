@@ -1709,13 +1709,15 @@ function IndividualReport() {
 
   // Fetch salary structure assignment for the selected employee (has priority over payrollCfg)
   const [empStructBasic, setEmpStructBasic] = useState<number | null>(null);
+  const [empStructLoaded, setEmpStructLoaded] = useState(false);
   useEffect(() => {
-    if (!activeEmpId) { setEmpStructBasic(null); return; }
+    if (!activeEmpId) { setEmpStructBasic(null); setEmpStructLoaded(false); return; }
+    setEmpStructLoaded(false);
     const token = localStorage.getItem("auth_token") || "";
     fetch(apiUrl(`/salary-structures/assignment/${activeEmpId}`), { credentials: "include", headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : null)
-      .then(d => setEmpStructBasic(d?.basicAmount ?? null))
-      .catch(() => setEmpStructBasic(null));
+      .then(d => { setEmpStructBasic(d?.basicAmount ?? null); setEmpStructLoaded(true); })
+      .catch(() => { setEmpStructBasic(null); setEmpStructLoaded(true); });
   }, [activeEmpId]);
 
   const employees = useMemo(() => {
@@ -1835,16 +1837,24 @@ function IndividualReport() {
         if (!emp) continue;
 
         let recs: any[] = [];
+        let pdfStructBasic: number | null = null;
         try {
           const token = localStorage.getItem("auth_token") || "";
-          const params = new URLSearchParams({ startDate, endDate, employeeId: eid });
-          const res = await fetch(`${BASE}/api/reports/attendance?${params}`, {
-            credentials: "include",
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (res.ok) {
-            const d = await res.json();
+          const [attRes, structRes] = await Promise.all([
+            fetch(`${BASE}/api/reports/attendance?${new URLSearchParams({ startDate, endDate, employeeId: eid })}`, {
+              credentials: "include", headers: { Authorization: `Bearer ${token}` },
+            }),
+            fetch(`${BASE}/api/salary-structures/assignment/${eid}`, {
+              credentials: "include", headers: { Authorization: `Bearer ${token}` },
+            }),
+          ]);
+          if (attRes.ok) {
+            const d = await attRes.json();
             recs = (d.records || []).sort((a: any, b: any) => a.date.localeCompare(b.date));
+          }
+          if (structRes.ok) {
+            const sd = await structRes.json();
+            pdfStructBasic = sd?.basicAmount ?? null;
           }
         } catch (err) { console.error("Fetch error for employee", eid, err); }
 
@@ -1932,13 +1942,25 @@ function IndividualReport() {
         }
 
         // Night Watcher OT table for PDF
-        const empBasicForNW = (emp as any).basicSalary ?? 0;
-        const empNwOtRate = Math.round((empBasicForNW / 240 * 1.5) * 100) / 100;
         const empIsNW = !!(
           clientFindRule(hrRules, (emp as any).department ?? "", shiftOptions.find((s: any) => s.id === (emp as any).shiftId)?.name ?? null)?.nightWatcherPayroll ||
           /night\s*watcher/i.test((emp as any).designation || "") ||
           /night\s*watcher/i.test(shiftOptions.find((s: any) => s.id === (emp as any).shiftId)?.name || "")
         );
+        // Resolve basic salary: salary structure > payroll overrides > salary scale > NOT ASSIGNED
+        const pdfEmpIdStr = String((emp as any).id ?? "");
+        const pdfDesignation = (emp as any).designation ?? "";
+        let empBasicForNW: number | null = pdfStructBasic;
+        let empNwHasValidBasic = empBasicForNW !== null;
+        if (!empNwHasValidBasic && payrollCfg) {
+          const fromOverride = payrollCfg.employeeOverrides[pdfEmpIdStr];
+          if (fromOverride !== undefined) { empBasicForNW = fromOverride; empNwHasValidBasic = true; }
+          else {
+            const fromScale = payrollCfg.salaryScale[pdfDesignation];
+            if (fromScale !== undefined) { empBasicForNW = fromScale; empNwHasValidBasic = true; }
+          }
+        }
+        const empNwOtRate = empNwHasValidBasic ? Math.round(((empBasicForNW ?? 0) / 240 * 1.5) * 100) / 100 : 0;
         // Build full-calendar rows for PDF (all days, like reference screenshot)
         const pdfRecMap = new Map(recs.map((r: any) => [r.date as string, r]));
         const nwTotalOt = recs.reduce((s: number, r: any) => s + (r.overtimeHours || 0), 0);
@@ -1968,8 +1990,17 @@ function IndividualReport() {
             <td style="padding:3px 8px;font-size:8.5px;border-bottom:1px solid #f0f0f0">${absenceLabel}</td>
           </tr>`);
         }
-        const nwOtTableHtml = empIsNW ? `
-<div style="margin-top:14px;border:1px solid #fde68a;border-radius:6px;overflow:hidden">
+        const nwOtTableHtml = empIsNW ? (
+          !empNwHasValidBasic
+            ? `<div style="margin-top:14px;border:1px solid #fde68a;border-radius:6px;overflow:hidden">
+  <div style="background:#fffbeb;padding:8px 14px;border-bottom:1px solid #fde68a">
+    <span style="font-weight:700;color:#92400e;font-size:10px">NIGHT WATCHER OT SUMMARY</span>
+  </div>
+  <div style="padding:16px 20px;background:#fff7ed;border:1px solid #fed7aa;border-radius:4px;margin:12px;text-align:center">
+    <span style="color:#c2410c;font-size:10px;font-weight:700">&#9888; Salary structure not assigned — OT amount cannot be calculated. Please assign a salary structure to this employee.</span>
+  </div>
+</div>`
+            : `<div style="margin-top:14px;border:1px solid #fde68a;border-radius:6px;overflow:hidden">
   <div style="background:#fffbeb;padding:8px 14px;border-bottom:1px solid #fde68a;display:flex;justify-content:space-between;align-items:center">
     <span style="font-weight:700;color:#92400e;font-size:10px">NIGHT WATCHER OT SUMMARY</span>
     <span style="font-size:9px;color:#b45309">OT Rate = Basic/240×1.5 = Rs. ${empNwOtRate.toFixed(2)}/hr &nbsp;|&nbsp; Normal: 3 hrs · Holiday: 11 hrs (8+3)</span>
@@ -1992,7 +2023,8 @@ function IndividualReport() {
       <td style="border-top:2px solid #1565a8"></td>
     </tr></tfoot>
   </table>
-</div>` : "";
+</div>`
+        ) : "";
 
         pagesHtml.push(`<div class="report-wrap">
 <div class="header">
@@ -2160,17 +2192,30 @@ ${nwOtTableHtml}
     /night\s*watcher/i.test((selectedEmp as any)?.designation || "") ||
     /night\s*watcher/i.test(empShiftNameForRule || "")
   );
-  const nwOtRate = useMemo(() => {
-    if (!isNightWatcher) return 0;
-    // Priority: salary structure assignment > payroll settings override > salary scale > fallback
+  const nwOtInfo = useMemo((): { rate: number; hasValidBasic: boolean } => {
+    if (!isNightWatcher) return { rate: 0, hasValidBasic: false };
     const empId = String((selectedEmp as any)?.id ?? "");
     const designation = (selectedEmp as any)?.designation ?? "";
-    const basic = empStructBasic
-      ?? (payrollCfg
-        ? (payrollCfg.employeeOverrides[empId] ?? payrollCfg.salaryScale[designation] ?? 40000)
-        : 40000);
-    return Math.round((basic / 240 * 1.5) * 100) / 100;
+    // Priority 1: salary structure assignment
+    if (empStructBasic !== null) {
+      return { rate: Math.round((empStructBasic / 240 * 1.5) * 100) / 100, hasValidBasic: true };
+    }
+    // Priority 2: payroll settings override or salary scale
+    if (payrollCfg) {
+      const fromOverride = payrollCfg.employeeOverrides[empId];
+      if (fromOverride !== undefined) {
+        return { rate: Math.round((fromOverride / 240 * 1.5) * 100) / 100, hasValidBasic: true };
+      }
+      const fromScale = payrollCfg.salaryScale[designation];
+      if (fromScale !== undefined) {
+        return { rate: Math.round((fromScale / 240 * 1.5) * 100) / 100, hasValidBasic: true };
+      }
+    }
+    // No valid basic salary found
+    return { rate: 0, hasValidBasic: false };
   }, [isNightWatcher, selectedEmp, payrollCfg, empStructBasic]);
+  const nwOtRate = nwOtInfo.rate;
+  const nwHasValidBasic = nwOtInfo.hasValidBasic;
 
   const isOffSeasonInd = useOffSeasonStatus(month, year);
 
@@ -2306,6 +2351,27 @@ ${nwOtTableHtml}
           )}
 
           {isNightWatcher && !isLoading && records.length > 0 && (() => {
+            // Show "not assigned" notice if salary structure hasn't loaded yet or is missing
+            if (!empStructLoaded) return null;
+            if (!nwHasValidBasic) {
+              return (
+                <Card className="overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border bg-amber-50 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-amber-900">Night Watcher OT Summary</span>
+                    </div>
+                    <span className="text-[10px] text-amber-600">Normal: 3 hrs · Holiday: 11 hrs (8+3) · Cap: 11 hrs</span>
+                  </div>
+                  <div className="p-6 text-center">
+                    <div className="inline-flex items-center gap-2 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
+                      <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                      Salary structure not assigned — OT amount cannot be calculated. Please assign a salary structure to this employee.
+                    </div>
+                  </div>
+                </Card>
+              );
+            }
+
             // Build a full calendar map: date → record (API synthesises absent rows for all days)
             const recMap = new Map(records.map((r: any) => [r.date, r]));
             const calRows: { date: string; dow: number; r: any | null }[] = [];
