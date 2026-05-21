@@ -15,14 +15,36 @@ import { processSalaryRow, resolveDayShift, type WeekOffInfo } from "../lib/sala
 
 const STATUTORY_NAMES = ["EPF – Employee", "EPF – Employer", "ETF"];
 
+const DEFAULT_SALARY_SCALE: Record<string, number> = {
+  "General Manager":       150000,
+  "Operations Manager":    120000,
+  "F&B Manager":           100000,
+  "HR Manager":             90000,
+  "Accountant":             75000,
+  "Admin Officer":          65000,
+  "Kitchen Supervisor":     60000,
+  "Kitchen Staff":          45000,
+  "Room Supervisor":        60000,
+  "Room Attendant":         45000,
+  "Head Gardener":          50000,
+  "Gardener":               40000,
+  "Head Surf Instructor":   60000,
+  "Surf Instructor":        45000,
+  "Night Watcher":          40000,
+  "Security Officer":       40000,
+  "Cashier":                42000,
+  "Driver":                 38000,
+};
+
 const router = Router();
 
 async function getPayrollSettings() {
   const [existing] = await db.select().from(payrollSettings);
   const row = existing ?? (await db.insert(payrollSettings).values({}).returning())[0];
+  const storedScale = JSON.parse(row.salaryScale) as Record<string, number>;
   return {
     ...row,
-    salaryScale: JSON.parse(row.salaryScale) as Record<string, number>,
+    salaryScale: { ...DEFAULT_SALARY_SCALE, ...storedScale },
     employeeOverrides: JSON.parse(row.employeeOverrides ?? "{}") as Record<string, number>,
   };
 }
