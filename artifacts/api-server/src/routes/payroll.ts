@@ -419,7 +419,7 @@ router.post("/generate", async (req, res) => {
         ? basicSalary / 30
         : basicSalary / empWdCount;
       const hourlyRate  = isNightWatcherPayroll
-        ? basicSalary / 240
+        ? basicSalary / 250
         : basicSalary / (empWdCount * reqHoursPerDay);
       const minuteRate  = hourlyRate / 60;
 

@@ -1697,6 +1697,15 @@ function IndividualReport() {
   const { rules: hrRules, shifts: shiftOptions } = useHrRules();
   const empOffDays = useEmployeeOffDays();
 
+  const [payrollCfg, setPayrollCfg] = useState<{ salaryScale: Record<string,number>; employeeOverrides: Record<string,number> } | null>(null);
+  useEffect(() => {
+    const token = localStorage.getItem("auth_token") || "";
+    fetch(apiUrl("/payroll-settings"), { credentials: "include", headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => setPayrollCfg({ salaryScale: d.salaryScale ?? {}, employeeOverrides: d.employeeOverrides ?? {} }))
+      .catch(() => {});
+  }, []);
+
   const employees = useMemo(() => {
     const list = (empData?.employees || []) as any[];
     return [...list].sort((a, b) => (a.fullName || "").localeCompare(b.fullName || ""));
@@ -1902,7 +1911,7 @@ function IndividualReport() {
 
         // Night Watcher OT table for PDF
         const empBasicForNW = (emp as any).basicSalary ?? 0;
-        const empNwOtRate = Math.round((empBasicForNW / 240 * 1.5) * 100) / 100;
+        const empNwOtRate = Math.round((empBasicForNW / 250 * 1.5) * 100) / 100;
         const empIsNW = !!(
           clientFindRule(hrRules, (emp as any).department ?? "", shiftOptions.find((s: any) => s.id === (emp as any).shiftId)?.name ?? null)?.nightWatcherPayroll ||
           /night\s*watcher/i.test((emp as any).designation || "") ||
@@ -1941,7 +1950,7 @@ function IndividualReport() {
 <div style="margin-top:14px;border:1px solid #fde68a;border-radius:6px;overflow:hidden">
   <div style="background:#fffbeb;padding:8px 14px;border-bottom:1px solid #fde68a;display:flex;justify-content:space-between;align-items:center">
     <span style="font-weight:700;color:#92400e;font-size:10px">NIGHT WATCHER OT SUMMARY</span>
-    <span style="font-size:9px;color:#b45309">OT Rate = Basic/240×1.5 = Rs. ${empNwOtRate.toFixed(2)}/hr &nbsp;|&nbsp; Normal: 3 hrs · Holiday: 11 hrs (8+3)</span>
+    <span style="font-size:9px;color:#b45309">OT Rate = Basic/250×1.5 = Rs. ${empNwOtRate.toFixed(2)}/hr &nbsp;|&nbsp; Normal: 3 hrs · Holiday: 11 hrs (8+3)</span>
   </div>
   <table style="width:100%;border-collapse:collapse">
     <thead><tr style="background:#1565a8">
@@ -2131,9 +2140,14 @@ ${nwOtTableHtml}
   );
   const nwOtRate = useMemo(() => {
     if (!isNightWatcher) return 0;
-    const basic = (selectedEmp as any)?.basicSalary ?? 0;
-    return Math.round((basic / 240 * 1.5) * 100) / 100;
-  }, [isNightWatcher, selectedEmp]);
+    // Basic salary comes from payroll settings (not the employee list, which doesn't carry it)
+    const empId = String((selectedEmp as any)?.id ?? "");
+    const designation = (selectedEmp as any)?.designation ?? "";
+    const basic = payrollCfg
+      ? (payrollCfg.employeeOverrides[empId] ?? payrollCfg.salaryScale[designation] ?? 40000)
+      : 40000;
+    return Math.round((basic / 250 * 1.5) * 100) / 100;
+  }, [isNightWatcher, selectedEmp, payrollCfg]);
 
   const isOffSeasonInd = useOffSeasonStatus(month, year);
 
@@ -2276,7 +2290,7 @@ ${nwOtTableHtml}
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold text-amber-900">Night Watcher OT Summary</span>
                   <span className="text-[10px] text-amber-700 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded font-mono">
-                    OT Rate = Basic / 240 × 1.5 = Rs. {nwOtRate.toFixed(2)} / hr
+                    OT Rate = Basic / 250 × 1.5 = Rs. {nwOtRate.toFixed(2)} / hr
                   </span>
                 </div>
                 <span className="text-[10px] text-amber-600">Normal: 3 hrs · Holiday: 11 hrs (8+3) · Cap: 11 hrs</span>
