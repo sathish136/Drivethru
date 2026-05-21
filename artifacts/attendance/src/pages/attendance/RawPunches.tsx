@@ -265,7 +265,7 @@ export default function RawPunches() {
                 <th colSpan={7} className="px-3 py-1.5 text-left text-[10px] font-semibold border-r border-slate-600">
                   Employee Info
                 </th>
-                <th colSpan={4} className="px-3 py-1.5 text-center text-[10px] font-semibold border-r border-slate-600">
+                <th colSpan={8} className="px-3 py-1.5 text-center text-[10px] font-semibold border-r border-slate-600">
                   Punch Times
                 </th>
                 <th colSpan={2} className="px-3 py-1.5 text-center text-[10px] font-semibold">
@@ -280,7 +280,7 @@ export default function RawPunches() {
                 <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Code</th>
                 <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Status</th>
                 <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-r border-border">Source</th>
-                {/* 4 punch columns */}
+                {/* 8 punch columns */}
                 <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-emerald-50 text-emerald-700">
                   <div className="text-[10px]">Punch 1</div><div className="text-[9px] font-normal opacity-70">IN</div>
                 </th>
@@ -290,8 +290,20 @@ export default function RawPunches() {
                 <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-emerald-50 text-emerald-700">
                   <div className="text-[10px]">Punch 3</div><div className="text-[9px] font-normal opacity-70">IN</div>
                 </th>
-                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-red-50 text-red-700 border-r border-border">
+                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-red-50 text-red-700">
                   <div className="text-[10px]">Punch 4</div><div className="text-[9px] font-normal opacity-70">OUT</div>
+                </th>
+                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-emerald-50 text-emerald-700">
+                  <div className="text-[10px]">Punch 5</div><div className="text-[9px] font-normal opacity-70">IN</div>
+                </th>
+                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-red-50 text-red-700">
+                  <div className="text-[10px]">Punch 6</div><div className="text-[9px] font-normal opacity-70">OUT</div>
+                </th>
+                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-emerald-50 text-emerald-700">
+                  <div className="text-[10px]">Punch 7</div><div className="text-[9px] font-normal opacity-70">IN</div>
+                </th>
+                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-red-50 text-red-700 border-r border-border">
+                  <div className="text-[10px]">Punch 8</div><div className="text-[9px] font-normal opacity-70">OUT</div>
                 </th>
                 <th className="px-3 py-2 text-center font-semibold text-muted-foreground whitespace-nowrap">Total</th>
                 <th className="px-3 py-2 text-center font-semibold text-muted-foreground whitespace-nowrap">OT</th>
@@ -300,14 +312,14 @@ export default function RawPunches() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={13} className="px-3 py-12 text-center text-muted-foreground">
+                  <td colSpan={17} className="px-3 py-12 text-center text-muted-foreground">
                     <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-primary" />
                     Loading records…
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="px-3 py-12 text-center text-muted-foreground">
+                  <td colSpan={17} className="px-3 py-12 text-center text-muted-foreground">
                     <Fingerprint className="w-8 h-8 mx-auto mb-2 opacity-30" />
                     No records found. Try adjusting your filters.
                   </td>
@@ -362,13 +374,18 @@ export default function RawPunches() {
                       {row.p3 ?? <span className="text-muted-foreground/30">—</span>}
                     </td>
                     {/* Punch 4 OUT — highlight missing */}
-                    <td className="px-3 py-1.5 text-center font-mono whitespace-nowrap border-r border-border/50">
+                    <td className="px-3 py-1.5 text-center font-mono whitespace-nowrap">
                       {row.p4
                         ? <span className="text-red-700 font-semibold">{row.p4}</span>
                         : missingP4
                           ? <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-300">MISSING</span>
                           : <span className="text-muted-foreground/30">—</span>}
                     </td>
+                    {/* Punch 5–8: always empty (reserved for future device punches) */}
+                    <td className="px-3 py-1.5 text-center font-mono text-muted-foreground/30">—</td>
+                    <td className="px-3 py-1.5 text-center font-mono text-muted-foreground/30">—</td>
+                    <td className="px-3 py-1.5 text-center font-mono text-muted-foreground/30">—</td>
+                    <td className="px-3 py-1.5 text-center font-mono text-muted-foreground/30 border-r border-border/50">—</td>
                     <td className="px-3 py-1.5 text-center font-mono text-blue-700 font-medium">
                       {fmtHours(row.totalHours)}
                     </td>
