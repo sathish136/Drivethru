@@ -1706,6 +1706,17 @@ function IndividualReport() {
       .catch(() => {});
   }, []);
 
+  // Fetch salary structure assignment for the selected employee (has priority over payrollCfg)
+  const [empStructBasic, setEmpStructBasic] = useState<number | null>(null);
+  useEffect(() => {
+    if (!activeEmpId) { setEmpStructBasic(null); return; }
+    const token = localStorage.getItem("auth_token") || "";
+    fetch(apiUrl(`/salary-structures/assignment/${activeEmpId}`), { credentials: "include", headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setEmpStructBasic(d?.basicAmount ?? null))
+      .catch(() => setEmpStructBasic(null));
+  }, [activeEmpId]);
+
   const employees = useMemo(() => {
     const list = (empData?.employees || []) as any[];
     return [...list].sort((a, b) => (a.fullName || "").localeCompare(b.fullName || ""));
@@ -2140,14 +2151,15 @@ ${nwOtTableHtml}
   );
   const nwOtRate = useMemo(() => {
     if (!isNightWatcher) return 0;
-    // Basic salary comes from payroll settings (not the employee list, which doesn't carry it)
+    // Priority: salary structure assignment > payroll settings override > salary scale > fallback
     const empId = String((selectedEmp as any)?.id ?? "");
     const designation = (selectedEmp as any)?.designation ?? "";
-    const basic = payrollCfg
-      ? (payrollCfg.employeeOverrides[empId] ?? payrollCfg.salaryScale[designation] ?? 40000)
-      : 40000;
+    const basic = empStructBasic
+      ?? (payrollCfg
+        ? (payrollCfg.employeeOverrides[empId] ?? payrollCfg.salaryScale[designation] ?? 40000)
+        : 40000);
     return Math.round((basic / 240 * 1.5) * 100) / 100;
-  }, [isNightWatcher, selectedEmp, payrollCfg]);
+  }, [isNightWatcher, selectedEmp, payrollCfg, empStructBasic]);
 
   const isOffSeasonInd = useOffSeasonStatus(month, year);
 
