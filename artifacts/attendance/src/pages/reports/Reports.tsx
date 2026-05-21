@@ -2255,30 +2255,30 @@ ${nwOtTableHtml}
                 {[2024,2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
               </Select>
             </div>
-            <div className="flex gap-2 pt-5">
+            <div className="flex gap-1.5 pt-5">
               <button
                 disabled={empIds.length === 0}
                 onClick={() => setShowReport(true)}
                 className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all",
+                  "flex-1 flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all",
                   empIds.length > 0
                     ? "bg-primary text-white hover:bg-primary/90 shadow-sm active:scale-95"
                     : "bg-muted text-muted-foreground cursor-not-allowed"
                 )}
               >
-                <Eye className="w-4 h-4"/> View Report
+                <Eye className="w-3.5 h-3.5"/> View Report
               </button>
               <button
                 disabled={empIds.length === 0 || generatingPdfs}
                 onClick={handleGenerateAllPdfs}
                 className={cn(
-                  "flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap",
+                  "flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap",
                   empIds.length > 0 && !generatingPdfs
                     ? "bg-[#E02B20] text-white hover:bg-[#C4241A] shadow-sm active:scale-95"
                     : "bg-muted text-muted-foreground cursor-not-allowed"
                 )}
               >
-                <Printer className="w-4 h-4"/>
+                <Printer className="w-3.5 h-3.5"/>
                 {generatingPdfs ? `Generating… (${empIds.length})` : empIds.length > 1 ? `Generate ${empIds.length} PDFs` : "Generate PDF"}
               </button>
             </div>
