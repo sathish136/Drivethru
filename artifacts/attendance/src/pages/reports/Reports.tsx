@@ -1806,7 +1806,16 @@ function IndividualReport() {
     const token = localStorage.getItem("auth_token") || "";
     fetch(apiUrl(`/salary-structures/assignment/${activeEmpId}`), { credentials: "include", headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : null)
-      .then(d => { setEmpStructBasic(d?.basicAmount ?? null); setEmpStructLoaded(true); })
+      .then(d => {
+        if (!d) { setEmpStructBasic(null); setEmpStructLoaded(true); return; }
+        let basic: number | null = d.basicAmount > 0 ? d.basicAmount : null;
+        if (!basic && Array.isArray(d.earnings)) {
+          const basicEarning = d.earnings.find((e: any) => (e.component ?? e.name ?? "").toLowerCase() === "basic");
+          if (basicEarning) basic = Number(basicEarning.amount) || null;
+        }
+        setEmpStructBasic(basic);
+        setEmpStructLoaded(true);
+      })
       .catch(() => { setEmpStructBasic(null); setEmpStructLoaded(true); });
   }, [activeEmpId]);
 
@@ -1944,7 +1953,12 @@ function IndividualReport() {
           }
           if (structRes.ok) {
             const sd = await structRes.json();
-            pdfStructBasic = sd?.basicAmount ?? null;
+            let basic: number | null = sd?.basicAmount > 0 ? sd.basicAmount : null;
+            if (!basic && Array.isArray(sd?.earnings)) {
+              const basicEarning = sd.earnings.find((e: any) => (e.component ?? e.name ?? "").toLowerCase() === "basic");
+              if (basicEarning) basic = Number(basicEarning.amount) || null;
+            }
+            pdfStructBasic = basic;
           }
         } catch (err) { console.error("Fetch error for employee", eid, err); }
 
