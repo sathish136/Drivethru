@@ -38,6 +38,7 @@ import {
   CalendarOff,
   Fingerprint,
   Calculator,
+  DatabaseZap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -56,8 +57,9 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/attendance/today",      label: "Today's Attendance", icon: ClipboardList   },
       { href: "/attendance/monthly",    label: "Monthly Sheet",      icon: CalendarCheck   },
-      { href: "/attendance/approvals",  label: "Approvals",          icon: ClipboardCheck  },
-      { href: "/attendance/leave-entry", label: "Leave Entry",        icon: CalendarClock   },
+      { href: "/attendance/approvals",    label: "Approvals",          icon: ClipboardCheck  },
+      { href: "/attendance/leave-entry",  label: "Leave Entry",        icon: CalendarClock   },
+      { href: "/attendance/raw-punches",  label: "Raw Punches",        icon: DatabaseZap     },
     ],
   },
   {

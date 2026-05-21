@@ -66,20 +66,38 @@ router.post("/devices/:id/test", async (req, res) => {
 
 router.get("/logs", async (req, res) => {
   try {
-    const { deviceId, page = "1" } = req.query;
+    const { deviceId, page = "1", limit: limitQ, employeeId, startDate, endDate, punchType, search } = req.query;
     const all = await db.select({
       log: biometricLogs,
       deviceName: biometricDevices.name,
       empName: employees.fullName,
+      empCode: employees.employeeId,
     }).from(biometricLogs)
       .leftJoin(biometricDevices, eq(biometricLogs.deviceId, biometricDevices.id))
-      .leftJoin(employees, eq(biometricLogs.employeeId, employees.id));
+      .leftJoin(employees, eq(biometricLogs.employeeId, employees.id))
+      .orderBy(biometricLogs.punchTime);
 
     let filtered = all;
-    if (deviceId) filtered = filtered.filter(r => r.log.deviceId === Number(deviceId));
+    if (deviceId)    filtered = filtered.filter(r => r.log.deviceId === Number(deviceId));
+    if (employeeId)  filtered = filtered.filter(r => r.log.employeeId === Number(employeeId));
+    if (punchType && punchType !== "all") filtered = filtered.filter(r => r.log.punchType === punchType);
+    if (startDate)   filtered = filtered.filter(r => r.log.punchTime >= new Date(String(startDate)));
+    if (endDate) {
+      const end = new Date(String(endDate)); end.setHours(23, 59, 59, 999);
+      filtered = filtered.filter(r => r.log.punchTime <= end);
+    }
+    if (search) {
+      const q = String(search).toLowerCase();
+      filtered = filtered.filter(r =>
+        (r.empName || "").toLowerCase().includes(q) ||
+        (r.empCode || "").toLowerCase().includes(q) ||
+        r.log.biometricId.toLowerCase().includes(q)
+      );
+    }
 
     const total = filtered.length;
-    const p = Number(page), l = 50;
+    const p = Number(page);
+    const l = limitQ ? Math.min(Number(limitQ), 500) : 100;
     const paginated = filtered.slice((p - 1) * l, p * l);
 
     res.json({
@@ -88,10 +106,11 @@ router.get("/logs", async (req, res) => {
         deviceName: r.deviceName || "",
         employeeId: r.log.employeeId || 0,
         employeeName: r.empName || "Unknown",
+        employeeCode: r.empCode || "",
         punchTime: r.log.punchTime.toISOString(),
         createdAt: r.log.createdAt.toISOString(),
       })),
-      total, page: p,
+      total, page: p, pageSize: l,
     });
   } catch (e) { res.status(500).json({ message: "Error", success: false }); }
 });

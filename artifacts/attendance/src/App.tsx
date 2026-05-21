@@ -28,6 +28,7 @@ import Incentives from "@/pages/incentives/Incentives";
 import WeekOffs from "@/pages/weekoffs/WeekOffs";
 import Tutorial from "@/pages/tutorial/Tutorial";
 import ManualSalary from "@/pages/manual-salary/ManualSalary";
+import RawPunches from "@/pages/attendance/RawPunches";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -110,6 +111,7 @@ function Router() {
       <Route path="/weekoffs"><ProtectedRoute component={WeekOffs} /></Route>
       <Route path="/tutorial"><ProtectedRoute component={Tutorial} /></Route>
       <Route path="/manual-salary"><ProtectedRoute component={ManualSalary} /></Route>
+      <Route path="/attendance/raw-punches"><ProtectedRoute component={RawPunches} /></Route>
       <Route component={NotFound} />
     </Switch>
   );
