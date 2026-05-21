@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { attendanceRecords, employees, branches, shifts, leaveBalances, payrollRecords } from "@workspace/db/schema";
+import { attendanceRecords, employees, branches, shifts, leaveBalances, payrollRecords, biometricLogs } from "@workspace/db/schema";
 import { eq, and, gte, lte, isNotNull, desc, or, ilike, sql } from "drizzle-orm";
 import { calcWorkHours, getDaysInMonth, today } from "../lib/helpers.js";
 import { loadDeptRules, findRule, timeToMins } from "../lib/hr-rules.js";
@@ -686,79 +686,132 @@ router.put("/:id", async (req, res) => {
   } catch (e) { res.status(500).json({ message: "Error", success: false }); }
 });
 
-/* GET /attendance/raw-punches — one row per employee per day, all punches as columns */
+/* GET /attendance/raw-punches
+   Reads from biometric_logs — one row per employee per day,
+   up to 8 individual punch timestamps as p1…p8 columns.
+   Also joins attendance_records for status/totalHours/OT. */
 router.get("/raw-punches", async (req, res) => {
   try {
     const { employeeId, startDate, endDate, search, page = "1", limit: limitQ } = req.query;
 
-    const rows = await db
-      .select({
-        rec: attendanceRecords,
-        empName: employees.fullName,
-        empCode: employees.employeeId,
-        branchName: branches.name,
-      })
-      .from(attendanceRecords)
-      .leftJoin(employees, eq(attendanceRecords.employeeId, employees.id))
-      .leftJoin(branches, eq(attendanceRecords.branchId, branches.id))
-      .orderBy(attendanceRecords.date);
+    // Build WHERE clauses
+    const conditions: ReturnType<typeof eq>[] = [];
+    if (employeeId) conditions.push(eq(biometricLogs.employeeId, Number(employeeId)));
+    if (startDate)  conditions.push(sql`DATE(${biometricLogs.punchTime}) >= ${String(startDate)}`  as any);
+    if (endDate)    conditions.push(sql`DATE(${biometricLogs.punchTime}) <= ${String(endDate)}`    as any);
 
-    // Build one row per employee-day record
-    type DayRow = {
-      id: number;
-      employeeId: number;
+    // Fetch raw logs with employee info
+    const logs = await db
+      .select({
+        logId:       biometricLogs.id,
+        employeeId:  biometricLogs.employeeId,
+        punchTime:   biometricLogs.punchTime,
+        punchType:   biometricLogs.punchType,
+        empName:     employees.fullName,
+        empCode:     employees.employeeId,
+        branchName:  branches.name,
+      })
+      .from(biometricLogs)
+      .leftJoin(employees, eq(biometricLogs.employeeId, employees.id))
+      .leftJoin(branches,  eq(employees.branchId, branches.id))
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(biometricLogs.punchTime);
+
+    // Also fetch attendance_records for status / totalHours / OT
+    const attRecs = await db
+      .select({
+        employeeId:    attendanceRecords.employeeId,
+        date:          attendanceRecords.date,
+        status:        attendanceRecords.status,
+        source:        attendanceRecords.source,
+        totalHours:    attendanceRecords.totalHours,
+        overtimeHours: attendanceRecords.overtimeHours,
+      })
+      .from(attendanceRecords);
+
+    // Index attendance records by employeeId+date
+    const attMap = new Map<string, typeof attRecs[0]>();
+    for (const r of attRecs) {
+      attMap.set(`${r.employeeId}|${r.date}`, r);
+    }
+
+    // Group biometric logs by employeeId + date
+    type DayKey = string; // `${employeeId}|${date}`
+    const dayMap = new Map<DayKey, {
+      employeeId:  number;
       employeeName: string;
       employeeCode: string;
-      branchName: string;
-      date: string;
-      status: string;
-      source: string;
-      p1: string | null; // Punch 1 IN
-      p2: string | null; // Punch 2 OUT
-      p3: string | null; // Punch 3 IN
-      p4: string | null; // Punch 4 OUT
-      totalHours: number | null;
-      overtimeHours: number | null;
-    };
+      branchName:  string;
+      date:        string;
+      punches:     { time: string; type: string }[];
+    }>();
 
-    let dayRows: DayRow[] = rows.map(({ rec, empName, empCode, branchName }) => ({
-      id: rec.id,
-      employeeId: rec.employeeId,
-      employeeName: empName || "Unknown",
-      employeeCode: empCode || "",
-      branchName: branchName || "",
-      date: rec.date,
-      status: rec.status,
-      source: rec.source,
-      p1: rec.inTime1  || null,
-      p2: rec.outTime1 || null,
-      p3: rec.inTime2  || null,
-      p4: rec.outTime2 || null,
-      totalHours: rec.totalHours ?? null,
-      overtimeHours: rec.overtimeHours ?? null,
-    }));
+    for (const log of logs) {
+      const pt = log.punchTime instanceof Date ? log.punchTime : new Date(log.punchTime);
+      const date = pt.toISOString().slice(0, 10);
+      const timeStr = pt.toTimeString().slice(0, 8); // HH:MM:SS
+      const key: DayKey = `${log.employeeId}|${date}`;
 
-    // Apply filters
-    if (employeeId)  dayRows = dayRows.filter(r => r.employeeId === Number(employeeId));
-    if (startDate)   dayRows = dayRows.filter(r => r.date >= String(startDate));
-    if (endDate)     dayRows = dayRows.filter(r => r.date <= String(endDate));
+      if (!dayMap.has(key)) {
+        dayMap.set(key, {
+          employeeId:  log.employeeId ?? 0,
+          employeeName: log.empName   || "Unknown",
+          employeeCode: log.empCode   || "",
+          branchName:  log.branchName || "",
+          date,
+          punches: [],
+        });
+      }
+      dayMap.get(key)!.punches.push({ time: timeStr, type: log.punchType });
+    }
+
+    // Apply search filter
+    let dayEntries = [...dayMap.values()];
     if (search) {
       const q = String(search).toLowerCase();
-      dayRows = dayRows.filter(r =>
+      dayEntries = dayEntries.filter(r =>
         r.employeeName.toLowerCase().includes(q) ||
         r.employeeCode.toLowerCase().includes(q)
       );
     }
 
-    // Sort newest first
-    dayRows.sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName));
+    // Sort newest first, then by name
+    dayEntries.sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName));
 
-    const total = dayRows.length;
+    const total = dayEntries.length;
     const p = Number(page);
     const l = limitQ ? Math.min(Number(limitQ), 500) : 100;
-    const paginated = dayRows.slice((p - 1) * l, p * l);
+    const paginated = dayEntries.slice((p - 1) * l, p * l);
 
-    res.json({ rows: paginated, total, page: p, pageSize: l });
+    // Build final response rows — spread up to 8 punches into p1…p8
+    const responseRows = paginated.map((entry, i) => {
+      const att = attMap.get(`${entry.employeeId}|${entry.date}`);
+      const ps = entry.punches.slice(0, 8);
+      return {
+        id:           i + (p - 1) * l + 1,
+        employeeId:   entry.employeeId,
+        employeeName: entry.employeeName,
+        employeeCode: entry.employeeCode,
+        branchName:   entry.branchName,
+        date:         entry.date,
+        status:       att?.status  || "unknown",
+        source:       att?.source  || "biometric",
+        totalHours:   att?.totalHours    ?? null,
+        overtimeHours: att?.overtimeHours ?? null,
+        punchCount:   entry.punches.length,
+        p1: ps[0]?.time ?? null,
+        p2: ps[1]?.time ?? null,
+        p3: ps[2]?.time ?? null,
+        p4: ps[3]?.time ?? null,
+        p5: ps[4]?.time ?? null,
+        p6: ps[5]?.time ?? null,
+        p7: ps[6]?.time ?? null,
+        p8: ps[7]?.time ?? null,
+        punchTypes: ps.map(px => px.type),
+      };
+    });
+
+    res.json({ rows: responseRows, total, page: p, pageSize: l });
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: "Error fetching raw punches", success: false });

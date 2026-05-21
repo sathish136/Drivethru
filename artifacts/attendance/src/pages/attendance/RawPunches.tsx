@@ -26,6 +26,12 @@ type DayRow = {
   p2: string | null;
   p3: string | null;
   p4: string | null;
+  p5: string | null;
+  p6: string | null;
+  p7: string | null;
+  p8: string | null;
+  punchCount: number;
+  punchTypes: string[]; // ['in','out','in','out',...] per punch slot
   totalHours: number | null;
   overtimeHours: number | null;
 };
@@ -116,9 +122,9 @@ export default function RawPunches() {
   const exportCsv = () => {
     const header = [
       "#", "Date", "Day", "Employee", "Emp Code", "Branch", "Status", "Source",
-      "Punch 1 (IN)", "Punch 2 (OUT)", "Punch 3 (IN)", "Punch 4 (OUT)",
-      "Punch 5 (IN)", "Punch 6 (OUT)", "Punch 7 (IN)", "Punch 8 (OUT)",
-      "Total Hrs", "OT Hrs",
+      "Punch 1", "Punch 2", "Punch 3", "Punch 4",
+      "Punch 5", "Punch 6", "Punch 7", "Punch 8",
+      "Total Punches", "Total Hrs", "OT Hrs",
     ];
     const data = rows.map((r, i) => [
       (page - 1) * PAGE_SIZE + i + 1,
@@ -126,7 +132,8 @@ export default function RawPunches() {
       r.employeeName, r.employeeCode, r.branchName,
       r.status.replace("_", " "), r.source,
       r.p1 || "", r.p2 || "", r.p3 || "", r.p4 || "",
-      "", "", "", "",
+      r.p5 || "", r.p6 || "", r.p7 || "", r.p8 || "",
+      r.punchCount || 0,
       fmtHours(r.totalHours), fmtHours(r.overtimeHours),
     ]);
     const csv = [header, ...data].map(row =>
@@ -142,8 +149,11 @@ export default function RawPunches() {
   // Summary stats
   const presentCount  = rows.filter(r => r.status === "present" || r.status === "late").length;
   const absentCount   = rows.filter(r => r.status === "absent").length;
-  const missingOut    = rows.filter(r => r.p1 && !r.p2).length;
-  const missingIn2    = rows.filter(r => r.p2 && r.p3 && !r.p4).length; // has split but missing out2
+  // Missing punch: last punch in the day is type "in" (never punched out)
+  const missingPunchCount = rows.filter(r => {
+    const types = r.punchTypes || [];
+    return types.length > 0 && types[types.length - 1] === "in";
+  }).length;
 
   return (
     <div className="space-y-4">
@@ -181,7 +191,7 @@ export default function RawPunches() {
           <div className="text-xs text-muted-foreground mt-0.5">Absent</div>
         </div>
         <div className="rounded-lg border px-4 py-3 bg-orange-50 border-orange-300">
-          <div className="text-xl font-bold text-orange-600">{(missingOut + missingIn2).toLocaleString()}</div>
+          <div className="text-xl font-bold text-orange-600">{missingPunchCount.toLocaleString()}</div>
           <div className="text-xs text-muted-foreground mt-0.5">⚠ Missing Punches</div>
         </div>
       </div>
@@ -327,10 +337,12 @@ export default function RawPunches() {
               ) : rows.map((row, i) => {
                 const sc = STATUS_COLOR[row.status] ?? STATUS_COLOR.absent;
                 const rowN = (page - 1) * PAGE_SIZE + i + 1;
-                // missing punch detection
-                const missingP2 = !!row.p1 && !row.p2;          // punched in, never out
-                const missingP4 = !!row.p3 && !row.p4;          // split: punched in2, never out2
-                const hasMissing = missingP2 || missingP4;
+                const types = row.punchTypes || [];
+                // Missing punch: last punch of the day was an "in" — never punched out
+                const lastType = types[types.length - 1];
+                const hasMissing = types.length > 0 && lastType === "in";
+                const punchVals = [row.p1, row.p2, row.p3, row.p4, row.p5, row.p6, row.p7, row.p8];
+
                 return (
                   <tr key={row.id}
                     className={cn("border-b border-border/50 hover:bg-muted/20 transition-colors",
@@ -339,7 +351,7 @@ export default function RawPunches() {
                     <td className="px-3 py-1.5 font-mono whitespace-nowrap">{fmtDate(row.date)}</td>
                     <td className="px-3 py-1.5 text-muted-foreground">{fmtDay(row.date)}</td>
                     <td className="px-3 py-1.5 font-medium text-foreground whitespace-nowrap max-w-[160px] truncate" title={row.employeeName}>
-                      {hasMissing && <span className="mr-1 text-orange-500" title="Missing punch">⚠</span>}
+                      {hasMissing && <span className="mr-1 text-orange-500" title="Missing out-punch">⚠</span>}
                       {row.employeeName}
                     </td>
                     <td className="px-3 py-1.5 font-mono text-muted-foreground whitespace-nowrap">{row.employeeCode}</td>
@@ -357,35 +369,32 @@ export default function RawPunches() {
                         {row.source}
                       </span>
                     </td>
-                    {/* Punch 1 IN */}
-                    <td className="px-3 py-1.5 text-center font-mono whitespace-nowrap text-emerald-700 font-semibold">
-                      {row.p1 ?? <span className="text-muted-foreground/30">—</span>}
-                    </td>
-                    {/* Punch 2 OUT — highlight missing */}
-                    <td className="px-3 py-1.5 text-center font-mono whitespace-nowrap">
-                      {row.p2
-                        ? <span className="text-red-700 font-semibold">{row.p2}</span>
-                        : missingP2
-                          ? <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-300">MISSING</span>
-                          : <span className="text-muted-foreground/30">—</span>}
-                    </td>
-                    {/* Punch 3 IN */}
-                    <td className="px-3 py-1.5 text-center font-mono whitespace-nowrap text-emerald-700 font-semibold">
-                      {row.p3 ?? <span className="text-muted-foreground/30">—</span>}
-                    </td>
-                    {/* Punch 4 OUT — highlight missing */}
-                    <td className="px-3 py-1.5 text-center font-mono whitespace-nowrap">
-                      {row.p4
-                        ? <span className="text-red-700 font-semibold">{row.p4}</span>
-                        : missingP4
-                          ? <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-300">MISSING</span>
-                          : <span className="text-muted-foreground/30">—</span>}
-                    </td>
-                    {/* Punch 5–8: always empty (reserved for future device punches) */}
-                    <td className="px-3 py-1.5 text-center font-mono text-muted-foreground/30">—</td>
-                    <td className="px-3 py-1.5 text-center font-mono text-muted-foreground/30">—</td>
-                    <td className="px-3 py-1.5 text-center font-mono text-muted-foreground/30">—</td>
-                    <td className="px-3 py-1.5 text-center font-mono text-muted-foreground/30 border-r border-border/50">—</td>
+                    {/* 8 punch columns — color from punchTypes, MISSING badge on last "in" */}
+                    {punchVals.map((pt, pi) => {
+                      const pType = types[pi]; // 'in' | 'out' | undefined
+                      const isIn  = pType === "in";
+                      const isOut = pType === "out";
+                      const isMissingSlot = hasMissing && pi === types.length; // next slot after last punch
+                      const isLastCol = pi === 7;
+                      return (
+                        <td key={pi} className={cn(
+                          "px-3 py-1.5 text-center font-mono whitespace-nowrap text-xs",
+                          isLastCol && "border-r border-border/50"
+                        )}>
+                          {pt ? (
+                            <span className={cn("font-semibold",
+                              isIn  ? "text-emerald-700" :
+                              isOut ? "text-red-700"     : "text-slate-600")}>
+                              {pt}
+                            </span>
+                          ) : isMissingSlot ? (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-300">MISSING</span>
+                          ) : (
+                            <span className="text-muted-foreground/25">—</span>
+                          )}
+                        </td>
+                      );
+                    })}
                     <td className="px-3 py-1.5 text-center font-mono text-blue-700 font-medium">
                       {fmtHours(row.totalHours)}
                     </td>
