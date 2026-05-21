@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import {
-  Fingerprint, Search, RefreshCw, Download, ChevronLeft, ChevronRight,
-  LogIn, LogOut, X,
+  Fingerprint, Search, RefreshCw, Download, ChevronLeft, ChevronRight, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -14,127 +13,136 @@ function authHeaders() {
 
 const PAGE_SIZE = 100;
 
-type PunchRow = {
-  id: string;
-  attendanceId: number;
+type DayRow = {
+  id: number;
   employeeId: number;
   employeeName: string;
   employeeCode: string;
   branchName: string;
   date: string;
-  punchTime: string;
-  punchType: "in" | "out";
-  slot: string;
   status: string;
   source: string;
+  p1: string | null;
+  p2: string | null;
+  p3: string | null;
+  p4: string | null;
+  totalHours: number | null;
+  overtimeHours: number | null;
 };
 
 type Employee = { id: number; fullName: string; employeeId: string };
 
-const PUNCH_META = {
-  in:  { label: "Punch In",  icon: LogIn,  color: "text-emerald-700", bg: "bg-emerald-100" },
-  out: { label: "Punch Out", icon: LogOut, color: "text-red-700",     bg: "bg-red-100"     },
+const STATUS_COLOR: Record<string, { bg: string; text: string; dot: string }> = {
+  present:  { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
+  late:     { bg: "bg-amber-50",   text: "text-amber-700",   dot: "bg-amber-500"   },
+  half_day: { bg: "bg-yellow-50",  text: "text-yellow-700",  dot: "bg-yellow-500"  },
+  absent:   { bg: "bg-red-50",     text: "text-red-700",     dot: "bg-red-500"     },
+  leave:    { bg: "bg-purple-50",  text: "text-purple-700",  dot: "bg-purple-500"  },
+  holiday:  { bg: "bg-gray-50",    text: "text-gray-600",    dot: "bg-gray-400"    },
+  off_day:  { bg: "bg-slate-50",   text: "text-slate-600",   dot: "bg-slate-400"   },
 };
 
-function fmtDate(dateStr: string) {
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-}
-function fmtDay(dateStr: string) {
-  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short" });
-}
-function fmtTime(punchTime: string) {
-  const d = new Date(punchTime);
-  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-}
-function todayStr() { return new Date().toISOString().slice(0, 10); }
-function sevenDaysAgoStr() {
-  const d = new Date(); d.setDate(d.getDate() - 6);
-  return d.toISOString().slice(0, 10);
-}
+// Punch column definitions: 8 slots alternating IN/OUT
+const PUNCH_COLS = [
+  { key: "p1", label: "Punch 1", type: "IN",  field: "p1" },
+  { key: "p2", label: "Punch 2", type: "OUT", field: "p2" },
+  { key: "p3", label: "Punch 3", type: "IN",  field: "p3" },
+  { key: "p4", label: "Punch 4", type: "OUT", field: "p4" },
+  { key: "p5", label: "Punch 5", type: "IN",  field: "p5" },
+  { key: "p6", label: "Punch 6", type: "OUT", field: "p6" },
+  { key: "p7", label: "Punch 7", type: "IN",  field: "p7" },
+  { key: "p8", label: "Punch 8", type: "OUT", field: "p8" },
+] as const;
 
-const SOURCE_BADGE: Record<string, string> = {
-  biometric: "bg-blue-100 text-blue-700",
-  manual:    "bg-purple-100 text-purple-700",
-  system:    "bg-gray-100 text-gray-600",
-};
-const STATUS_DOT: Record<string, string> = {
-  present:  "bg-emerald-500",
-  late:     "bg-amber-500",
-  half_day: "bg-yellow-500",
-  absent:   "bg-red-500",
-  leave:    "bg-purple-500",
-  holiday:  "bg-gray-400",
-  off_day:  "bg-slate-400",
-};
+function fmtDate(d: string) {
+  return new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+function fmtDay(d: string) {
+  return new Date(d + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short" });
+}
+function fmtHours(h: number | null) {
+  if (h == null) return "—";
+  const hrs = Math.floor(h); const mins = Math.round((h - hrs) * 60);
+  return `${hrs}:${String(mins).padStart(2, "0")}`;
+}
 
 export default function RawPunches() {
-  const [punches, setPunches]   = useState<PunchRow[]>([]);
+  const [rows, setRows]         = useState<DayRow[]>([]);
   const [total, setTotal]       = useState(0);
   const [loading, setLoading]   = useState(false);
   const [page, setPage]         = useState(1);
 
-  const [search, setSearch]       = useState("");
-  const [empId, setEmpId]         = useState("");
-  const [punchType, setPunchType] = useState("all");
-  const [startDate, setStartDate] = useState(sevenDaysAgoStr());
-  const [endDate, setEndDate]     = useState(todayStr());
+  const [search, setSearch]     = useState("");
+  const [empId, setEmpId]       = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate]     = useState("");
   const [employees, setEmployees] = useState<Employee[]>([]);
 
   useEffect(() => {
     fetch(apiUrl("/employees?limit=1000"), { headers: authHeaders() })
       .then(r => r.ok ? r.json() : null)
-      .then(d => setEmployees((d?.employees || d || []).map((e: any) => ({ id: e.id, fullName: e.fullName, employeeId: e.employeeId }))))
+      .then(d => setEmployees((d?.employees || d || []).map((e: any) => ({
+        id: e.id, fullName: e.fullName, employeeId: e.employeeId,
+      }))))
       .catch(() => {});
   }, []);
 
-  const fetchPunches = useCallback(async (p: number) => {
+  const fetchRows = useCallback(async (p: number) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(p), limit: String(PAGE_SIZE) });
-      if (search)              params.set("search", search);
-      if (empId)               params.set("employeeId", empId);
-      if (punchType !== "all") params.set("punchType", punchType);
-      if (startDate)           params.set("startDate", startDate);
-      if (endDate)             params.set("endDate", endDate);
+      if (search)    params.set("search", search);
+      if (empId)     params.set("employeeId", empId);
+      if (startDate) params.set("startDate", startDate);
+      if (endDate)   params.set("endDate", endDate);
 
       const r = await fetch(apiUrl(`/attendance/raw-punches?${params}`), { headers: authHeaders() });
       const d = await r.json();
-      setPunches(d.punches || []);
+      setRows(d.rows || []);
       setTotal(d.total || 0);
     } catch {
-      setPunches([]);
+      setRows([]);
     } finally {
       setLoading(false);
     }
-  }, [search, empId, punchType, startDate, endDate]);
+  }, [search, empId, startDate, endDate]);
 
-  useEffect(() => { setPage(1); fetchPunches(1); }, [empId, punchType, startDate, endDate]);
-  useEffect(() => { fetchPunches(page); }, [page]);
+  useEffect(() => { setPage(1); fetchRows(1); }, [empId, startDate, endDate]);
+  useEffect(() => { fetchRows(page); }, [page]);
 
-  const handleSearch = () => { setPage(1); fetchPunches(1); };
-
+  const handleSearch = () => { setPage(1); fetchRows(1); };
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
-  const inCount  = punches.filter(p => p.punchType === "in").length;
-  const outCount = punches.filter(p => p.punchType === "out").length;
-
   const exportCsv = () => {
-    const header = ["#", "Date", "Day", "Time", "Slot", "Punch Type", "Employee", "Emp Code", "Branch", "Att. Status", "Source"];
-    const rows = punches.map((p, i) => [
+    const header = [
+      "#", "Date", "Day", "Employee", "Emp Code", "Branch", "Status", "Source",
+      "Punch 1 (IN)", "Punch 2 (OUT)", "Punch 3 (IN)", "Punch 4 (OUT)",
+      "Punch 5 (IN)", "Punch 6 (OUT)", "Punch 7 (IN)", "Punch 8 (OUT)",
+      "Total Hrs", "OT Hrs",
+    ];
+    const data = rows.map((r, i) => [
       (page - 1) * PAGE_SIZE + i + 1,
-      fmtDate(p.date), fmtDay(p.date), fmtTime(p.punchTime), p.slot,
-      p.punchType === "in" ? "Punch In" : "Punch Out",
-      p.employeeName, p.employeeCode, p.branchName,
-      p.status.replace("_", " "), p.source,
+      fmtDate(r.date), fmtDay(r.date),
+      r.employeeName, r.employeeCode, r.branchName,
+      r.status.replace("_", " "), r.source,
+      r.p1 || "", r.p2 || "", r.p3 || "", r.p4 || "",
+      "", "", "", "",
+      fmtHours(r.totalHours), fmtHours(r.overtimeHours),
     ]);
-    const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const csv = [header, ...data].map(row =>
+      row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")
+    ).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url;
-    a.download = `raw-punches-${startDate}-${endDate}.csv`; a.click();
+    const a = document.createElement("a");
+    a.href = url; a.download = `raw-punches-${startDate || "all"}.csv`; a.click();
     URL.revokeObjectURL(url);
   };
+
+  // Summary stats
+  const presentCount = rows.filter(r => r.status === "present" || r.status === "late").length;
+  const absentCount  = rows.filter(r => r.status === "absent").length;
+  const hasPunch4    = rows.some(r => r.p3 || r.p4);
 
   return (
     <div className="space-y-4">
@@ -142,27 +150,27 @@ export default function RawPunches() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Fingerprint className="w-5 h-5 text-primary" />
-          <h1 className="text-base font-semibold text-foreground">Raw Punch Logs</h1>
-          <span className="text-xs text-muted-foreground ml-1">All individual punch records from attendance data</span>
+          <h1 className="text-base font-semibold">Raw Punch Logs</h1>
+          <span className="text-xs text-muted-foreground">One row per employee per day · all punch times</span>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => fetchPunches(page)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-md bg-background hover:bg-muted transition-colors">
+        <div className="flex gap-2">
+          <button onClick={() => fetchRows(page)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-md bg-background hover:bg-muted">
             <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} /> Refresh
           </button>
-          <button onClick={exportCsv} disabled={punches.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-md bg-background hover:bg-muted transition-colors disabled:opacity-40">
+          <button onClick={exportCsv} disabled={rows.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-md bg-background hover:bg-muted disabled:opacity-40">
             <Download className="w-3.5 h-3.5" /> Export CSV
           </button>
         </div>
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      {/* Summary */}
+      <div className="grid grid-cols-3 gap-3">
         {[
-          { label: "Total Punches",     value: total,    color: "text-blue-600",    bg: "bg-blue-50 border-blue-200"     },
-          { label: "Punch In (page)",   value: inCount,  color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-200" },
-          { label: "Punch Out (page)",  value: outCount, color: "text-red-600",     bg: "bg-red-50 border-red-200"       },
+          { label: "Total Records", value: total,        color: "text-blue-600",    bg: "bg-blue-50 border-blue-200"       },
+          { label: "Present / Late", value: presentCount, color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-200" },
+          { label: "Absent",         value: absentCount,  color: "text-red-600",     bg: "bg-red-50 border-red-200"         },
         ].map(c => (
           <div key={c.label} className={cn("rounded-lg border px-4 py-3", c.bg)}>
             <div className={cn("text-xl font-bold", c.color)}>{c.value.toLocaleString()}</div>
@@ -173,70 +181,43 @@ export default function RawPunches() {
 
       {/* Filters */}
       <div className="rounded-xl border border-border bg-card shadow-sm">
-        <div className="px-4 py-3 border-b border-border bg-muted/30 rounded-t-xl">
-          <span className="text-xs font-semibold text-foreground">Filters</span>
+        <div className="px-4 py-2.5 border-b border-border bg-muted/30 rounded-t-xl">
+          <span className="text-xs font-semibold">Filters</span>
         </div>
-        <div className="p-4 flex flex-wrap gap-3 items-end">
-          {/* Search */}
-          <div className="flex-1 min-w-[180px]">
-            <label className="block text-xs text-muted-foreground mb-1">Search (name / emp code)</label>
+        <div className="p-3 flex flex-wrap gap-3 items-end">
+          <div className="flex-1 min-w-[160px]">
+            <label className="block text-xs text-muted-foreground mb-1">Search</label>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-              <input
-                className="w-full pl-8 pr-8 py-1.5 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
-                placeholder="Employee name or code…"
-                value={search}
+              <input className="w-full pl-8 pr-7 py-1.5 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="Name or emp code…" value={search}
                 onChange={e => setSearch(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleSearch()}
-              />
-              {search && (
-                <button className="absolute right-2 top-1/2 -translate-y-1/2"
-                  onClick={() => { setSearch(""); setPage(1); fetchPunches(1); }}>
-                  <X className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
-                </button>
-              )}
+                onKeyDown={e => e.key === "Enter" && handleSearch()} />
+              {search && <button className="absolute right-2 top-1/2 -translate-y-1/2"
+                onClick={() => { setSearch(""); setPage(1); fetchRows(1); }}>
+                <X className="w-3.5 h-3.5 text-muted-foreground" /></button>}
             </div>
           </div>
-
-          {/* Employee dropdown */}
-          <div className="min-w-[200px]">
+          <div className="min-w-[190px]">
             <label className="block text-xs text-muted-foreground mb-1">Employee</label>
             <select className="w-full py-1.5 px-2 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
               value={empId} onChange={e => setEmpId(e.target.value)}>
               <option value="">— All Employees —</option>
-              {employees.map(e => (
-                <option key={e.id} value={String(e.id)}>{e.fullName} ({e.employeeId})</option>
-              ))}
+              {employees.map(e => <option key={e.id} value={String(e.id)}>{e.fullName} ({e.employeeId})</option>)}
             </select>
           </div>
-
-          {/* Punch type */}
-          <div className="min-w-[130px]">
-            <label className="block text-xs text-muted-foreground mb-1">Punch Type</label>
-            <select className="w-full py-1.5 px-2 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
-              value={punchType} onChange={e => setPunchType(e.target.value)}>
-              <option value="all">All Types</option>
-              <option value="in">Punch In</option>
-              <option value="out">Punch Out</option>
-            </select>
-          </div>
-
-          {/* Date range */}
           <div>
             <label className="block text-xs text-muted-foreground mb-1">From</label>
-            <input type="date"
-              className="py-1.5 px-2 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+            <input type="date" className="py-1.5 px-2 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
               value={startDate} onChange={e => setStartDate(e.target.value)} />
           </div>
           <div>
             <label className="block text-xs text-muted-foreground mb-1">To</label>
-            <input type="date"
-              className="py-1.5 px-2 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+            <input type="date" className="py-1.5 px-2 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
               value={endDate} onChange={e => setEndDate(e.target.value)} />
           </div>
-
           <button onClick={handleSearch}
-            className="px-4 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
+            className="px-4 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
             Apply
           </button>
         </div>
@@ -244,9 +225,10 @@ export default function RawPunches() {
 
       {/* Table */}
       <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center justify-between">
-          <span className="text-xs font-semibold text-foreground">
-            {loading ? "Loading…" : `${total.toLocaleString()} punch records`}
+        {/* Table header bar */}
+        <div className="px-4 py-2.5 border-b border-border bg-muted/30 flex items-center justify-between">
+          <span className="text-xs font-semibold">
+            {loading ? "Loading…" : `${total.toLocaleString()} records`}
             {!loading && total > 0 && (
               <span className="text-muted-foreground font-normal ml-1">
                 — showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)}
@@ -269,59 +251,121 @@ export default function RawPunches() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead className="bg-muted/50 border-b border-border">
-              <tr>
-                {["#", "Date", "Day", "Time", "Slot", "Type", "Employee", "Emp Code", "Branch", "Att. Status", "Source"].map(h => (
-                  <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
-                ))}
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              {/* Punch group header */}
+              <tr className="bg-slate-700 text-white">
+                <th colSpan={7} className="px-3 py-1.5 text-left text-[10px] font-semibold border-r border-slate-600">
+                  Employee Info
+                </th>
+                <th colSpan={hasPunch4 ? 4 : 2} className="px-3 py-1.5 text-center text-[10px] font-semibold border-r border-slate-600">
+                  Punch Times
+                </th>
+                <th colSpan={2} className="px-3 py-1.5 text-center text-[10px] font-semibold">
+                  Hours
+                </th>
+              </tr>
+              <tr className="bg-muted/70 border-b border-border">
+                <th className="px-2 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap w-8">#</th>
+                <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Date</th>
+                <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Day</th>
+                <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Employee</th>
+                <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Code</th>
+                <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Status</th>
+                <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-r border-border">Source</th>
+                {/* Punch columns */}
+                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-emerald-50 text-emerald-700">
+                  <div className="text-[10px]">Punch 1</div><div className="text-[9px] font-normal opacity-70">IN</div>
+                </th>
+                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-red-50 text-red-700">
+                  <div className="text-[10px]">Punch 2</div><div className="text-[9px] font-normal opacity-70">OUT</div>
+                </th>
+                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-emerald-50 text-emerald-700">
+                  <div className="text-[10px]">Punch 3</div><div className="text-[9px] font-normal opacity-70">IN</div>
+                </th>
+                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-red-50 text-red-700">
+                  <div className="text-[10px]">Punch 4</div><div className="text-[9px] font-normal opacity-70">OUT</div>
+                </th>
+                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-emerald-50 text-emerald-700">
+                  <div className="text-[10px]">Punch 5</div><div className="text-[9px] font-normal opacity-70">IN</div>
+                </th>
+                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-red-50 text-red-700">
+                  <div className="text-[10px]">Punch 6</div><div className="text-[9px] font-normal opacity-70">OUT</div>
+                </th>
+                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-emerald-50 text-emerald-700">
+                  <div className="text-[10px]">Punch 7</div><div className="text-[9px] font-normal opacity-70">IN</div>
+                </th>
+                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-red-50 text-red-700 border-r border-border">
+                  <div className="text-[10px]">Punch 8</div><div className="text-[9px] font-normal opacity-70">OUT</div>
+                </th>
+                <th className="px-3 py-2 text-center font-semibold text-muted-foreground whitespace-nowrap">Total</th>
+                <th className="px-3 py-2 text-center font-semibold text-muted-foreground whitespace-nowrap">OT</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="px-3 py-12 text-center text-muted-foreground">
+                  <td colSpan={17} className="px-3 py-12 text-center text-muted-foreground">
                     <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-primary" />
-                    Loading punch records…
+                    Loading records…
                   </td>
                 </tr>
-              ) : punches.length === 0 ? (
+              ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-3 py-12 text-center text-muted-foreground">
+                  <td colSpan={17} className="px-3 py-12 text-center text-muted-foreground">
                     <Fingerprint className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    No punch records found for the selected filters.
+                    No records found. Try adjusting your filters.
                   </td>
                 </tr>
-              ) : punches.map((p, i) => {
-                const meta = PUNCH_META[p.punchType];
-                const Icon = meta.icon;
+              ) : rows.map((row, i) => {
+                const sc = STATUS_COLOR[row.status] ?? STATUS_COLOR.absent;
                 const rowN = (page - 1) * PAGE_SIZE + i + 1;
+                const punches = [row.p1, row.p2, row.p3, row.p4, null, null, null, null];
                 return (
-                  <tr key={p.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                    <td className="px-3 py-2 text-muted-foreground">{rowN}</td>
-                    <td className="px-3 py-2 font-mono whitespace-nowrap">{fmtDate(p.date)}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{fmtDay(p.date)}</td>
-                    <td className="px-3 py-2 font-mono whitespace-nowrap font-semibold text-foreground">{fmtTime(p.punchTime)}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{p.slot}</td>
-                    <td className="px-3 py-2">
-                      <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium", meta.bg, meta.color)}>
-                        <Icon className="w-3 h-3" />
-                        {meta.label}
+                  <tr key={row.id}
+                    className={cn("border-b border-border/50 hover:bg-muted/20 transition-colors",
+                      i % 2 === 1 ? "bg-muted/10" : "bg-background")}>
+                    <td className="px-2 py-1.5 text-muted-foreground text-right w-8">{rowN}</td>
+                    <td className="px-3 py-1.5 font-mono whitespace-nowrap">{fmtDate(row.date)}</td>
+                    <td className="px-3 py-1.5 text-muted-foreground">{fmtDay(row.date)}</td>
+                    <td className="px-3 py-1.5 font-medium text-foreground whitespace-nowrap max-w-[160px] truncate" title={row.employeeName}>
+                      {row.employeeName}
+                    </td>
+                    <td className="px-3 py-1.5 font-mono text-muted-foreground whitespace-nowrap">{row.employeeCode}</td>
+                    <td className="px-3 py-1.5">
+                      <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium", sc.bg, sc.text)}>
+                        <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", sc.dot)} />
+                        {row.status.replace("_", " ")}
                       </span>
                     </td>
-                    <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">{p.employeeName}</td>
-                    <td className="px-3 py-2 font-mono text-muted-foreground">{p.employeeCode || "—"}</td>
-                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{p.branchName || "—"}</td>
-                    <td className="px-3 py-2">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className={cn("w-2 h-2 rounded-full flex-shrink-0", STATUS_DOT[p.status] || "bg-gray-400")} />
-                        <span className="capitalize">{p.status.replace("_", " ")}</span>
+                    <td className="px-3 py-1.5 border-r border-border/50">
+                      <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium capitalize",
+                        row.source === "biometric" ? "bg-blue-100 text-blue-700" :
+                        row.source === "manual"    ? "bg-purple-100 text-purple-700" :
+                        "bg-gray-100 text-gray-600")}>
+                        {row.source}
                       </span>
                     </td>
-                    <td className="px-3 py-2">
-                      <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium capitalize", SOURCE_BADGE[p.source] || "bg-gray-100 text-gray-600")}>
-                        {p.source}
-                      </span>
+                    {/* Punch time cells — 8 columns */}
+                    {punches.map((pt, pi) => {
+                      const isIn = pi % 2 === 0;
+                      return (
+                        <td key={pi} className={cn(
+                          "px-3 py-1.5 text-center font-mono whitespace-nowrap",
+                          pi === 7 ? "border-r border-border/50" : "",
+                          pt
+                            ? isIn  ? "text-emerald-700 font-semibold" : "text-red-700 font-semibold"
+                            : "text-muted-foreground/30"
+                        )}>
+                          {pt ?? "—"}
+                        </td>
+                      );
+                    })}
+                    <td className="px-3 py-1.5 text-center font-mono text-blue-700 font-medium">
+                      {fmtHours(row.totalHours)}
+                    </td>
+                    <td className="px-3 py-1.5 text-center font-mono text-orange-600">
+                      {row.overtimeHours && row.overtimeHours > 0 ? fmtHours(row.overtimeHours) : "—"}
                     </td>
                   </tr>
                 );
@@ -334,7 +378,7 @@ export default function RawPunches() {
         {totalPages > 1 && (
           <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center justify-between">
             <span className="text-xs text-muted-foreground">
-              Page {page} of {totalPages} · {PAGE_SIZE} per page
+              Page {page} of {totalPages} · {PAGE_SIZE} rows per page
             </span>
             <div className="flex items-center gap-1">
               <button disabled={page <= 1} onClick={() => setPage(1)}
@@ -349,7 +393,9 @@ export default function RawPunches() {
                 return (
                   <button key={pg} onClick={() => setPage(pg)}
                     className={cn("w-7 h-7 text-xs rounded border transition-colors",
-                      pg === page ? "bg-primary text-primary-foreground border-primary" : "border-border bg-background hover:bg-muted")}>
+                      pg === page
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border bg-background hover:bg-muted")}>
                     {pg}
                   </button>
                 );

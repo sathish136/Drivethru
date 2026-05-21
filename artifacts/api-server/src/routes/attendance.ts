@@ -686,10 +686,10 @@ router.put("/:id", async (req, res) => {
   } catch (e) { res.status(500).json({ message: "Error", success: false }); }
 });
 
-/* GET /attendance/raw-punches — flatten inTime1/outTime1/inTime2/outTime2 into individual punch rows */
+/* GET /attendance/raw-punches — one row per employee per day, all punches as columns */
 router.get("/raw-punches", async (req, res) => {
   try {
-    const { employeeId, startDate, endDate, punchType, search, page = "1", limit: limitQ } = req.query;
+    const { employeeId, startDate, endDate, search, page = "1", limit: limitQ } = req.query;
 
     const rows = await db
       .select({
@@ -703,72 +703,62 @@ router.get("/raw-punches", async (req, res) => {
       .leftJoin(branches, eq(attendanceRecords.branchId, branches.id))
       .orderBy(attendanceRecords.date);
 
-    // Flatten each record into individual punch rows
-    type PunchRow = {
-      id: string;
-      attendanceId: number;
+    // Build one row per employee-day record
+    type DayRow = {
+      id: number;
       employeeId: number;
       employeeName: string;
       employeeCode: string;
       branchName: string;
       date: string;
-      punchTime: string;
-      punchType: "in" | "out";
-      slot: string;
       status: string;
       source: string;
+      p1: string | null; // Punch 1 IN
+      p2: string | null; // Punch 2 OUT
+      p3: string | null; // Punch 3 IN
+      p4: string | null; // Punch 4 OUT
+      totalHours: number | null;
+      overtimeHours: number | null;
     };
 
-    const punches: PunchRow[] = [];
-    for (const { rec, empName, empCode, branchName } of rows) {
-      const slots: Array<{ time: string | null; type: "in" | "out"; slot: string }> = [
-        { time: rec.inTime1,  type: "in",  slot: "In 1"  },
-        { time: rec.outTime1, type: "out", slot: "Out 1" },
-        { time: rec.inTime2,  type: "in",  slot: "In 2"  },
-        { time: rec.outTime2, type: "out", slot: "Out 2" },
-      ];
-      for (const s of slots) {
-        if (!s.time) continue;
-        punches.push({
-          id: `${rec.id}-${s.slot}`,
-          attendanceId: rec.id,
-          employeeId: rec.employeeId,
-          employeeName: empName || "Unknown",
-          employeeCode: empCode || "",
-          branchName: branchName || "",
-          date: rec.date,
-          punchTime: `${rec.date}T${s.time}:00`,
-          punchType: s.type,
-          slot: s.slot,
-          status: rec.status,
-          source: rec.source,
-        });
-      }
-    }
+    let dayRows: DayRow[] = rows.map(({ rec, empName, empCode, branchName }) => ({
+      id: rec.id,
+      employeeId: rec.employeeId,
+      employeeName: empName || "Unknown",
+      employeeCode: empCode || "",
+      branchName: branchName || "",
+      date: rec.date,
+      status: rec.status,
+      source: rec.source,
+      p1: rec.inTime1  || null,
+      p2: rec.outTime1 || null,
+      p3: rec.inTime2  || null,
+      p4: rec.outTime2 || null,
+      totalHours: rec.totalHours ?? null,
+      overtimeHours: rec.overtimeHours ?? null,
+    }));
 
     // Apply filters
-    let filtered = punches;
-    if (employeeId)  filtered = filtered.filter(p => p.employeeId === Number(employeeId));
-    if (punchType && punchType !== "all") filtered = filtered.filter(p => p.punchType === punchType);
-    if (startDate)   filtered = filtered.filter(p => p.date >= String(startDate));
-    if (endDate)     filtered = filtered.filter(p => p.date <= String(endDate));
+    if (employeeId)  dayRows = dayRows.filter(r => r.employeeId === Number(employeeId));
+    if (startDate)   dayRows = dayRows.filter(r => r.date >= String(startDate));
+    if (endDate)     dayRows = dayRows.filter(r => r.date <= String(endDate));
     if (search) {
       const q = String(search).toLowerCase();
-      filtered = filtered.filter(p =>
-        p.employeeName.toLowerCase().includes(q) ||
-        p.employeeCode.toLowerCase().includes(q)
+      dayRows = dayRows.filter(r =>
+        r.employeeName.toLowerCase().includes(q) ||
+        r.employeeCode.toLowerCase().includes(q)
       );
     }
 
     // Sort newest first
-    filtered.sort((a, b) => b.punchTime.localeCompare(a.punchTime));
+    dayRows.sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName));
 
-    const total = filtered.length;
+    const total = dayRows.length;
     const p = Number(page);
     const l = limitQ ? Math.min(Number(limitQ), 500) : 100;
-    const paginated = filtered.slice((p - 1) * l, p * l);
+    const paginated = dayRows.slice((p - 1) * l, p * l);
 
-    res.json({ punches: paginated, total, page: p, pageSize: l });
+    res.json({ rows: paginated, total, page: p, pageSize: l });
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: "Error fetching raw punches", success: false });
