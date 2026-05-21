@@ -1155,6 +1155,8 @@ function MonthlyReport({ initialEmpName="", initialMonth, initialYear }: { initi
 /* ══════════════════════════════════════════════════════════
    OVERTIME REPORT
 ══════════════════════════════════════════════════════════ */
+const OT_DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
 function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { initialEmpName?: string; initialMonth?: number; initialYear?: number }) {
   const now = new Date();
   const defStart = (initialMonth && initialYear)
@@ -1168,6 +1170,7 @@ function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { init
   const [branchId, setBranchId]   = useState("");
   const [empType, setEmpType]     = useState("");
   const [empName, setEmpName]     = useState(initialEmpName);
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
 
   const dStart  = useDebounce(startDate, 400);
   const dEnd    = useDebounce(endDate, 400);
@@ -1187,6 +1190,14 @@ function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { init
   const totalOT = filtered.reduce((s: number, e: any) => s + e.totalOvertimeHours, 0);
   const totalHolOT = filtered.reduce((s: number, e: any) => s + (e.holidayOtHours||0), 0);
 
+  const toggleExpand = (id: number) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
   const HEADERS = ["Emp ID","Employee","Branch","Designation","Type","OT Days","Total OT Hrs","Regular OT","Holiday OT Days","Holiday OT Hrs","Daily Breakdown"];
 
   const handleExport = async () => {
@@ -1198,7 +1209,7 @@ function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { init
       <td>${(e.regularOtHours||0).toFixed(1)}h</td>
       <td>${e.holidayOtDays||0}</td>
       <td>${(e.holidayOtHours||0).toFixed(1)}h</td>
-      <td>${e.records.slice(0,5).map((r:any)=>`${r.date}: ${r.overtimeHours.toFixed(1)}h${r.holidayName?" ["+r.holidayName+"]":""}`).join(" | ")}</td>
+      <td>${e.records.map((r:any)=>`${r.date}: ${r.overtimeHours.toFixed(1)}h${r.holidayName?" ["+r.holidayName+"]":""}`).join(" | ")}</td>
     </tr>`).join("");
     printReport({
       title: "Overtime Report",
@@ -1228,6 +1239,8 @@ function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { init
   const _otMonth = startDate ? new Date(startDate + "T00:00:00").getMonth()+1 : new Date().getMonth()+1;
   const _otYear  = startDate ? new Date(startDate + "T00:00:00").getFullYear() : new Date().getFullYear();
 
+  const COLS = 10;
+
   return (
     <div className="space-y-4">
       <SeasonBadge month={_otMonth} year={_otYear} />
@@ -1254,72 +1267,149 @@ function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { init
       </FilterCard>
 
       {data && (
-        <Card className="p-3 flex flex-wrap gap-6 text-sm border-amber-200 bg-amber-50/30">
-          <div><span className="text-muted-foreground">Total OT Hours: </span><strong className="text-amber-700">{totalOT.toFixed(1)}h</strong></div>
-          <div><span className="text-muted-foreground">Holiday OT Hours: </span><strong className="text-red-600">{totalHolOT.toFixed(1)}h</strong></div>
-          <div><span className="text-muted-foreground">Regular OT Hours: </span><strong className="text-amber-600">{(totalOT - totalHolOT).toFixed(1)}h</strong></div>
-          <div><span className="text-muted-foreground">Employees with OT: </span><strong>{filtered.length}</strong></div>
-        </Card>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {[
+            { label:"Total OT Hours",    val:`${totalOT.toFixed(1)}h`,                      cls:"text-amber-700",   bg:"bg-amber-50 border-amber-200" },
+            { label:"Holiday OT Hours",  val:`${totalHolOT.toFixed(1)}h`,                   cls:"text-red-600",     bg:"bg-red-50 border-red-200" },
+            { label:"Regular OT Hours",  val:`${(totalOT-totalHolOT).toFixed(1)}h`,          cls:"text-orange-600",  bg:"bg-orange-50 border-orange-200" },
+            { label:"Employees with OT", val:String(filtered.length),                        cls:"text-blue-700",    bg:"bg-blue-50 border-blue-200" },
+          ].map(({ label, val, cls, bg }) => (
+            <Card key={label} className={`p-3 border ${bg}`}>
+              <div className={`text-lg font-bold ${cls}`}>{val}</div>
+              <div className="text-[10px] text-muted-foreground mt-0.5">{label}</div>
+            </Card>
+          ))}
+        </div>
       )}
 
       <Card className="overflow-hidden">
         {isLoading ? <div className="p-8 text-center text-sm text-muted-foreground">Loading…</div> : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
-              <thead className="bg-muted/50">
-                <tr>
-                  {["Emp ID","Employee","Branch","Designation","Type"].map(h=><th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>)}
+              <thead>
+                <tr className="bg-muted/60 border-b border-border">
+                  <th className="px-3 py-2.5 w-8"></th>
+                  {["Emp ID","Employee","Branch","Designation","Type"].map(h=>(
+                    <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
+                  ))}
                   <th className="px-3 py-2.5 text-center font-semibold text-muted-foreground whitespace-nowrap">OT Days</th>
                   <th className="px-3 py-2.5 text-center font-semibold text-amber-700 whitespace-nowrap">Total OT</th>
-                  <th className="px-3 py-2.5 text-center font-semibold text-amber-500 whitespace-nowrap bg-amber-50/40">Reg OT</th>
-                  <th className="px-3 py-2.5 text-center font-semibold text-orange-600 whitespace-nowrap bg-orange-50/40">Hol. Days</th>
-                  <th className="px-3 py-2.5 text-center font-semibold text-red-600 whitespace-nowrap bg-red-50/40">Holiday OT</th>
-                  <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">Daily Breakdown</th>
+                  <th className="px-3 py-2.5 text-center font-semibold text-amber-500 whitespace-nowrap">Reg OT</th>
+                  <th className="px-3 py-2.5 text-center font-semibold text-orange-600 whitespace-nowrap">Hol. Days</th>
+                  <th className="px-3 py-2.5 text-center font-semibold text-red-600 whitespace-nowrap">Holiday OT</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
-                {filtered.map((e:any)=>(
-                  <tr key={e.employeeId} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-3 py-2 font-mono whitespace-nowrap text-muted-foreground">{e.employeeCode}</td>
-                    <td className="px-3 py-2 font-medium whitespace-nowrap">{e.employeeName}</td>
-                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{e.branchName}</td>
-                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{e.designation}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {e.employeeType?<span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium capitalize",
-                        e.employeeType==="permanent"?"bg-blue-100 text-blue-700":e.employeeType==="contract"?"bg-purple-100 text-purple-700":"bg-orange-100 text-orange-700"
-                      )}>{e.employeeType}</span>:"—"}
-                    </td>
-                    <td className="px-3 py-2 text-center whitespace-nowrap font-semibold text-amber-600">{e.overtimeDays}</td>
-                    <td className="px-3 py-2 text-center whitespace-nowrap font-bold text-amber-700">{e.totalOvertimeHours.toFixed(1)}h</td>
-                    <td className="px-3 py-2 text-center whitespace-nowrap font-semibold text-amber-500 bg-amber-50/20">{(e.regularOtHours||0).toFixed(1)}h</td>
-                    <td className="px-3 py-2 text-center whitespace-nowrap bg-orange-50/20">
-                      {(e.holidayOtDays||0) > 0
-                        ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[10px] font-bold">{e.holidayOtDays}</span>
-                        : <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td className="px-3 py-2 text-center whitespace-nowrap bg-red-50/20">
-                      {(e.holidayOtHours||0) > 0
-                        ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-bold">{(e.holidayOtHours||0).toFixed(1)}h</span>
-                        : <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap text-[10px] max-w-[300px]">
-                      <div className="flex flex-wrap gap-1">
-                        {e.records.slice(0,6).map((r:any, i:number)=>(
-                          <span key={i} className={cn("px-1.5 py-0.5 rounded font-mono",
-                            r.holidayType==="statutory"?"bg-blue-100 text-blue-700":
-                            r.holidayType==="poya"?"bg-purple-100 text-purple-700":
-                            r.holidayType==="public"?"bg-amber-100 text-amber-700":
-                            "bg-muted text-muted-foreground"
-                          )} title={r.holidayName||undefined}>
-                            {r.date}: {r.overtimeHours.toFixed(1)}h{r.holidayType?" 🏖":""}
-                          </span>
-                        ))}
-                        {e.records.length>6&&<span className="text-muted-foreground px-1">+{e.records.length-6} more</span>}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {!filtered.length&&<tr><td colSpan={11} className="text-center py-8 text-muted-foreground">No overtime records found for this period.</td></tr>}
+              <tbody>
+                {filtered.map((e: any) => {
+                  const isOpen = expandedIds.has(e.employeeId);
+                  return (
+                    <React.Fragment key={e.employeeId}>
+                      <tr
+                        key={e.employeeId}
+                        onClick={() => toggleExpand(e.employeeId)}
+                        className={cn(
+                          "cursor-pointer border-b border-border transition-colors select-none",
+                          isOpen ? "bg-amber-50/60" : "hover:bg-muted/30"
+                        )}
+                      >
+                        <td className="px-3 py-2 text-muted-foreground">
+                          <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", isOpen && "rotate-180")} />
+                        </td>
+                        <td className="px-3 py-2 font-mono whitespace-nowrap text-muted-foreground">{e.employeeCode}</td>
+                        <td className="px-3 py-2 font-semibold whitespace-nowrap">{e.employeeName}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{e.branchName}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{e.designation}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {e.employeeType ? (
+                            <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium capitalize",
+                              e.employeeType==="permanent" ? "bg-blue-100 text-blue-700" :
+                              e.employeeType==="contract"  ? "bg-purple-100 text-purple-700" :
+                              "bg-orange-100 text-orange-700"
+                            )}>{e.employeeType}</span>
+                          ) : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-center whitespace-nowrap font-semibold text-amber-600">{e.overtimeDays}</td>
+                        <td className="px-3 py-2 text-center whitespace-nowrap font-bold text-amber-700">{e.totalOvertimeHours.toFixed(1)}h</td>
+                        <td className="px-3 py-2 text-center whitespace-nowrap font-semibold text-amber-500">{(e.regularOtHours||0).toFixed(1)}h</td>
+                        <td className="px-3 py-2 text-center whitespace-nowrap">
+                          {(e.holidayOtDays||0) > 0
+                            ? <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[10px] font-bold">{e.holidayOtDays}</span>
+                            : <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="px-3 py-2 text-center whitespace-nowrap">
+                          {(e.holidayOtHours||0) > 0
+                            ? <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-bold">{(e.holidayOtHours||0).toFixed(1)}h</span>
+                            : <span className="text-muted-foreground">—</span>}
+                        </td>
+                      </tr>
+
+                      {isOpen && (
+                        <tr key={`${e.employeeId}-detail`} className="bg-amber-50/30">
+                          <td colSpan={COLS + 1} className="px-0 py-0">
+                            <div className="border-t border-amber-200 mx-4 my-3 rounded-lg overflow-hidden border border-amber-200 shadow-sm">
+                              <div className="px-3 py-2 bg-amber-100/60 border-b border-amber-200 flex items-center justify-between">
+                                <span className="text-xs font-semibold text-amber-900">Daily OT Breakdown — {e.employeeName}</span>
+                                <span className="text-[10px] text-amber-700">{e.records.length} OT day{e.records.length !== 1 ? "s" : ""} · Total: {e.totalOvertimeHours.toFixed(1)}h</span>
+                              </div>
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="bg-amber-50">
+                                    <th className="px-3 py-1.5 text-left font-semibold text-muted-foreground w-8">#</th>
+                                    <th className="px-3 py-1.5 text-left font-semibold text-muted-foreground">Date</th>
+                                    <th className="px-3 py-1.5 text-left font-semibold text-muted-foreground">Day</th>
+                                    <th className="px-3 py-1.5 text-center font-semibold text-orange-600">OT Hours</th>
+                                    <th className="px-3 py-1.5 text-left font-semibold text-muted-foreground">Type</th>
+                                    <th className="px-3 py-1.5 text-left font-semibold text-muted-foreground">Holiday / Remarks</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-amber-100">
+                                  {e.records.map((r: any, idx: number) => {
+                                    const dow = new Date(r.date + "T00:00:00Z").getUTCDay();
+                                    const isHol = !!r.holidayType;
+                                    const holColor =
+                                      r.holidayType === "statutory" ? "bg-blue-100 text-blue-700" :
+                                      r.holidayType === "poya"      ? "bg-purple-100 text-purple-700" :
+                                      r.holidayType === "public"    ? "bg-amber-100 text-amber-700" : "";
+                                    return (
+                                      <tr key={r.date} className={cn("transition-colors", isHol ? "bg-blue-50/40" : "hover:bg-amber-50/50")}>
+                                        <td className="px-3 py-1.5 text-muted-foreground font-mono">{idx + 1}</td>
+                                        <td className="px-3 py-1.5 font-mono whitespace-nowrap">{r.date}</td>
+                                        <td className="px-3 py-1.5 text-muted-foreground">{OT_DAY_NAMES[dow]}</td>
+                                        <td className="px-3 py-1.5 text-center">
+                                          <span className={cn("font-bold", isHol ? "text-blue-700" : "text-orange-600")}>{r.overtimeHours.toFixed(1)}h</span>
+                                        </td>
+                                        <td className="px-3 py-1.5">
+                                          {isHol
+                                            ? <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-semibold capitalize", holColor)}>{r.holidayType}</span>
+                                            : <span className="text-muted-foreground text-[10px]">Regular</span>}
+                                        </td>
+                                        <td className="px-3 py-1.5 text-muted-foreground">
+                                          {r.holidayName || "—"}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                                <tfoot>
+                                  <tr className="bg-amber-100/60 border-t border-amber-200">
+                                    <td colSpan={3} className="px-3 py-1.5 text-xs font-bold text-amber-900">TOTAL</td>
+                                    <td className="px-3 py-1.5 text-center font-bold text-orange-600">{e.totalOvertimeHours.toFixed(1)}h</td>
+                                    <td colSpan={2} className="px-3 py-1.5 text-[10px] text-muted-foreground">
+                                      Reg: {(e.regularOtHours||0).toFixed(1)}h &nbsp;·&nbsp; Holiday: {(e.holidayOtHours||0).toFixed(1)}h
+                                    </td>
+                                  </tr>
+                                </tfoot>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+                {!filtered.length && (
+                  <tr><td colSpan={COLS + 1} className="text-center py-8 text-muted-foreground">No overtime records found for this period.</td></tr>
+                )}
               </tbody>
             </table>
           </div>
