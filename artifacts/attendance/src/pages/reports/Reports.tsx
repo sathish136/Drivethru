@@ -1692,6 +1692,7 @@ function IndividualReport() {
   const [empIds, setEmpIds]       = useState<string[]>([]);
   const [activeEmpId, setActiveEmpId] = useState<string>("");
   const [showReport, setShowReport] = useState(false);
+  const [deptFilter, setDeptFilter] = useState("");
 
   const { data: empData, isLoading: empLoading } = useListEmployees({ limit: 1000 });
   const { rules: hrRules, shifts: shiftOptions } = useHrRules();
@@ -1721,6 +1722,16 @@ function IndividualReport() {
     const list = (empData?.employees || []) as any[];
     return [...list].sort((a, b) => (a.fullName || "").localeCompare(b.fullName || ""));
   }, [empData]);
+
+  const departments = useMemo(() => {
+    const set = new Set(employees.map((e: any) => e.department).filter(Boolean));
+    return Array.from(set).sort() as string[];
+  }, [employees]);
+
+  const filteredEmployees = useMemo(() => {
+    if (!deptFilter) return employees;
+    return employees.filter((e: any) => e.department === deptFilter);
+  }, [employees, deptFilter]);
 
   useEffect(() => {
     if (empIds.length > 0 && !empIds.includes(activeEmpId)) {
@@ -2175,10 +2186,17 @@ ${nwOtTableHtml}
           </div>
         </div>
         <div className="p-4 space-y-4 overflow-visible relative">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-start">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-start">
+            <div>
+              <Label className="text-xs">Department</Label>
+              <Select value={deptFilter} onChange={e => { setDeptFilter(e.target.value); setEmpIds([]); setActiveEmpId(""); setShowReport(false); }}>
+                <option value="">— All Departments —</option>
+                {departments.map(d => <option key={d} value={d}>{d}</option>)}
+              </Select>
+            </div>
             <div>
               <Label className="text-xs">Employee(s)</Label>
-              <MultiEmployeeSelect employees={employees} selectedIds={empIds} onChange={ids => { setEmpIds(ids); setShowReport(false); }} loading={empLoading} />
+              <MultiEmployeeSelect employees={filteredEmployees} selectedIds={empIds} onChange={ids => { setEmpIds(ids); setShowReport(false); }} loading={empLoading} />
             </div>
             <div>
               <Label className="text-xs">Month</Label>
