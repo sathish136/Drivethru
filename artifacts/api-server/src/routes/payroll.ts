@@ -448,12 +448,13 @@ router.post("/generate", async (req, res) => {
       })();
       const isOffSeason = cfg.offSeasonEnabled && offSeasonMonthsList.includes(Number(month));
 
-      /* ── STANDARD deductions (skipped for Night Watcher and Off Season) ── */
-      /* Morning late: per-record from the salary engine (policy-driven cutoff) */
-      const morningLateMinutes = (!isNightWatcherPayroll && !isOffSeason)
+      /* ── STANDARD deductions ────────────────────────────────────────── */
+      /* Morning late: applies to ALL employees incl. Night Watchers (policy: "late deductions apply").
+         Night Watcher late = arrived after 20:15 (shift 20:00 + 15 min grace). */
+      const morningLateMinutes = (!isOffSeason)
         ? presentRecs.reduce((sum, rec) => sum + salaryRowFor(rec).lateMinutes, 0)
         : 0;
-      /* Lunch return late: minutes over allocated lunch for ALL present records */
+      /* Lunch return late: Night Watchers have no lunch break — kept excluded for NW */
       const lunchLateMinutes = (!isNightWatcherPayroll && !isOffSeason) ? [...presentRecs, ...lateRecs].reduce((sum, rec) => {
         return sum + calcLunchLateMinutes(rec.outTime1, rec.inTime2, rule);
       }, 0) : 0;
@@ -557,8 +558,8 @@ router.post("/generate", async (req, res) => {
       let grossSalary: number;
 
       if (isNightWatcherPayroll) {
-        /* ── NIGHT WATCHER gross: salary after deduction + OT ── */
-        grossSalary = Math.round(nwSalaryAfterDeduction + overtimePay + holidayOtPay + offDayOtPay);
+        /* ── NIGHT WATCHER gross: salary after deduction + OT − late deduction ── */
+        grossSalary = Math.round(nwSalaryAfterDeduction + overtimePay + holidayOtPay + offDayOtPay - lateDeduction);
       } else {
         grossSalary = Math.round(
           basicSalary + transportAllowance + lunchIncentive + housingAllowance + otherAllowances
@@ -644,7 +645,7 @@ router.post("/generate", async (req, res) => {
         epfEmployer,
         etfEmployer,
         apit,
-        lateDeduction: isNightWatcherPayroll ? 0 : lateDeduction,
+        lateDeduction: lateDeduction,
         lunchLateDeduction: isNightWatcherPayroll ? 0 : lunchLateDeduction,
         absenceDeduction: storedAbsenceDeduction,
         halfDayDeduction: isNightWatcherPayroll ? 0 : halfDayDeduction,

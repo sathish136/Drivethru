@@ -91,7 +91,8 @@ function categoryDefaults(c: ShiftCategory): {
     // shift end + 30-min threshold, identical to Regular/Reception.
     // The category-default otAfter is left blank so the OT branch falls
     // through to the dynamic shift-end calculation below.
-    case "KITCHEN":   return { startTime: "08:00", endTime: "17:00", lateAfter: "08:15", otAfter: "—"     };
+    // Kitchen Mon–Fri: 07:00–21:00 per policy doc (2-hr lunch, OT after shift end +30 min)
+    case "KITCHEN":   return { startTime: "07:00", endTime: "21:00", lateAfter: "07:15", otAfter: "—"     };
     case "FLEXIBLE":  return { startTime: "—",     endTime: "—",     lateAfter: "—",     otAfter: "—"     };
     case "NIGHT":     return { startTime: "20:00", endTime: "08:00", lateAfter: "—",     otAfter: "05:00" };
     case "HALF_DAY":  return { startTime: "08:00", endTime: "13:00", lateAfter: "08:15", otAfter: "—"     };
@@ -367,23 +368,24 @@ export function processSalaryRow(opts: {
   }
 
   /* ── Late minutes ─────────────────────────────────────────────────── */
+  // Policy: late deductions apply to all categories EXCEPT Flexible.
+  // Night Watchers: late after 20:15 (shift start 20:00 + 15-min grace).
   let lateMinutes = 0;
   if (
     dayType !== "ABSENT" &&
     dayType !== "WEEK_OFF" &&
     dayType !== "INVALID" &&
-    category !== "FLEXIBLE" &&
-    category !== "NIGHT"
+    category !== "FLEXIBLE"
   ) {
     if (firstIn) {
       // Late cutoff = assigned/category start + 15-min general grace, OR the
       // category's explicit lateAfter when it differs (e.g. Reception 08:45).
-      // For Kitchen with a varied assigned start we use start + 15.
       const cutoff = (() => {
         if (category === "REGULAR")   return defaults.lateAfter;          // 08:15
         if (category === "RECEPTION") return defaults.lateAfter;          // 08:45
         if (category === "HALF_DAY")  return defaults.lateAfter;          // 08:15
-        // KITCHEN → assigned start + 15
+        // KITCHEN, NIGHT → assigned/default start + 15 grace
+        // Night: startTime = "20:00" → cutoff "20:15"
         return minsToTime(timeToMins(startTime) + LATE_GRACE_MINUTES);
       })();
       lateMinutes = lateMinutesAfter(firstIn, cutoff);
@@ -559,13 +561,14 @@ function buildRemarks(args: {
       break;
 
     case "NIGHT":
+      if (lateMinutes > 0) parts.push(`${label} - Late by ${fmtDuration(lateMinutes)}`);
       if (night && night.deductedHours === 0 && otHours > 0) {
-        parts.push(`${label} - 3 hrs OT added`);
+        parts.push(`3 hrs OT added`);
       } else if (night && night.deductedHours === 1) {
-        parts.push(`${label} - 1 hr OT deducted due to missed hourly punch`);
+        parts.push(`1 hr OT deducted due to missed hourly punch`);
       } else if (night && night.deductedHours >= 2) {
-        parts.push(`${label} - 2 hrs OT deducted due to multiple missed punches`);
-      } else {
+        parts.push(`2 hrs OT deducted due to multiple missed punches`);
+      } else if (!lateMinutes) {
         parts.push(`${label} - No OT`);
       }
       break;

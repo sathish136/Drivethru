@@ -1,0 +1,74 @@
+Payroll & Attendance System Overview
+Working Schedules
+The company operates under two different working schedules:
+Main Season
+Includes overtime calculations, late hour deductions, lunch incentive payments, and shift systems according to
+employment category.
+Off Season
+Excludes overtime, late hour deductions, and shift systems. During off season, employees are only required to
+maintain normal attendance through sign-ins and sign-outs in the attendance system.
+General Payroll Rules
+Lunch Incentive
+- Paid at Rs. 125 per working day
+- Also applicable for approved half days
+Attendance
+- All employees must record attendance through the LiveU Attendance Cloud System.
+- Attendance calculations are based on recorded punches.
+Kitchen Department
+Main Season
+Monday to Friday: 7:00 AM – 9:00 PM (including 2-hour lunch break)
+Saturday: 8:00 AM – 2:00 PM (half day without lunch break)
+Sunday: 8:00 AM – 8:00 PM (including 1-hour lunch break)
+Off Season
+- No fixed shift system
+- Normal attendance with sign-ins and sign-outs only
+- No overtime
+- No late hour deductions
+Room Attendants, Gardeners, Accounting & Management
+Main Season
+Working Day: 8:00 AM – 5:00 PM (including 1-hour lunch break)
+Half Day: 8:00 AM – 2:00 PM (without lunch break)
+Off Season
+- No fixed shift system
+- Normal attendance with sign-ins and sign-outs only
+- No overtime
+- No late hour deductions
+Reception Department
+Main Season
+Working Day: 8:30 AM – 5:30 PM (including 1-hour lunch break)
+Half Day: 8:30 AM – 2:30 PM (without lunch break)
+Off Season
+- No fixed shift system
+- Normal attendance with sign-ins and sign-outs only
+- No overtime
+- No late hour deductions
+Surf Instructors
+Main Season
+- No fixed working schedule
+- Working hours depend on surf lesson bookings and guest schedules
+- Full working day: 9 hours including 1-hour lunch break
+- Half day: 5 hours without lunch break
+- No late hour deductions
+Attendance must reflect all activity periods through punch records in the LiveU Attendance Cloud System.
+Example of Punch Sequence
+1. Lesson start – IN
+2. Lesson finish and leaving after lesson – OUT
+3. Return for theory session – IN
+4. Sign OUT for lunch break
+5. Sign IN after lunch break
+6. Going for second lesson and final sign OUT after completing work and going home
+Off Season
+- No fixed shift system
+- Normal attendance with sign-ins and sign-outs only
+- No overtime
+- No late hour deductions
+Night Watchers
+All Year Round
+- Duty schedule: Every second day
+- Shift timing: 8:00 PM – 8:00 AM
+- 12-hour shift including 3 hours overtime
+- No lunch break deduction
+- Late hour deductions apply
+Previously, hourly punch records were used to confirm active duty performance and prevent sleeping during shifts.
+In case an alternative monitoring method is implemented for duty performance verification, access to 12 punch
+records in the LiveU Attendance Cloud System will no longer be required.
