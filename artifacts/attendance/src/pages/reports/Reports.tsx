@@ -1334,6 +1334,23 @@ interface PayrollRecord {
   employee:{ id:number; employeeId:string; fullName:string; designation:string; department:string; employeeType?:string };
 }
 
+function useOffSeasonStatus(month: number, year: number) {
+  const [offSeason, setOffSeason] = useState<{ enabled: boolean; start: string; end: string } | null>(null);
+  useEffect(() => {
+    const token = localStorage.getItem("auth_token") || "";
+    fetch(apiUrl("/payroll-settings"), { credentials: "include", headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => setOffSeason({ enabled: d.offSeasonEnabled ?? false, start: d.offSeasonStart ?? "", end: d.offSeasonEnd ?? "" }))
+      .catch(() => {});
+  }, []);
+  return useMemo(() => {
+    if (!offSeason?.enabled || !offSeason.start || !offSeason.end) return false;
+    const firstDay = `${year}-${String(month).padStart(2,"0")}-01`;
+    const lastDay  = `${year}-${String(month).padStart(2,"0")}-${String(new Date(year, month, 0).getDate()).padStart(2,"0")}`;
+    return firstDay <= offSeason.end && lastDay >= offSeason.start;
+  }, [offSeason, month, year]);
+}
+
 function PayrollReport() {
   const now = new Date();
   const [month, setMonth]     = useState(now.getMonth()+1);
@@ -1343,6 +1360,8 @@ function PayrollReport() {
   const [empName, setEmpName] = useState("");
   const [data, setData]       = useState<PayrollRecord[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const isOffSeason = useOffSeasonStatus(month, year);
 
   const dMonth = useDebounce(month, 300);
   const dYear  = useDebounce(year, 300);
@@ -1471,6 +1490,12 @@ function PayrollReport() {
 
   return (
     <div className="space-y-4">
+      {isOffSeason && (
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+          <span className="font-semibold">⛅ Off-Season Mode</span>
+          <span className="text-blue-600 text-xs">— No OT, no late deductions, no incomplete hours deduction applied for this period</span>
+        </div>
+      )}
       <FilterCard title="Payroll Report Filters" onExport={handleExport} onExportExcel={handleExportExcel}>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           <div><Label className="text-xs">Month</Label>
@@ -2087,8 +2112,16 @@ ${nwOtTableHtml}
     return Math.round((basic / 240 * 1.5) * 100) / 100;
   }, [isNightWatcher, selectedEmp]);
 
+  const isOffSeasonInd = useOffSeasonStatus(month, year);
+
   return (
     <div className="space-y-4">
+      {isOffSeasonInd && (
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+          <span className="font-semibold">⛅ Off-Season Mode</span>
+          <span className="text-blue-600 text-xs">— No OT, no late deductions, no incomplete hours deduction for this period</span>
+        </div>
+      )}
       <Card className="p-0 overflow-visible">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30 rounded-t-xl">
           <span className="text-sm font-semibold text-foreground">Individual Monthly Report</span>

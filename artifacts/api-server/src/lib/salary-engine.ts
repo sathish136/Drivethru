@@ -93,7 +93,7 @@ function categoryDefaults(c: ShiftCategory): {
     // through to the dynamic shift-end calculation below.
     case "KITCHEN":   return { startTime: "08:00", endTime: "17:00", lateAfter: "08:15", otAfter: "—"     };
     case "FLEXIBLE":  return { startTime: "—",     endTime: "—",     lateAfter: "—",     otAfter: "—"     };
-    case "NIGHT":     return { startTime: "20:00", endTime: "05:00", lateAfter: "—",     otAfter: "05:00" };
+    case "NIGHT":     return { startTime: "20:00", endTime: "08:00", lateAfter: "—",     otAfter: "05:00" };
     case "HALF_DAY":  return { startTime: "08:00", endTime: "13:00", lateAfter: "08:15", otAfter: "—"     };
   }
 }
@@ -292,7 +292,9 @@ export function processSalaryRow(opts: {
 
   const dow = dayOfWeek(date);
   const isOff = !!weekoff?.offDays?.includes(dow);
-  const isHalfDayScheduled = !!weekoff?.halfDays?.includes(dow);
+  // Kitchen Saturday is always a scheduled half-day (08:00–14:00, no lunch) per policy doc.
+  const isKitchenSaturday = category === "KITCHEN" && dow === 6;
+  const isHalfDayScheduled = !!weekoff?.halfDays?.includes(dow) || isKitchenSaturday;
   const weekOffStatus = isOff ? "Off" : isHalfDayScheduled ? "Half Day" : "Working";
 
   const firstIn = rec?.inTime1 ?? null;

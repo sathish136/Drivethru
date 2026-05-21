@@ -638,7 +638,7 @@ export default function PayrollSettings() {
               </div>
               <div className="flex-1">
                 <p className="text-sm font-bold">Off-Season Mode</p>
-                <p className="text-xs text-muted-foreground">During off-season, standard OT is not calculated for any employee</p>
+                <p className="text-xs text-muted-foreground">During off-season: no OT, no late deductions, no incomplete hours deduction</p>
               </div>
               <button
                 onClick={() => set("offSeasonEnabled", !cfg.offSeasonEnabled)}
@@ -668,7 +668,7 @@ export default function PayrollSettings() {
               </div>
             )}
             {!cfg.offSeasonEnabled && (
-              <p className="text-xs text-muted-foreground">Enable to set a date range during which overtime pay will not be calculated for any employee.</p>
+              <p className="text-xs text-muted-foreground">Enable to set a date range during which OT, late deductions and incomplete hours deductions are all suppressed.</p>
             )}
           </Card>
         </div>

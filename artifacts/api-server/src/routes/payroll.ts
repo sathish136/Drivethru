@@ -440,13 +440,19 @@ router.post("/generate", async (req, res) => {
         ? Math.max(0, basicSalary - nwLeaveDeduction)
         : 0;
 
-      /* ── STANDARD deductions (skipped for Night Watcher) ── */
+      /* ── Off-season: skip OT, late deductions and incomplete hours ── */
+      /* Doc: "Off Season — No overtime, no late hour deductions"       */
+      const isOffSeason = cfg.offSeasonEnabled && empAtt.some(rec =>
+        isDateInOffSeason(rec.date, cfg.offSeasonStart, cfg.offSeasonEnd)
+      );
+
+      /* ── STANDARD deductions (skipped for Night Watcher and Off Season) ── */
       /* Morning late: per-record from the salary engine (policy-driven cutoff) */
-      const morningLateMinutes = (!isNightWatcherPayroll)
+      const morningLateMinutes = (!isNightWatcherPayroll && !isOffSeason)
         ? presentRecs.reduce((sum, rec) => sum + salaryRowFor(rec).lateMinutes, 0)
         : 0;
       /* Lunch return late: minutes over allocated lunch for ALL present records */
-      const lunchLateMinutes = (!isNightWatcherPayroll) ? [...presentRecs, ...lateRecs].reduce((sum, rec) => {
+      const lunchLateMinutes = (!isNightWatcherPayroll && !isOffSeason) ? [...presentRecs, ...lateRecs].reduce((sum, rec) => {
         return sum + calcLunchLateMinutes(rec.outTime1, rec.inTime2, rule);
       }, 0) : 0;
       const totalLateMinutes = morningLateMinutes + lunchLateMinutes;
@@ -459,10 +465,10 @@ router.post("/generate", async (req, res) => {
       /* ── Half-day deduction ────────────────────────────── */
       const halfDayDeduction = isNightWatcherPayroll ? 0 : Math.round(halfDaysCount * (dailyRate / 2));
 
-      /* ── Incomplete hours deduction (rules-based) ───────── */
+      /* ── Incomplete hours deduction (rules-based, skipped in off season) ─ */
       let incompleteDeduction = 0;
       let totalIncompleteMinutes = 0;
-      if (!isFlexible && !isNightWatcherPayroll) {
+      if (!isFlexible && !isNightWatcherPayroll && !isOffSeason) {
         for (const rec of [...presentRecs, ...halfDayRecs]) {
           const rawHrs = rec.totalHours ?? 0;
           if (rawHrs === 0) continue;
@@ -476,11 +482,6 @@ router.post("/generate", async (req, res) => {
         }
         incompleteDeduction = Math.round(incompleteDeduction);
       }
-
-      /* ── Off-season: skip standard OT if enabled ────────── */
-      const isOffSeason = cfg.offSeasonEnabled && empAtt.some(rec =>
-        isDateInOffSeason(rec.date, cfg.offSeasonStart, cfg.offSeasonEnd)
-      );
 
       /* ── OT and holiday pay (rules-based) ───────────────── */
       let regularOtHours = 0;
