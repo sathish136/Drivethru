@@ -65,7 +65,7 @@ export interface DeptShiftRule {
    *  - Worked shifts = PRESENT×1 + HALF_DAY×0.5  (ABSENT / no-record = 0)
    *  - Leave days = scheduledShifts − workedShifts
    *  - Salary after deduction = basic − (leaveDays × dailyRate)
-   *  - OT hourly rate = basic / 250  (not basic / workingDays×hoursPerDay)
+   *  - OT hourly rate = basic / 240  (not basic / workingDays×hoursPerDay)
    *  - OT rate = hourlyRate × 1.5
    *  - EPF/ETF contributions are applied ONLY on salary after deduction, NOT on OT
    *  - Net salary = (salaryAfterDeduction + OT) − EPF Employee

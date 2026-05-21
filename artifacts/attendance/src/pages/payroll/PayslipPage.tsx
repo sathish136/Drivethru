@@ -149,7 +149,7 @@ export default function PayslipPage() {
     ? row.basicSalary / 30
     : (row.workingDays > 0 ? row.basicSalary / row.workingDays : 0);
   const hourlyRate = isNightWatcher
-    ? row.basicSalary / 250
+    ? row.basicSalary / 240
     : (row.workingDays > 0 && reqHrs > 0 ? row.basicSalary / (row.workingDays * reqHrs) : 0);
   const minuteRate = hourlyRate / 60;
 
