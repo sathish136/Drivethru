@@ -13,7 +13,7 @@ import {
   Briefcase, Phone, Hash, CreditCard, Calendar,
   IdCard, Home, Shield, Camera, BadgeIndianRupee,
   Banknote, UserCheck, ListChecks, CheckCircle, Clock,
-  CircleDashed, BadgeCheck, RefreshCw, ChevronDown, ChevronUp, Settings, Save,
+  CircleDashed, BadgeCheck, RefreshCw, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Settings, Save,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -343,63 +343,67 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
     : form.firstName?.[0]?.toUpperCase() || "E";
 
   const DRAWER_TABS = [
-    { key: "personal", label: "Personal", icon: UserCircle, step: 1 },
-    { key: "professional", label: "Professional", icon: Briefcase, step: 2 },
-    { key: "payroll", label: "Payroll", icon: BadgeIndianRupee, step: 3 },
-    { key: "documents", label: "Documents", icon: FileText, step: 4 },
-    { key: "policy", label: "Policy", icon: Settings, step: 5 },
+    { key: "personal",      label: "Personal",      icon: UserCircle       },
+    { key: "professional",  label: "Employment",    icon: Briefcase        },
+    { key: "payroll",       label: "Payroll",       icon: BadgeIndianRupee },
+    { key: "documents",     label: "Documents",     icon: FileText         },
+    { key: "policy",        label: "Policy",        icon: Settings         },
   ] as const;
+  const tabKeys = DRAWER_TABS.map(t => t.key);
+  const tabIdx = tabKeys.indexOf(tab);
+  const prevTab = tabIdx > 0 ? tabKeys[tabIdx - 1] : null;
+  const nextTab = tabIdx < tabKeys.length - 1 ? tabKeys[tabIdx + 1] : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex">
-      <div className="flex-1 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="w-full max-w-2xl bg-background border-l border-border shadow-2xl flex flex-col h-full overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden">
 
-        {/* Drawer Header */}
-        <div className="px-5 pt-5 pb-4 border-b border-border bg-gradient-to-r from-primary/5 to-background">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-primary/15 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden">
+      {/* Page Header */}
+      <div className="bg-background border-b border-border shrink-0">
+        <div className="max-w-3xl mx-auto px-6 pt-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <button onClick={onClose} className="p-1.5 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-foreground">
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden">
                 {photoPreview
                   ? <img src={photoPreview} alt="avatar" className="w-full h-full object-cover" />
-                  : <span className="text-base font-bold text-primary">{initials}</span>
+                  : <span className="text-sm font-bold text-primary">{initials}</span>
                 }
               </div>
               <div>
-                <h2 className="font-bold text-base leading-tight">{emp ? "Edit Employee Profile" : "New Employee"}</h2>
+                <h2 className="font-bold text-sm leading-tight">{emp ? "Edit Employee" : "New Employee"}</h2>
                 {emp
-                  ? <p className="text-xs text-muted-foreground mt-0.5">{emp.employeeId} · {empDisplayName(emp)}</p>
-                  : <p className="text-xs text-muted-foreground mt-0.5">Fill in the details below</p>
+                  ? <p className="text-xs text-muted-foreground">{emp.employeeId} · {empDisplayName(emp)}</p>
+                  : <p className="text-xs text-muted-foreground">Fill in the details below</p>
                 }
               </div>
             </div>
-            <button onClick={onClose} className="p-2 hover:bg-muted rounded-xl transition-colors mt-0.5">
+            <button onClick={onClose} className="p-1.5 hover:bg-muted rounded-lg transition-colors">
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Step Tabs */}
-          <div className="flex gap-2 mt-4">
-            {DRAWER_TABS.map(({ key, label, icon: Icon, step }) => (
-              <button key={key} onClick={() => setTab(key)}
+          {/* Underline Tab Bar */}
+          <div className="flex">
+            {DRAWER_TABS.map(({ key, label, icon: Icon }) => (
+              <button key={key} onClick={() => setTab(key as any)}
                 className={cn(
-                  "flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all duration-200 flex-1 justify-center",
+                  "flex items-center gap-1.5 px-5 py-2.5 text-xs font-medium transition-all duration-150 border-b-2 whitespace-nowrap",
                   tab === key
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
                 )}>
-                <span className={cn(
-                  "w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0",
-                  tab === key ? "bg-white/20" : "bg-background"
-                )}>{step}</span>
                 <Icon className="w-3.5 h-3.5" />
                 {label}
               </button>
             ))}
           </div>
         </div>
+      </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto px-6 py-6 space-y-5">
           {tab === "personal" && (
             <>
               {/* Photo Upload */}
@@ -1022,15 +1026,37 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
             </div>
           )}
         </div>
+      </div>
 
-        {tab !== "documents" && tab !== "policy" && (
-          <div className="border-t border-border px-5 py-4 flex justify-end gap-3 bg-muted/20">
-            <Button variant="outline" onClick={onClose}>Cancel</Button>
-            <Button onClick={handleSave} disabled={isPending}>
-              {isPending ? "Saving..." : emp ? "Update Employee" : "Create Employee"}
+      {/* Footer navigation */}
+      <div className="border-t border-border bg-background shrink-0">
+        <div className="max-w-3xl mx-auto px-6 py-3 flex items-center justify-between">
+          <Button
+            variant="outline"
+            className="text-xs h-8 px-3 gap-1.5"
+            onClick={() => prevTab ? setTab(prevTab as any) : onClose()}
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            {prevTab ? DRAWER_TABS.find(t => t.key === prevTab)!.label : "Cancel"}
+          </Button>
+
+          {tab !== "documents" && tab !== "policy" && (
+            <Button onClick={handleSave} disabled={isPending} className="text-xs h-8 px-4 gap-1.5">
+              <Save className="w-3.5 h-3.5" />
+              {isPending ? "Saving..." : emp ? "Save Changes" : "Create Employee"}
             </Button>
-          </div>
-        )}
+          )}
+          {(tab === "documents" || tab === "policy") && <div />}
+
+          <Button
+            variant="outline"
+            className="text-xs h-8 px-3 gap-1.5"
+            onClick={() => nextTab ? setTab(nextTab as any) : onClose()}
+          >
+            {nextTab ? DRAWER_TABS.find(t => t.key === nextTab)!.label : "Close"}
+            <ChevronRight className="w-3.5 h-3.5" />
+          </Button>
+        </div>
       </div>
     </div>
   );
