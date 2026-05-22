@@ -10,6 +10,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { loadDeptRules, findRule, timeToMins, calcOtHours, isNightShiftRecord } from "../lib/hr-rules.js";
+import { zkAdmsRunning } from "../lib/adms-state.js";
 
 const require = createRequire(join(process.cwd(), "package.json"));
 
@@ -50,17 +51,57 @@ router.put("/devices/:id", async (req, res) => {
 
 router.delete("/devices/:id", async (req, res) => {
   try {
-    await db.delete(biometricDevices).where(eq(biometricDevices.id, Number(req.params.id)));
+    const devId = Number(req.params.id);
+    await db.delete(biometricLogs).where(eq(biometricLogs.deviceId, devId));
+    await db.delete(biometricDevices).where(eq(biometricDevices.id, devId));
     res.json({ message: "Deleted", success: true });
-  } catch (e) { res.status(500).json({ message: "Error", success: false }); }
+  } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
 });
 
 router.get("/adms-status", async (_req, res) => {
   try {
     const online = await db.select({ id: biometricDevices.id, serialNumber: biometricDevices.serialNumber, name: biometricDevices.name, ipAddress: biometricDevices.ipAddress, lastSync: biometricDevices.lastSync })
       .from(biometricDevices).where(eq(biometricDevices.status, "online"));
-    res.json({ active: true, port: 8081, onlineCount: online.length, devices: online.map(d => ({ ...d, lastSync: d.lastSync?.toISOString() || null })) });
+    res.json({ active: zkAdmsRunning, port: 8081, onlineCount: online.length, devices: online.map(d => ({ ...d, lastSync: d.lastSync?.toISOString() || null })) });
   } catch { res.json({ active: false, port: 8081, onlineCount: 0, devices: [] }); }
+});
+
+router.post("/devices/adms-add", async (req, res) => {
+  try {
+    const { serialNumber, ip } = req.body as { serialNumber?: string; ip?: string };
+    if (!serialNumber?.trim()) {
+      res.status(400).json({ success: false, message: "serialNumber is required" });
+      return;
+    }
+    const sn = serialNumber.trim();
+    const ipAddr = ip?.trim() || "0.0.0.0";
+    const [firstBranch] = await db.select({ id: branches.id }).from(branches).limit(1);
+    const branchId = firstBranch?.id ?? 1;
+    await db.insert(biometricDevices).values({
+      name: `ZK Device (${sn})`,
+      serialNumber: sn,
+      model: "ZKTeco",
+      ipAddress: ipAddr,
+      port: 8081,
+      branchId,
+      pushMethod: "zkpush",
+      status: "offline",
+    }).onConflictDoUpdate({
+      target: biometricDevices.serialNumber,
+      set: { ipAddress: ipAddr, lastSync: new Date(), status: "online" },
+    });
+    const [dev] = await db.select({
+      dev: biometricDevices,
+      branchName: branches.name,
+    }).from(biometricDevices)
+      .leftJoin(branches, eq(biometricDevices.branchId, branches.id))
+      .where(eq(biometricDevices.serialNumber, sn));
+    if (!dev) {
+      res.status(404).json({ success: false, message: "Device not found after add" });
+      return;
+    }
+    res.json({ success: true, device: { ...dev.dev, branchName: dev.branchName || "", totalPushLogs: 0, lastSync: dev.dev.lastSync?.toISOString() || null, createdAt: dev.dev.createdAt.toISOString() } });
+  } catch (e) { console.error(e); res.status(500).json({ success: false, message: "Error adding device" }); }
 });
 
 router.post("/devices/:id/test", async (req, res) => {

@@ -115,43 +115,98 @@ function DevicesTab() {
   const test = useTestBiometricDevice();
 
   const [showForm, setShowForm] = useState(false);
+  const [showAdmsAdd, setShowAdmsAdd] = useState(false);
+  const [admsAddSn, setAdmsAddSn] = useState("");
+  const [admsAddIp, setAdmsAddIp] = useState("");
+  const [admsAddLoading, setAdmsAddLoading] = useState(false);
+  const [admsAddError, setAdmsAddError] = useState<string | null>(null);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState<DeviceForm>(EMPTY_FORM);
   const [testResults, setTestResults] = useState<Record<number, { success: boolean; message: string }>>({});
 
-  function openCreate() { setForm(EMPTY_FORM); setEditId(null); setShowForm(true); }
+  function openCreate() { setForm(EMPTY_FORM); setEditId(null); setShowForm(true); setShowAdmsAdd(false); }
   function openEdit(d: any) {
     setForm({ name: d.name, serialNumber: d.serialNumber, model: d.model, ipAddress: d.ipAddress, port: d.port, branchId: d.branchId, pushMethod: d.pushMethod, apiKey: d.apiKey || "", isActive: d.isActive });
-    setEditId(d.id); setShowForm(true);
+    setEditId(d.id); setShowForm(true); setShowAdmsAdd(false);
   }
   function handleSave() {
     const payload = { ...form, apiKey: form.apiKey || null };
     if (editId) {
-      update.mutate({ id: editId, data: payload }, { onSuccess: () => setShowForm(false) });
+      update.mutate({ id: editId, data: payload }, { onSuccess: () => { setShowForm(false); refetch(); } });
     } else {
-      create.mutate({ data: payload }, { onSuccess: () => setShowForm(false) });
+      create.mutate({ data: payload }, { onSuccess: () => { setShowForm(false); refetch(); } });
     }
   }
   function handleTest(id: number) {
     test.mutate({ id }, { onSuccess: (data) => setTestResults(r => ({ ...r, [id]: data })) });
   }
+  function handleDelete(id: number) {
+    if (!confirm("Delete this device? All associated logs will also be removed.")) return;
+    remove.mutate({ id }, { onSuccess: () => refetch(), onError: () => alert("Failed to delete device.") });
+  }
+  async function handleAdmsAdd() {
+    if (!admsAddSn.trim()) { setAdmsAddError("Serial number is required."); return; }
+    setAdmsAddLoading(true); setAdmsAddError(null);
+    try {
+      const r = await fetch(`${BASE}/api/biometric/devices/adms-add`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("auth_token") || ""}` },
+        body: JSON.stringify({ serialNumber: admsAddSn.trim(), ip: admsAddIp.trim() || undefined }),
+      });
+      const data = await r.json();
+      if (!data.success) { setAdmsAddError(data.message || "Failed to add device."); }
+      else { setShowAdmsAdd(false); setAdmsAddSn(""); setAdmsAddIp(""); refetch(); }
+    } catch { setAdmsAddError("Network error. Try again."); }
+    finally { setAdmsAddLoading(false); }
+  }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-xs text-muted-foreground flex items-center gap-1.5">
           <Server className="w-3.5 h-3.5 text-primary" />
           Devices connecting to port <strong>8081</strong> appear here automatically — no manual entry needed for ZK Push devices.
         </p>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" onClick={() => refetch()} className="flex items-center gap-2 text-xs">
             <RefreshCw className="w-3.5 h-3.5" />Refresh
+          </Button>
+          <Button variant="outline" onClick={() => { setShowAdmsAdd(v => !v); setShowForm(false); setAdmsAddError(null); }} className="flex items-center gap-2 text-xs border-green-300 text-green-700 hover:bg-green-50">
+            <Radio className="w-3.5 h-3.5" />Add via ADMS
           </Button>
           <Button onClick={openCreate} className="flex items-center gap-2 text-xs">
             <Plus className="w-4 h-4" />Add Device
           </Button>
         </div>
       </div>
+
+      {showAdmsAdd && (
+        <Card className="p-4 border-green-200 bg-green-50/30">
+          <h3 className="font-semibold text-sm mb-3 text-green-900 flex items-center gap-2">
+            <Radio className="w-4 h-4 text-green-600" />Add Device via ADMS (port 8081)
+          </h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            Enter the serial number of a ZKTeco device that has already connected to port 8081. It will be registered directly in the device list.
+          </p>
+          <div className="flex gap-3 items-end flex-wrap">
+            <div className="flex-1 min-w-[180px]">
+              <Label className="text-xs">Serial Number <span className="text-red-500">*</span></Label>
+              <Input placeholder="e.g. AABBCC123456" value={admsAddSn} onChange={e => setAdmsAddSn(e.target.value)} />
+            </div>
+            <div className="flex-1 min-w-[160px]">
+              <Label className="text-xs">IP Address (optional)</Label>
+              <Input placeholder="192.168.1.201" value={admsAddIp} onChange={e => setAdmsAddIp(e.target.value)} />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { setShowAdmsAdd(false); setAdmsAddError(null); }}>Cancel</Button>
+              <Button onClick={handleAdmsAdd} disabled={admsAddLoading} className="bg-green-600 hover:bg-green-700">
+                {admsAddLoading ? "Adding..." : "Add Directly"}
+              </Button>
+            </div>
+          </div>
+          {admsAddError && <p className="text-xs text-red-600 mt-2">{admsAddError}</p>}
+        </Card>
+      )}
 
       {showForm && (
         <Card className="p-5 border-primary/30 bg-primary/5">
@@ -246,8 +301,8 @@ function DevicesTab() {
                           <button onClick={() => openEdit(d)} className="p-1.5 hover:bg-muted rounded text-muted-foreground">
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
-                          <button onClick={() => { if(confirm("Delete this device?")) remove.mutate({ id: d.id }); }}
-                            className="p-1.5 hover:bg-red-100 text-red-500 rounded">
+                          <button onClick={() => handleDelete(d.id)}
+                            className="p-1.5 hover:bg-red-100 text-red-500 rounded" title="Remove device">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>

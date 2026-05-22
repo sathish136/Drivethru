@@ -17,6 +17,7 @@ import { db } from "@workspace/db";
 import { biometricDevices, branches } from "@workspace/db/schema";
 import { eq, and, lt } from "drizzle-orm";
 import { processAttRows } from "./routes/biometric.js";
+import { setZkAdmsRunning } from "./lib/adms-state.js";
 
 const admsApp = express();
 
@@ -219,6 +220,7 @@ export function startZkAdmsServer(port = 8081): http.Server {
   const server = http.createServer(admsApp);
 
   server.on("error", (err: NodeJS.ErrnoException) => {
+    setZkAdmsRunning(false);
     if (err.code === "EADDRINUSE") {
       console.warn(`[ZK ADMS] Port ${port} already in use — ADMS server not started. Stop the existing service (e.g. bio_sync.py) and restart to enable auto-discovery.`);
     } else {
@@ -227,8 +229,8 @@ export function startZkAdmsServer(port = 8081): http.Server {
   });
 
   server.listen(port, "0.0.0.0", () => {
+    setZkAdmsRunning(true);
     console.log(`ZK Push ADMS server listening on port ${port}`);
-    // Start offline sweep only after successful bind
     setInterval(sweepOfflineDevices, 2 * 60 * 1000);
   });
 
