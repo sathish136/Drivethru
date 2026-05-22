@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Fingerprint, Search, RefreshCw, Download, ChevronLeft, ChevronRight, X,
 } from "lucide-react";
@@ -22,16 +22,9 @@ type DayRow = {
   date: string;
   status: string;
   source: string;
-  p1: string | null;
-  p2: string | null;
-  p3: string | null;
-  p4: string | null;
-  p5: string | null;
-  p6: string | null;
-  p7: string | null;
-  p8: string | null;
   punchCount: number;
-  punchTypes: string[]; // ['in','out','in','out',...] per punch slot
+  punchTimes: string[];   // all punch times — dynamic length
+  punchTypes: string[];   // 'in' | 'out' for each slot
   totalHours: number | null;
   overtimeHours: number | null;
 };
@@ -48,18 +41,6 @@ const STATUS_COLOR: Record<string, { bg: string; text: string; dot: string }> = 
   off_day:  { bg: "bg-slate-50",   text: "text-slate-600",   dot: "bg-slate-400"   },
 };
 
-// Punch column definitions: 8 slots alternating IN/OUT
-const PUNCH_COLS = [
-  { key: "p1", label: "Punch 1", type: "IN",  field: "p1" },
-  { key: "p2", label: "Punch 2", type: "OUT", field: "p2" },
-  { key: "p3", label: "Punch 3", type: "IN",  field: "p3" },
-  { key: "p4", label: "Punch 4", type: "OUT", field: "p4" },
-  { key: "p5", label: "Punch 5", type: "IN",  field: "p5" },
-  { key: "p6", label: "Punch 6", type: "OUT", field: "p6" },
-  { key: "p7", label: "Punch 7", type: "IN",  field: "p7" },
-  { key: "p8", label: "Punch 8", type: "OUT", field: "p8" },
-] as const;
-
 function fmtDate(d: string) {
   return new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
@@ -70,6 +51,11 @@ function fmtHours(h: number | null) {
   if (h == null) return "—";
   const hrs = Math.floor(h); const mins = Math.round((h - hrs) * 60);
   return `${hrs}:${String(mins).padStart(2, "0")}`;
+}
+
+// Determine punch label type by index: 0=IN,1=OUT,2=IN,3=OUT,... or use punchTypes
+function punchLabel(idx: number): "IN" | "OUT" {
+  return idx % 2 === 0 ? "IN" : "OUT";
 }
 
 export default function RawPunches() {
@@ -119,23 +105,31 @@ export default function RawPunches() {
   const handleSearch = () => { setPage(1); fetchRows(1); };
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
+  // Dynamically compute max punch columns from current page data (minimum 4)
+  const maxCols = useMemo(() =>
+    Math.max(4, ...rows.map(r => r.punchCount ?? 0)),
+    [rows]
+  );
+
   const exportCsv = () => {
+    const punchHeaders = Array.from({ length: maxCols }, (_, i) => `Punch ${i + 1}`);
     const header = [
       "#", "Date", "Day", "Employee", "Emp Code", "Branch", "Status", "Source",
-      "Punch 1", "Punch 2", "Punch 3", "Punch 4",
-      "Punch 5", "Punch 6", "Punch 7", "Punch 8",
+      ...punchHeaders,
       "Total Punches", "Total Hrs", "OT Hrs",
     ];
-    const data = rows.map((r, i) => [
-      (page - 1) * PAGE_SIZE + i + 1,
-      fmtDate(r.date), fmtDay(r.date),
-      r.employeeName, r.employeeCode, r.branchName,
-      r.status.replace("_", " "), r.source,
-      r.p1 || "", r.p2 || "", r.p3 || "", r.p4 || "",
-      r.p5 || "", r.p6 || "", r.p7 || "", r.p8 || "",
-      r.punchCount || 0,
-      fmtHours(r.totalHours), fmtHours(r.overtimeHours),
-    ]);
+    const data = rows.map((r, i) => {
+      const punchCols = Array.from({ length: maxCols }, (_, pi) => r.punchTimes?.[pi] || "");
+      return [
+        (page - 1) * PAGE_SIZE + i + 1,
+        fmtDate(r.date), fmtDay(r.date),
+        r.employeeName, r.employeeCode, r.branchName,
+        r.status.replace("_", " "), r.source,
+        ...punchCols,
+        r.punchCount || 0,
+        fmtHours(r.totalHours), fmtHours(r.overtimeHours),
+      ];
+    });
     const csv = [header, ...data].map(row =>
       row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")
     ).join("\n");
@@ -149,7 +143,6 @@ export default function RawPunches() {
   // Summary stats
   const presentCount  = rows.filter(r => r.status === "present" || r.status === "late").length;
   const absentCount   = rows.filter(r => r.status === "absent").length;
-  // Missing punch: last punch in the day is type "in" (never punched out)
   const missingPunchCount = rows.filter(r => {
     const types = r.punchTypes || [];
     return types.length > 0 && types[types.length - 1] === "in";
@@ -251,6 +244,11 @@ export default function RawPunches() {
                 — showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)}
               </span>
             )}
+            {!loading && maxCols > 4 && (
+              <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-normal">
+                {maxCols} punch columns
+              </span>
+            )}
           </span>
           {totalPages > 1 && (
             <div className="flex items-center gap-1">
@@ -270,18 +268,19 @@ export default function RawPunches() {
         <div className="overflow-x-auto">
           <table className="w-full text-xs border-collapse">
             <thead>
-              {/* Punch group header */}
+              {/* Group header row */}
               <tr className="bg-slate-700 text-white">
                 <th colSpan={7} className="px-3 py-1.5 text-left text-[10px] font-semibold border-r border-slate-600">
                   Employee Info
                 </th>
-                <th colSpan={8} className="px-3 py-1.5 text-center text-[10px] font-semibold border-r border-slate-600">
-                  Punch Times
+                <th colSpan={maxCols} className="px-3 py-1.5 text-center text-[10px] font-semibold border-r border-slate-600">
+                  Punch Times ({maxCols})
                 </th>
                 <th colSpan={2} className="px-3 py-1.5 text-center text-[10px] font-semibold">
                   Hours
                 </th>
               </tr>
+              {/* Column header row */}
               <tr className="bg-muted/70 border-b border-border">
                 <th className="px-2 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap w-8">#</th>
                 <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Date</th>
@@ -290,31 +289,22 @@ export default function RawPunches() {
                 <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Code</th>
                 <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Status</th>
                 <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap border-r border-border">Source</th>
-                {/* 8 punch columns */}
-                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-emerald-50 text-emerald-700">
-                  <div className="text-[10px]">Punch 1</div><div className="text-[9px] font-normal opacity-70">IN</div>
-                </th>
-                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-red-50 text-red-700">
-                  <div className="text-[10px]">Punch 2</div><div className="text-[9px] font-normal opacity-70">OUT</div>
-                </th>
-                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-emerald-50 text-emerald-700">
-                  <div className="text-[10px]">Punch 3</div><div className="text-[9px] font-normal opacity-70">IN</div>
-                </th>
-                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-red-50 text-red-700">
-                  <div className="text-[10px]">Punch 4</div><div className="text-[9px] font-normal opacity-70">OUT</div>
-                </th>
-                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-emerald-50 text-emerald-700">
-                  <div className="text-[10px]">Punch 5</div><div className="text-[9px] font-normal opacity-70">IN</div>
-                </th>
-                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-red-50 text-red-700">
-                  <div className="text-[10px]">Punch 6</div><div className="text-[9px] font-normal opacity-70">OUT</div>
-                </th>
-                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-emerald-50 text-emerald-700">
-                  <div className="text-[10px]">Punch 7</div><div className="text-[9px] font-normal opacity-70">IN</div>
-                </th>
-                <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-red-50 text-red-700 border-r border-border">
-                  <div className="text-[10px]">Punch 8</div><div className="text-[9px] font-normal opacity-70">OUT</div>
-                </th>
+                {/* Dynamic punch column headers */}
+                {Array.from({ length: maxCols }, (_, pi) => {
+                  const label = punchLabel(pi);
+                  const isIn  = label === "IN";
+                  const isLast = pi === maxCols - 1;
+                  return (
+                    <th key={pi} className={cn(
+                      "px-3 py-2 text-center font-semibold whitespace-nowrap",
+                      isIn ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700",
+                      isLast && "border-r border-border"
+                    )}>
+                      <div className="text-[10px]">Punch {pi + 1}</div>
+                      <div className="text-[9px] font-normal opacity-70">{label}</div>
+                    </th>
+                  );
+                })}
                 <th className="px-3 py-2 text-center font-semibold text-muted-foreground whitespace-nowrap">Total</th>
                 <th className="px-3 py-2 text-center font-semibold text-muted-foreground whitespace-nowrap">OT</th>
               </tr>
@@ -322,14 +312,14 @@ export default function RawPunches() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={17} className="px-3 py-12 text-center text-muted-foreground">
+                  <td colSpan={7 + maxCols + 2} className="px-3 py-12 text-center text-muted-foreground">
                     <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-primary" />
                     Loading records…
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={17} className="px-3 py-12 text-center text-muted-foreground">
+                  <td colSpan={7 + maxCols + 2} className="px-3 py-12 text-center text-muted-foreground">
                     <Fingerprint className="w-8 h-8 mx-auto mb-2 opacity-30" />
                     No records found. Try adjusting your filters.
                   </td>
@@ -338,10 +328,9 @@ export default function RawPunches() {
                 const sc = STATUS_COLOR[row.status] ?? STATUS_COLOR.absent;
                 const rowN = (page - 1) * PAGE_SIZE + i + 1;
                 const types = row.punchTypes || [];
-                // Missing punch: last punch of the day was an "in" — never punched out
+                const times = row.punchTimes || [];
                 const lastType = types[types.length - 1];
                 const hasMissing = types.length > 0 && lastType === "in";
-                const punchVals = [row.p1, row.p2, row.p3, row.p4, row.p5, row.p6, row.p7, row.p8];
 
                 return (
                   <tr key={row.id}
@@ -369,23 +358,24 @@ export default function RawPunches() {
                         {row.source}
                       </span>
                     </td>
-                    {/* 8 punch columns — color from punchTypes, MISSING badge on last "in" */}
-                    {punchVals.map((pt, pi) => {
-                      const pType = types[pi]; // 'in' | 'out' | undefined
-                      const isIn  = pType === "in";
-                      const isOut = pType === "out";
-                      const isMissingSlot = hasMissing && pi === types.length; // next slot after last punch
-                      const isLastCol = pi === 7;
+                    {/* Dynamic punch cells */}
+                    {Array.from({ length: maxCols }, (_, pi) => {
+                      const punchTime = times[pi];
+                      const pType = types[pi];
+                      const isIn  = pType === "in"  || (!pType && pi % 2 === 0 && !!punchTime);
+                      const isOut = pType === "out" || (!pType && pi % 2 === 1 && !!punchTime);
+                      const isMissingSlot = hasMissing && pi === types.length;
+                      const isLastCol = pi === maxCols - 1;
                       return (
                         <td key={pi} className={cn(
                           "px-3 py-1.5 text-center font-mono whitespace-nowrap text-xs",
                           isLastCol && "border-r border-border/50"
                         )}>
-                          {pt ? (
+                          {punchTime ? (
                             <span className={cn("font-semibold",
                               isIn  ? "text-emerald-700" :
                               isOut ? "text-red-700"     : "text-slate-600")}>
-                              {pt}
+                              {punchTime}
                             </span>
                           ) : isMissingSlot ? (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-300">MISSING</span>

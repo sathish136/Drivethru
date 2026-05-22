@@ -852,9 +852,8 @@ router.get("/raw-punches", async (req, res) => {
     const l = limitQ ? Math.min(Number(limitQ), 500) : 100;
     const paginated = dayEntries.slice((p - 1) * l, p * l);
 
-    // ── 5. Build response rows ─────────────────────────────────────────
+    // ── 5. Build response rows — no cap on punch count ────────────────
     const responseRows = paginated.map((entry, i) => {
-      const ps = entry.punches.slice(0, 8);
       return {
         id:            i + (p - 1) * l + 1,
         employeeId:    entry.employeeId,
@@ -867,15 +866,8 @@ router.get("/raw-punches", async (req, res) => {
         totalHours:    entry.totalHours,
         overtimeHours: entry.overtimeHours,
         punchCount:    entry.punches.length,
-        p1: ps[0]?.time ?? null,
-        p2: ps[1]?.time ?? null,
-        p3: ps[2]?.time ?? null,
-        p4: ps[3]?.time ?? null,
-        p5: ps[4]?.time ?? null,
-        p6: ps[5]?.time ?? null,
-        p7: ps[6]?.time ?? null,
-        p8: ps[7]?.time ?? null,
-        punchTypes: ps.map(px => px.type),
+        punchTimes:    entry.punches.map(px => px.time),  // all punch times
+        punchTypes:    entry.punches.map(px => px.type),  // all punch types
       };
     });
 
