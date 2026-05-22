@@ -355,11 +355,11 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
   const nextTab = tabIdx < tabKeys.length - 1 ? tabKeys[tabIdx + 1] : null;
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-hidden -m-4 md:-m-6">
+    <div className="flex flex-col overflow-hidden" style={{height:"calc(100vh - 56px)"}}>  
 
       {/* Page Header */}
       <div className="bg-background border-b border-border shrink-0">
-        <div className="max-w-3xl mx-auto px-6 pt-4">
+        <div className="px-6 pt-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <button onClick={onClose} className="p-1.5 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-foreground">
@@ -403,7 +403,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-6 py-6 space-y-5">
+        <div className="px-6 py-5 space-y-4">
           {tab === "personal" && (
             <>
               {/* Photo Upload */}
@@ -1030,7 +1030,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
       {/* Footer navigation */}
       <div className="border-t border-border bg-background shrink-0">
-        <div className="max-w-3xl mx-auto px-6 py-3 flex items-center justify-between">
+        <div className="px-6 py-3 flex items-center justify-between">
           <Button
             variant="outline"
             className="text-xs h-8 px-3 gap-1.5"
