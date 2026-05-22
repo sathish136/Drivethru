@@ -2,6 +2,7 @@ import express, { type Express } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import router from "./routes/index.js";
+import { admsRouter } from "./zk-adms-server.js";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import path from "path";
 
@@ -11,6 +12,10 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+// ZK ADMS push routes — served on main port so devices can reach it even when
+// port 8081 is unavailable.  Configure ZKTeco device: Server=<host>, Port=8080
+app.use("/iclock", admsRouter);
 
 app.use("/api", router);
 

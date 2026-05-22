@@ -1,28 +1,25 @@
 /**
- * ZK Push ADMS Server — port 8081
+ * ZK Push ADMS Server
  *
  * Native implementation of the ZKTeco ADMS push protocol.
- * Devices connect automatically; no manual registration needed.
+ * Routes are mounted on the main API server (port 8080) at /iclock — no
+ * separate port is required.  When port 8081 is also free, a dedicated
+ * listener starts there as well so devices can push to either port.
  *
- * Endpoints (all on port 8081):
+ * Endpoints (served on BOTH main app port and dedicated 8081 when available):
  *   GET  /iclock/cdata?SN=XXX&options=all   — initialization handshake
- *   GET  /iclock/getrequest?SN=XXX          — keep-alive polling (every ~30 s)
+ *   GET  /iclock/getrequest?SN=XXX          — keep-alive polling (~30 s)
  *   POST /iclock/cdata?SN=XXX&table=ATTLOG  — attendance data upload
  *   POST /iclock/cdata?SN=XXX&table=OPERLOG — user data (ignored, OK returned)
  */
 
-import express from "express";
+import express, { Router } from "express";
 import http from "node:http";
 import { db } from "@workspace/db";
 import { biometricDevices, branches } from "@workspace/db/schema";
 import { eq, and, lt } from "drizzle-orm";
 import { processAttRows } from "./routes/biometric.js";
 import { setZkAdmsRunning } from "./lib/adms-state.js";
-
-const admsApp = express();
-
-// Accept plain-text body for ATTLOG uploads
-admsApp.use(express.text({ type: "*/*", limit: "50mb" }));
 
 // ── In-memory throttle: avoid spamming DB on every keep-alive ────────────────
 const deviceLastTouched = new Map<string, number>();
@@ -39,7 +36,7 @@ async function getDefaultBranchId(): Promise<number> {
  * Upsert device in biometric_devices.
  * Throttled to at most once per 30 s per device to avoid excessive DB writes.
  */
-async function touchDevice(sn: string, ip: string): Promise<void> {
+export async function touchDevice(sn: string, ip: string): Promise<void> {
   const now = Date.now();
   const last = deviceLastTouched.get(sn) ?? 0;
   if (now - last < 30_000) return;
@@ -82,7 +79,6 @@ function parseAttLog(body: string, sn: string) {
     let timeStr: string;
     let statusIdx: number;
 
-    // ZK devices send date and time as separate columns: "PIN YYYY-MM-DD HH:MM:SS STATUS ..."
     if (
       cols.length >= 4 &&
       /^\d{4}-\d{2}-\d{2}$/.test(cols[1]) &&
@@ -91,13 +87,11 @@ function parseAttLog(body: string, sn: string) {
       timeStr = `${cols[1]} ${cols[2]}`;
       statusIdx = 3;
     } else {
-      // Fallback: combined datetime in second column
       timeStr = cols[1] ?? "";
       statusIdx = 2;
     }
 
     if (!timeStr || !/^\d{4}-\d{2}-\d{2}/.test(timeStr)) continue;
-
     rows.push({ pin, time: timeStr, status: cols[statusIdx] ?? "0", sn });
   }
   return rows;
@@ -110,13 +104,19 @@ function clientIp(req: express.Request): string {
     .trim();
 }
 
-// ── Routes ────────────────────────────────────────────────────────────────────
+// ── Shared ADMS Router ────────────────────────────────────────────────────────
+// Mounted on the main app at /iclock AND optionally on a dedicated port 8081.
+
+export const admsRouter = Router();
+
+// Accept plain-text body (ATTLOG uploads)
+admsRouter.use(express.text({ type: "*/*", limit: "50mb" }));
 
 /**
  * GET /iclock/cdata?SN=XXX&options=all
  * Device initialization — respond with push configuration.
  */
-admsApp.get(["/iclock/cdata", "/iclock/cdata.aspx"], async (req, res) => {
+admsRouter.get(["/cdata", "/cdata.aspx"], async (req, res) => {
   const sn = String(req.query["SN"] ?? req.query["sn"] ?? "").trim();
   if (!sn) { res.status(400).type("text/plain").send("Missing SN"); return; }
 
@@ -124,7 +124,6 @@ admsApp.get(["/iclock/cdata", "/iclock/cdata.aspx"], async (req, res) => {
   await touchDevice(sn, ip);
 
   if (String(req.query["options"] ?? "") === "all") {
-    // Full initialization handshake — ATTLOGStamp=0 forces device to upload ALL records
     const body = [
       `GET OPTION FROM: ${sn}`,
       "ATTLOGStamp=0",
@@ -156,7 +155,7 @@ admsApp.get(["/iclock/cdata", "/iclock/cdata.aspx"], async (req, res) => {
  * POST /iclock/cdata?SN=XXX&table=ATTLOG
  * Device uploads attendance punch records.
  */
-admsApp.post(["/iclock/cdata", "/iclock/cdata.aspx"], async (req, res) => {
+admsRouter.post(["/cdata", "/cdata.aspx"], async (req, res) => {
   const sn = String(req.query["SN"] ?? req.query["sn"] ?? "").trim();
   if (!sn) { res.status(400).type("text/plain").send("Missing SN"); return; }
 
@@ -178,7 +177,6 @@ admsApp.post(["/iclock/cdata", "/iclock/cdata.aspx"], async (req, res) => {
     }
   }
 
-  // Always respond OK immediately so device doesn't time out
   res.type("text/plain").send("OK: 0");
 });
 
@@ -186,20 +184,20 @@ admsApp.post(["/iclock/cdata", "/iclock/cdata.aspx"], async (req, res) => {
  * GET /iclock/getrequest?SN=XXX
  * Keep-alive polling — device calls this every ~30 s.
  */
-admsApp.get(["/iclock/getrequest", "/iclock/getrequest.aspx"], async (req, res) => {
+admsRouter.get(["/getrequest", "/getrequest.aspx"], async (req, res) => {
   const sn = String(req.query["SN"] ?? req.query["sn"] ?? "").trim();
   if (sn) await touchDevice(sn, clientIp(req));
   res.type("text/plain").send("OK");
 });
 
-// Catch-all middleware: return OK for any other ZK ADMS path
-admsApp.use("/iclock", (_req, res) => res.type("text/plain").send("OK"));
+// Catch-all: return OK for any other ZK ADMS path
+admsRouter.use("/", (_req, res) => res.type("text/plain").send("OK"));
 
 // ── Background: sweep offline devices ────────────────────────────────────────
 
 async function sweepOfflineDevices(): Promise<void> {
   try {
-    const cutoff = new Date(Date.now() - 3 * 60 * 1000); // 3 minutes
+    const cutoff = new Date(Date.now() - 3 * 60 * 1000);
     await db
       .update(biometricDevices)
       .set({ status: "offline" })
@@ -214,15 +212,33 @@ async function sweepOfflineDevices(): Promise<void> {
   }
 }
 
-// ── Export ────────────────────────────────────────────────────────────────────
+// Start the offline sweep once (called from index.ts after server starts)
+export function startAdmsSweep(): void {
+  setInterval(sweepOfflineDevices, 2 * 60 * 1000);
+}
+
+// ── Optional dedicated port 8081 listener ─────────────────────────────────────
+// Attempts to bind port 8081 as a convenience for ZKTeco devices pre-configured
+// to that port.  If the port is already in use (e.g. dev environment), the
+// main-app routes at /iclock still serve all ADMS traffic on port 8080.
 
 export function startZkAdmsServer(port = 8081): http.Server {
-  const server = http.createServer(admsApp);
+  const dedicatedApp = express();
+  dedicatedApp.use(express.text({ type: "*/*", limit: "50mb" }));
+
+  // Mount with full /iclock prefix so device URLs work as-is
+  dedicatedApp.use("/iclock", admsRouter);
+  dedicatedApp.use("/", (_req, res) => res.type("text/plain").send("OK"));
+
+  const server = http.createServer(dedicatedApp);
 
   server.on("error", (err: NodeJS.ErrnoException) => {
     setZkAdmsRunning(false);
     if (err.code === "EADDRINUSE") {
-      console.warn(`[ZK ADMS] Port ${port} already in use — ADMS server not started. Stop the existing service (e.g. bio_sync.py) and restart to enable auto-discovery.`);
+      console.warn(
+        `[ZK ADMS] Port ${port} already in use — dedicated listener skipped. ` +
+        `Devices can still push to port 8080 at /iclock (configure server port to 8080 on device).`
+      );
     } else {
       console.error("[ZK ADMS] Server error:", err.message);
     }
@@ -230,8 +246,7 @@ export function startZkAdmsServer(port = 8081): http.Server {
 
   server.listen(port, "0.0.0.0", () => {
     setZkAdmsRunning(true);
-    console.log(`ZK Push ADMS server listening on port ${port}`);
-    setInterval(sweepOfflineDevices, 2 * 60 * 1000);
+    console.log(`[ZK ADMS] Dedicated server listening on port ${port}`);
   });
 
   return server;
