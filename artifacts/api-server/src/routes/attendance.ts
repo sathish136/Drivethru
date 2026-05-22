@@ -816,17 +816,21 @@ router.get("/raw-punches", async (req, res) => {
       const [empIdStr, date] = key.split("|");
       const empId = Number(empIdStr);
       if (!empId) continue;
-      // Look up employee info from the bio logs join — fetch on demand
+      // Look up employee info — apply the same branchId/department filters
+      const empConds: any[] = [eq(employees.id, empId)];
+      if (branchId)   empConds.push(eq(employees.branchId, Number(branchId)));
+      if (department) empConds.push(eq(employees.department, String(department)));
       const [empRow] = await db
         .select({ empName: employees.fullName, empCode: employees.employeeId, branchName: branches.name })
         .from(employees)
         .leftJoin(branches, eq(employees.branchId, branches.id))
-        .where(eq(employees.id, empId));
+        .where(and(...empConds));
+      if (!empRow) continue; // employee doesn't match current filters — skip
       dayMap.set(key, {
         employeeId:   empId,
-        employeeName: empRow?.empName    || "Unknown",
-        employeeCode: empRow?.empCode    || "",
-        branchName:   empRow?.branchName || "",
+        employeeName: empRow.empName    || "Unknown",
+        employeeCode: empRow.empCode    || "",
+        branchName:   empRow.branchName || "",
         date,
         status:       "unknown",
         source:       "biometric",
