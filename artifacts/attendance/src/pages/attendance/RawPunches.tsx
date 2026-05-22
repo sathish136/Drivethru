@@ -137,16 +137,16 @@ export default function RawPunches() {
   const exportCsv = () => {
     const punchHeaders = Array.from({ length: maxCols }, (_, i) => `Punch ${i + 1}`);
     const header = [
-      "#", "Date", "Day", "Employee", "Emp Code", "Branch", "Status", "Source",
-      ...punchHeaders, "Total Punches", "Total Hrs", "OT Hrs",
+      "#", "Date", "Day", "Employee", "Emp Code", "Branch", "Source",
+      ...punchHeaders, "Total Punches",
     ];
     const data = rows.map((r, i) => [
       (page - 1) * PAGE_SIZE + i + 1,
       fmtDate(r.date), fmtDay(r.date),
       r.employeeName, r.employeeCode, r.branchName,
-      r.status.replace("_", " "), r.source,
+      r.source,
       ...Array.from({ length: maxCols }, (_, pi) => r.punchTimes?.[pi] || ""),
-      r.punchCount || 0, fmtHours(r.totalHours), fmtHours(r.overtimeHours),
+      r.punchCount || 0,
     ]);
     const csv = [header, ...data].map(row =>
       row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")
@@ -355,14 +355,11 @@ export default function RawPunches() {
           <table className="w-full text-xs border-collapse">
             <thead>
               <tr className="bg-slate-700 text-white">
-                <th colSpan={7} className="px-3 py-1.5 text-left text-[10px] font-semibold border-r border-slate-600">
+                <th colSpan={6} className="px-3 py-1.5 text-left text-[10px] font-semibold border-r border-slate-600">
                   Employee Info
                 </th>
-                <th colSpan={maxCols} className="px-3 py-1.5 text-center text-[10px] font-semibold border-r border-slate-600">
+                <th colSpan={maxCols} className="px-3 py-1.5 text-center text-[10px] font-semibold">
                   Punch Times {maxCols > 4 ? `(${maxCols})` : ""}
-                </th>
-                <th colSpan={2} className="px-3 py-1.5 text-center text-[10px] font-semibold">
-                  Hours
                 </th>
               </tr>
               <tr className="bg-muted/70 border-b border-border">
@@ -371,7 +368,6 @@ export default function RawPunches() {
                 <th className="px-2 py-1.5 text-left font-semibold text-muted-foreground whitespace-nowrap">Day</th>
                 <th className="px-2 py-1.5 text-left font-semibold text-muted-foreground whitespace-nowrap">Employee</th>
                 <th className="px-2 py-1.5 text-left font-semibold text-muted-foreground whitespace-nowrap">Code</th>
-                <th className="px-2 py-1.5 text-left font-semibold text-muted-foreground whitespace-nowrap">Status</th>
                 <th className="px-2 py-1.5 text-left font-semibold text-muted-foreground whitespace-nowrap border-r border-border">Source</th>
                 {Array.from({ length: maxCols }, (_, pi) => {
                   const label  = punchLabel(pi);
@@ -380,78 +376,71 @@ export default function RawPunches() {
                     <th key={pi} className={cn(
                       "px-2 py-1.5 text-center font-semibold whitespace-nowrap",
                       label === "IN" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700",
-                      isLast && "border-r border-border"
                     )}>
                       <div className="text-[10px]">P{pi + 1}</div>
                       <div className="text-[9px] font-normal opacity-70">{label}</div>
                     </th>
                   );
                 })}
-                <th className="px-2 py-1.5 text-center font-semibold text-muted-foreground whitespace-nowrap">Total</th>
-                <th className="px-2 py-1.5 text-center font-semibold text-muted-foreground whitespace-nowrap">OT</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7 + maxCols + 2} className="px-3 py-10 text-center text-muted-foreground">
+                  <td colSpan={6 + maxCols} className="px-3 py-10 text-center text-muted-foreground">
                     <RefreshCw className="w-4 h-4 animate-spin mx-auto mb-2 text-primary" />
                     Loading records…
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7 + maxCols + 2} className="px-3 py-10 text-center text-muted-foreground">
+                  <td colSpan={6 + maxCols} className="px-3 py-10 text-center text-muted-foreground">
                     <Fingerprint className="w-7 h-7 mx-auto mb-2 opacity-30" />
                     No records found.{date ? ` No punches on ${fmtDate(date)}.` : " Try adjusting filters."}
                   </td>
                 </tr>
               ) : rows.map((row, i) => {
-                const sc       = STATUS_COLOR[row.status] ?? STATUS_COLOR.absent;
                 const rowN     = (page - 1) * PAGE_SIZE + i + 1;
                 const types    = row.punchTypes || [];
                 const times    = row.punchTimes || [];
                 const lastType = types[types.length - 1];
                 const hasMissing = types.length > 0 && lastType === "in";
+                const isAbsent = row.status === "absent" || row.status === "leave" || row.status === "holiday";
 
                 return (
                   <tr key={row.id}
                     className={cn("border-b border-border/50 hover:bg-muted/20 transition-colors",
-                      hasMissing ? "bg-orange-50/60" : i % 2 === 1 ? "bg-muted/10" : "bg-background")}>
+                      isAbsent    ? "bg-red-50/40" :
+                      hasMissing  ? "bg-orange-50/60" :
+                      i % 2 === 1 ? "bg-muted/10" : "bg-background")}>
                     <td className="px-2 py-1 text-muted-foreground text-right w-8 text-[11px]">{rowN}</td>
                     <td className="px-2 py-1 font-mono whitespace-nowrap text-[11px]">{fmtDate(row.date)}</td>
                     <td className="px-2 py-1 text-muted-foreground text-[11px]">{fmtDay(row.date)}</td>
-                    <td className="px-2 py-1 font-medium text-foreground whitespace-nowrap max-w-[150px] truncate text-[11px]" title={row.employeeName}>
+                    <td title={row.employeeName}
+                        className={cn("px-2 py-1 font-medium whitespace-nowrap max-w-[150px] truncate text-[11px]",
+                          isAbsent ? "text-red-700" : "text-foreground")}>
                       {hasMissing && <span className="mr-1 text-orange-500 text-[10px]" title="Missing out-punch">⚠</span>}
+                      {isAbsent   && <span className="mr-1 text-red-400 text-[10px]" title="Absent">●</span>}
                       {row.employeeName}
                     </td>
                     <td className="px-2 py-1 font-mono text-muted-foreground whitespace-nowrap text-[11px]">{row.employeeCode}</td>
-                    <td className="px-2 py-1">
-                      <span className={cn("inline-flex items-center gap-1 px-1 py-0.5 rounded text-[10px] font-medium", sc.bg, sc.text)}>
-                        <span className={cn("w-1 h-1 rounded-full flex-shrink-0", sc.dot)} />
-                        {row.status.replace("_", " ")}
-                      </span>
-                    </td>
                     <td className="px-2 py-1 border-r border-border/50">
                       <span className={cn("px-1 py-0.5 rounded text-[10px] font-medium capitalize",
                         row.source === "biometric" ? "bg-blue-100 text-blue-700" :
                         row.source === "manual"    ? "bg-purple-100 text-purple-700" :
+                        row.source === "system"    ? "bg-red-100 text-red-600" :
                         "bg-gray-100 text-gray-600")}>
-                        {row.source}
+                        {row.source === "system" ? "absent" : row.source}
                       </span>
                     </td>
                     {Array.from({ length: maxCols }, (_, pi) => {
-                      const punchTime    = times[pi];
-                      const pType        = types[pi];
-                      const isIn         = pType === "in"  || (!pType && pi % 2 === 0 && !!punchTime);
-                      const isOut        = pType === "out" || (!pType && pi % 2 === 1 && !!punchTime);
+                      const punchTime     = times[pi];
+                      const pType         = types[pi];
+                      const isIn          = pType === "in"  || (!pType && pi % 2 === 0 && !!punchTime);
+                      const isOut         = pType === "out" || (!pType && pi % 2 === 1 && !!punchTime);
                       const isMissingSlot = hasMissing && pi === types.length;
-                      const isLastCol    = pi === maxCols - 1;
                       return (
-                        <td key={pi} className={cn(
-                          "px-2 py-1 text-center font-mono whitespace-nowrap text-[11px]",
-                          isLastCol && "border-r border-border/50"
-                        )}>
+                        <td key={pi} className="px-2 py-1 text-center font-mono whitespace-nowrap text-[11px]">
                           {punchTime ? (
                             <span className={cn("font-semibold",
                               isIn  ? "text-emerald-700" :
@@ -466,12 +455,6 @@ export default function RawPunches() {
                         </td>
                       );
                     })}
-                    <td className="px-2 py-1 text-center font-mono text-blue-700 font-medium text-[11px]">
-                      {fmtHours(row.totalHours)}
-                    </td>
-                    <td className="px-2 py-1 text-center font-mono text-orange-600 text-[11px]">
-                      {row.overtimeHours && row.overtimeHours > 0 ? fmtHours(row.overtimeHours) : "—"}
-                    </td>
                   </tr>
                 );
               })}
