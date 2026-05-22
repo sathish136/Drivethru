@@ -115,22 +115,17 @@ function DevicesTab() {
   const test = useTestBiometricDevice();
 
   const [showForm, setShowForm] = useState(false);
-  const [showAdmsAdd, setShowAdmsAdd] = useState(false);
-  const [admsAddSn, setAdmsAddSn] = useState("");
-  const [admsAddIp, setAdmsAddIp] = useState("");
-  const [admsAddLoading, setAdmsAddLoading] = useState(false);
-  const [admsAddError, setAdmsAddError] = useState<string | null>(null);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState<DeviceForm>(EMPTY_FORM);
   const [testResults, setTestResults] = useState<Record<number, { success: boolean; message: string }>>({});
 
-  function openCreate() { setForm(EMPTY_FORM); setEditId(null); setShowForm(true); setShowAdmsAdd(false); }
+  function openCreate() { setForm(EMPTY_FORM); setEditId(null); setShowForm(true); }
   function openEdit(d: any) {
     setForm({ name: d.name, serialNumber: d.serialNumber, model: d.model, ipAddress: d.ipAddress, port: d.port, branchId: d.branchId, pushMethod: d.pushMethod, apiKey: d.apiKey || "", isActive: d.isActive });
-    setEditId(d.id); setShowForm(true); setShowAdmsAdd(false);
+    setEditId(d.id); setShowForm(true);
   }
   function handleSave() {
-    const payload = { ...form, apiKey: form.apiKey || null };
+    const payload = { ...form, apiKey: null, port: 8081, pushMethod: "zkpush" as const };
     if (editId) {
       update.mutate({ id: editId, data: payload }, { onSuccess: () => { setShowForm(false); refetch(); } });
     } else {
@@ -144,21 +139,6 @@ function DevicesTab() {
     if (!confirm("Delete this device? All associated logs will also be removed.")) return;
     remove.mutate({ id }, { onSuccess: () => refetch(), onError: () => alert("Failed to delete device.") });
   }
-  async function handleAdmsAdd() {
-    if (!admsAddSn.trim()) { setAdmsAddError("Serial number is required."); return; }
-    setAdmsAddLoading(true); setAdmsAddError(null);
-    try {
-      const r = await fetch(`${BASE}/api/biometric/devices/adms-add`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("auth_token") || ""}` },
-        body: JSON.stringify({ serialNumber: admsAddSn.trim(), ip: admsAddIp.trim() || undefined }),
-      });
-      const data = await r.json();
-      if (!data.success) { setAdmsAddError(data.message || "Failed to add device."); }
-      else { setShowAdmsAdd(false); setAdmsAddSn(""); setAdmsAddIp(""); refetch(); }
-    } catch { setAdmsAddError("Network error. Try again."); }
-    finally { setAdmsAddLoading(false); }
-  }
 
   return (
     <div className="space-y-4">
@@ -171,42 +151,11 @@ function DevicesTab() {
           <Button variant="outline" onClick={() => refetch()} className="flex items-center gap-2 text-xs">
             <RefreshCw className="w-3.5 h-3.5" />Refresh
           </Button>
-          <Button variant="outline" onClick={() => { setShowAdmsAdd(v => !v); setShowForm(false); setAdmsAddError(null); }} className="flex items-center gap-2 text-xs border-green-300 text-green-700 hover:bg-green-50">
-            <Radio className="w-3.5 h-3.5" />Add via ADMS
-          </Button>
           <Button onClick={openCreate} className="flex items-center gap-2 text-xs">
             <Plus className="w-4 h-4" />Add Device
           </Button>
         </div>
       </div>
-
-      {showAdmsAdd && (
-        <Card className="p-4 border-green-200 bg-green-50/30">
-          <h3 className="font-semibold text-sm mb-3 text-green-900 flex items-center gap-2">
-            <Radio className="w-4 h-4 text-green-600" />Add Device via ADMS (port 8081)
-          </h3>
-          <p className="text-xs text-muted-foreground mb-3">
-            Enter the serial number of a ZKTeco device that has already connected to port 8081. It will be registered directly in the device list.
-          </p>
-          <div className="flex gap-3 items-end flex-wrap">
-            <div className="flex-1 min-w-[180px]">
-              <Label className="text-xs">Serial Number <span className="text-red-500">*</span></Label>
-              <Input placeholder="e.g. AABBCC123456" value={admsAddSn} onChange={e => setAdmsAddSn(e.target.value)} />
-            </div>
-            <div className="flex-1 min-w-[160px]">
-              <Label className="text-xs">IP Address (optional)</Label>
-              <Input placeholder="192.168.1.201" value={admsAddIp} onChange={e => setAdmsAddIp(e.target.value)} />
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => { setShowAdmsAdd(false); setAdmsAddError(null); }}>Cancel</Button>
-              <Button onClick={handleAdmsAdd} disabled={admsAddLoading} className="bg-green-600 hover:bg-green-700">
-                {admsAddLoading ? "Adding..." : "Add Directly"}
-              </Button>
-            </div>
-          </div>
-          {admsAddError && <p className="text-xs text-red-600 mt-2">{admsAddError}</p>}
-        </Card>
-      )}
 
       {showForm && (
         <Card className="p-5 border-primary/30 bg-primary/5">
@@ -217,13 +166,11 @@ function DevicesTab() {
               { key: "serialNumber", label: "Serial Number", type: "text", placeholder: "XXXXXXXX" },
               { key: "model", label: "Model", type: "text", placeholder: "ZKTeco F18" },
               { key: "ipAddress", label: "IP Address", type: "text", placeholder: "192.168.1.201" },
-              { key: "port", label: "Port", type: "number", placeholder: "4370" },
-              { key: "apiKey", label: "API Key (Optional)", type: "text", placeholder: "zk-secret-key" },
             ] as const).map(({ key, label, type, placeholder }) => (
               <div key={key}>
                 <Label className="text-xs">{label}</Label>
                 <Input type={type} placeholder={placeholder} value={(form as any)[key]}
-                  onChange={e => setForm(f => ({ ...f, [key]: type === "number" ? Number(e.target.value) : e.target.value }))} />
+                  onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
               </div>
             ))}
             <div>
@@ -231,13 +178,6 @@ function DevicesTab() {
               <Select value={form.branchId || ""} onChange={e => setForm(f => ({ ...f, branchId: Number(e.target.value) }))}>
                 <option value="">Select Branch</option>
                 {branches?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Push Method</Label>
-              <Select value={form.pushMethod} onChange={e => setForm(f => ({ ...f, pushMethod: e.target.value as any }))}>
-                <option value="zkpush">ZK Push (ADMS)</option>
-                <option value="sdk">SDK Direct</option>
               </Select>
             </div>
             <div className="flex items-center gap-2 pt-5">
