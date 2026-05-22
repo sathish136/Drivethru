@@ -692,15 +692,16 @@ router.put("/:id", async (req, res) => {
    One row per employee per day — up to 8 punch slots. */
 router.get("/raw-punches", async (req, res) => {
   try {
-    const { employeeId, startDate, endDate, search, branchId, page = "1", limit: limitQ } = req.query;
+    const { employeeId, startDate, endDate, search, branchId, department, page = "1", limit: limitQ } = req.query;
 
     // ── 1. Fetch attendance_records as PRIMARY source ──────────────────
     const attConds: any[] = [];
     attConds.push(sql`${attendanceRecords.inTime1} IS NOT NULL`);
-    if (employeeId) attConds.push(eq(attendanceRecords.employeeId, Number(employeeId)));
-    if (startDate)  attConds.push(sql`${attendanceRecords.date} >= ${String(startDate)}`);
-    if (endDate)    attConds.push(sql`${attendanceRecords.date} <= ${String(endDate)}`);
-    if (branchId)   attConds.push(eq(employees.branchId, Number(branchId)));
+    if (employeeId)  attConds.push(eq(attendanceRecords.employeeId, Number(employeeId)));
+    if (startDate)   attConds.push(sql`${attendanceRecords.date} >= ${String(startDate)}`);
+    if (endDate)     attConds.push(sql`${attendanceRecords.date} <= ${String(endDate)}`);
+    if (branchId)    attConds.push(eq(employees.branchId, Number(branchId)));
+    if (department)  attConds.push(eq(employees.department, String(department)));
 
     const attRecs = await db
       .select({

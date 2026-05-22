@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Fingerprint, Search, RefreshCw, Download, ChevronLeft, ChevronRight, X,
-  Calendar, Building2, User,
+  Calendar, Building2, User, Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +37,11 @@ type DayRow = {
 type Employee = { id: number; fullName: string; employeeId: string };
 type Branch   = { id: number; name: string };
 
+const DEPARTMENTS = [
+  "Admin", "Front Office", "House Keeping", "Kitchen",
+  "Maintainance", "Security", "Surf Instructors",
+];
+
 const STATUS_COLOR: Record<string, { bg: string; text: string; dot: string }> = {
   present:  { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
   late:     { bg: "bg-amber-50",   text: "text-amber-700",   dot: "bg-amber-500"   },
@@ -69,10 +74,11 @@ export default function RawPunches() {
   const [page, setPage]       = useState(1);
 
   // Filters — default date = today
-  const [date, setDate]         = useState(todayStr());
-  const [search, setSearch]     = useState("");
-  const [empId, setEmpId]       = useState("");
-  const [branchId, setBranchId] = useState("");
+  const [date, setDate]           = useState(todayStr());
+  const [search, setSearch]       = useState("");
+  const [empId, setEmpId]         = useState("");
+  const [branchId, setBranchId]   = useState("");
+  const [department, setDepartment] = useState("");
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [branches, setBranches]   = useState<Branch[]>([]);
@@ -97,10 +103,11 @@ export default function RawPunches() {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(p), limit: String(PAGE_SIZE) });
-      if (date)     { params.set("startDate", date); params.set("endDate", date); }
-      if (search)   params.set("search", search);
-      if (empId)    params.set("employeeId", empId);
-      if (branchId) params.set("branchId", branchId);
+      if (date)       { params.set("startDate", date); params.set("endDate", date); }
+      if (search)     params.set("search", search);
+      if (empId)      params.set("employeeId", empId);
+      if (branchId)   params.set("branchId", branchId);
+      if (department) params.set("department", department);
 
       const r = await fetch(apiUrl(`/attendance/raw-punches?${params}`), { headers: authHeaders() });
       const d = await r.json();
@@ -111,10 +118,10 @@ export default function RawPunches() {
     } finally {
       setLoading(false);
     }
-  }, [date, search, empId, branchId]);
+  }, [date, search, empId, branchId, department]);
 
   // Re-fetch when dropdown filters change
-  useEffect(() => { setPage(1); fetchRows(1); }, [date, empId, branchId]);
+  useEffect(() => { setPage(1); fetchRows(1); }, [date, empId, branchId, department]);
   useEffect(() => { fetchRows(page); }, [page]);
 
   const handleSearch = () => { setPage(1); fetchRows(1); };
@@ -230,8 +237,22 @@ export default function RawPunches() {
             </div>
           </div>
 
+          {/* Department filter */}
+          <div className="min-w-[150px]">
+            <label className="block text-[10px] text-muted-foreground mb-0.5 font-medium uppercase tracking-wide">Department</label>
+            <div className="relative">
+              <Layers className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+              <select
+                className="w-full pl-6 py-1 pr-2 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                value={department} onChange={e => setDepartment(e.target.value)}>
+                <option value="">All Departments</option>
+                {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+          </div>
+
           {/* Branch filter */}
-          <div className="min-w-[160px]">
+          <div className="min-w-[150px]">
             <label className="block text-[10px] text-muted-foreground mb-0.5 font-medium uppercase tracking-wide">Branch</label>
             <div className="relative">
               <Building2 className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
