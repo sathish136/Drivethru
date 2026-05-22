@@ -428,9 +428,11 @@ async function processAttRows(rows: AttRow[]) {
   }
 
   // ── Insert raw punches into biometric_logs ───────────────────────────────
+  console.log(`[processAttRows] collected ${rawPunches.length} raw punches for biometric_logs`);
   if (rawPunches.length > 0) {
     // Auto-create device entries for any SN not yet registered
     const uniqueSns = [...new Set(rawPunches.map(p => p.sn).filter(s => s.length > 0))];
+    console.log(`[processAttRows] unique SNs: ${JSON.stringify(uniqueSns)}`);
     for (const sn of uniqueSns) {
       if (!snToDeviceId.has(sn)) {
         try {
@@ -492,6 +494,7 @@ async function processAttRows(rows: AttRow[]) {
       });
     }
 
+    console.log(`[processAttRows] logInserts ready: ${logInserts.length} (skipped: ${rawPunches.length - logInserts.length})`);
     if (logInserts.length > 0) {
       // Deduplicate: delete existing biometric_logs for each employee+date in this import
       const seen = new Set<string>();
@@ -580,9 +583,18 @@ router.post("/sync-sqlite", upload.single("db"), async (req, res) => {
     const Database = require("better-sqlite3");
     const sqlite = new Database(tmpPath, { readonly: true });
 
-    const rows: AttRow[] = sqlite.prepare(
-      "SELECT sn, pin, time, status FROM attlog ORDER BY time ASC"
-    ).all() as AttRow[];
+    // Try to include sn (serial number) for device matching; fall back if column missing
+    let rows: AttRow[];
+    try {
+      rows = sqlite.prepare(
+        "SELECT sn, pin, time, status FROM attlog ORDER BY time ASC"
+      ).all() as AttRow[];
+    } catch {
+      console.warn("[sync-sqlite] sn column not found, falling back to SELECT without sn");
+      rows = sqlite.prepare(
+        "SELECT pin, time, status FROM attlog ORDER BY time ASC"
+      ).all() as AttRow[];
+    }
 
     sqlite.close();
 
