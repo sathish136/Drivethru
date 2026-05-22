@@ -696,7 +696,7 @@ router.get("/raw-punches", async (req, res) => {
 
     // ── 1. Fetch attendance_records as PRIMARY source ──────────────────
     const attConds: any[] = [];
-    attConds.push(sql`${attendanceRecords.inTime1} IS NOT NULL`);
+    // Include all statuses — absent/leave/holiday rows have no punches but should still show
     if (employeeId)  attConds.push(eq(attendanceRecords.employeeId, Number(employeeId)));
     if (startDate)   attConds.push(sql`${attendanceRecords.date} >= ${String(startDate)}`);
     if (endDate)     attConds.push(sql`${attendanceRecords.date} <= ${String(endDate)}`);
@@ -840,7 +840,48 @@ router.get("/raw-punches", async (req, res) => {
       });
     }
 
-    // ── 4. Apply search, sort, paginate ────────────────────────────────
+    // ── 4. Inject absent entries for employees with no attendance record ─
+    // Only when at least startDate is provided (avoid generating for all-time)
+    if (startDate) {
+      const rangeStart = new Date(String(startDate) + "T00:00:00Z");
+      const rangeEnd   = endDate ? new Date(String(endDate) + "T00:00:00Z") : rangeStart;
+      const msPerDay   = 86_400_000;
+      const days       = Math.min(93, Math.round((rangeEnd.getTime() - rangeStart.getTime()) / msPerDay) + 1);
+
+      // Fetch all active employees matching current filters
+      const absEmpConds: any[] = [eq(employees.status, "active")];
+      if (employeeId) absEmpConds.push(eq(employees.id, Number(employeeId)));
+      if (branchId)   absEmpConds.push(eq(employees.branchId, Number(branchId)));
+      if (department) absEmpConds.push(eq(employees.department, String(department)));
+
+      const allEmps = await db
+        .select({ id: employees.id, fullName: employees.fullName, empCode: employees.employeeId, branchName: branches.name })
+        .from(employees)
+        .leftJoin(branches, eq(employees.branchId, branches.id))
+        .where(and(...absEmpConds));
+
+      for (let d = 0; d < days; d++) {
+        const date = new Date(rangeStart.getTime() + d * msPerDay).toISOString().slice(0, 10);
+        for (const emp of allEmps) {
+          const key = `${emp.id}|${date}`;
+          if (dayMap.has(key)) continue; // already has a real record
+          dayMap.set(key, {
+            employeeId:    emp.id,
+            employeeName:  emp.fullName,
+            employeeCode:  emp.empCode,
+            branchName:    emp.branchName || "",
+            date,
+            status:        "absent",
+            source:        "system",
+            punches:       [],
+            totalHours:    null,
+            overtimeHours: null,
+          });
+        }
+      }
+    }
+
+    // ── 5. Apply search, sort, paginate ────────────────────────────────
     let dayEntries = [...dayMap.values()];
     if (search) {
       const q = String(search).toLowerCase();
