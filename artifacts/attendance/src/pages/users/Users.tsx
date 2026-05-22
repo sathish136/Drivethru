@@ -23,7 +23,7 @@ const EMPTY_FORM: UserForm = {
 };
 
 export default function Users() {
-  const { data: users, isLoading } = useListUsers();
+  const { data: users, isLoading, refetch } = useListUsers();
   const { data: branches } = useListBranches();
   const create = useCreateUser();
   const update = useUpdateUser();
@@ -41,9 +41,9 @@ export default function Users() {
     if (editId) {
       const payload: any = { fullName: form.fullName, email: form.email, role: form.role, branchIds: form.branchIds, isActive: form.isActive };
       if (form.password) payload.password = form.password;
-      update.mutate({ id: editId, data: payload }, { onSuccess: () => setShowForm(false) });
+      update.mutate({ id: editId, data: payload }, { onSuccess: () => { setShowForm(false); refetch(); } });
     } else {
-      create.mutate({ data: { ...form } }, { onSuccess: () => setShowForm(false) });
+      create.mutate({ data: { ...form } }, { onSuccess: () => { setShowForm(false); refetch(); } });
     }
   }
   function toggleBranch(id: number) {
@@ -187,7 +187,7 @@ export default function Users() {
                           <button onClick={() => openEdit(u)} className="p-1.5 hover:bg-muted rounded text-muted-foreground">
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
-                          <button onClick={() => { if(confirm(`Delete user "${u.username}"?`)) remove.mutate({ id: u.id }); }}
+                          <button onClick={() => { if(confirm(`Delete user "${u.username}"?`)) remove.mutate({ id: u.id }, { onSuccess: () => refetch() }); }}
                             className="p-1.5 hover:bg-red-100 text-red-500 rounded">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
