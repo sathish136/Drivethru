@@ -1742,7 +1742,7 @@ export default function Employees() {
                 <table className="w-full text-xs">
                   <thead className="bg-muted/50 sticky top-0">
                     <tr>
-                      {["Emp ID","Name","Designation / Dept","Branch","Type","NIC / Passport","Status","Actions"].map(h => (
+                      {["Emp ID","Name","Designation / Dept","Branch","NIC / Passport","Status","Actions"].map(h => (
                         <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -1763,7 +1763,6 @@ export default function Employees() {
                             </div>
                             <div>
                               <div className="font-medium">{empDisplayName(emp)}</div>
-                              <div className="text-muted-foreground flex items-center gap-1"><Mail className="w-2.5 h-2.5" /> {emp.email}</div>
                             </div>
                           </div>
                         </td>
@@ -1773,11 +1772,6 @@ export default function Employees() {
                         </td>
                         <td className="px-3 py-2.5 text-muted-foreground">
                           <div className="flex items-center gap-1"><MapPin className="w-3 h-3 shrink-0" /><span className="truncate max-w-[120px]">{emp.branchName}</span></div>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <span className={cn("px-1.5 py-0.5 rounded text-xs font-medium", EMP_TYPE_STYLE[emp.employeeType] || EMP_TYPE_STYLE.permanent)}>
-                            {emp.employeeType?.[0]?.toUpperCase() + emp.employeeType?.slice(1) || "Permanent"}
-                          </span>
                         </td>
                         <td className="px-3 py-2.5 font-mono text-muted-foreground text-xs">
                           <div>{emp.nicNumber || "—"}</div>
