@@ -6,7 +6,7 @@ import {
   Calendar, Plus, Trash2, Copy, Check, Building, Clock,
   Fingerprint, Users, ChevronRight,
   Database, Download, AlertTriangle, CheckCircle2, Upload, X,
-  Banknote, Percent, BadgeIndianRupee, Save, RefreshCw, Edit2
+  Save, RefreshCw, Edit2
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -21,11 +21,10 @@ const TYPE_STYLE: Record<string, string> = {
 };
 
 
-type SettingsTab = "organisation" | "payroll" | "database";
+type SettingsTab = "organisation" | "database";
 
 const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ElementType; description: string; color: string }[] = [
   { key: "organisation", label: "Organisation",       icon: Building,     description: "Name, country, timezone",       color: "text-emerald-600" },
-  { key: "payroll",      label: "Payroll Settings",   icon: Banknote,     description: "Salary, deductions, EPF/ETF",   color: "text-orange-600"  },
   { key: "database",     label: "Backup & Restore",   icon: Download,     description: "Backup and restore all data",    color: "text-teal-600"    },
 ];
 
@@ -268,111 +267,10 @@ export default function Settings() {
 
   function setER<K extends keyof DeptShiftRule>(k: K, v: DeptShiftRule[K]) { setEditingRule(s => ({ ...s, [k]: v })); }
 
-  const DEFAULT_SALARY_SCALE: Record<string, number> = {
-    "General Manager":      150000,
-    "Operations Manager":   120000,
-    "F&B Manager":          100000,
-    "HR Manager":            90000,
-    "Accountant":            75000,
-    "Admin Officer":         65000,
-    "Kitchen Supervisor":    60000,
-    "Kitchen Staff":         45000,
-    "Room Supervisor":       60000,
-    "Room Attendant":        45000,
-    "Head Gardener":         50000,
-    "Gardener":              40000,
-    "Head Surf Instructor":  60000,
-    "Surf Instructor":       45000,
-    "Night Watcher":         40000,
-    "Security Officer":      40000,
-    "Cashier":               42000,
-    "Driver":                38000,
-  };
-
-  const [payrollCfg, setPayrollCfg] = useState({
-    epfEmployeePercent: 8, epfEmployerPercent: 12, etfEmployerPercent: 3,
-    transportAllowance: 5000,
-    housingAllowanceLow: 3000, housingAllowanceMid: 7000, housingAllowanceHigh: 10000,
-    housingMidThreshold: 50000, housingHighThreshold: 80000,
-    otherAllowances: 1500,
-    overtimeMultiplier: 1.5,
-    statutoryOtMultiplier: 2.0,
-    poyaOtMultiplier: 1.5,
-    publicHolidayOtMultiplier: 1.5,
-    offDayOtMultiplier: 1.5,
-    salaryScale: { ...DEFAULT_SALARY_SCALE } as Record<string, number>,
-  });
-  const [payrollLoading, setPayrollLoading] = useState(false);
-  const [payrollSaved, setPayrollSaved] = useState(false);
-  const [payrollError, setPayrollError] = useState<string | null>(null);
-  const [editingDesignation, setEditingDesignation] = useState<string | null>(null);
-  const [editSalaryValue, setEditSalaryValue] = useState("");
-
   useEffect(() => {
     if (activeTab === "database") { loadDbStats(); }
     if (activeTab === "hr") { loadDeptRules(); }
   }, [activeTab]);
-
-  useEffect(() => {
-    if (activeTab !== "payroll") return;
-    setPayrollLoading(true);
-    fetch(apiUrl("/payroll-settings"))
-      .then(r => r.json())
-      .then(d => {
-        if (d.id) {
-          setPayrollCfg({
-            epfEmployeePercent: d.epfEmployeePercent,
-            epfEmployerPercent: d.epfEmployerPercent,
-            etfEmployerPercent: d.etfEmployerPercent,
-            transportAllowance: d.transportAllowance,
-            housingAllowanceLow: d.housingAllowanceLow,
-            housingAllowanceMid: d.housingAllowanceMid,
-            housingAllowanceHigh: d.housingAllowanceHigh,
-            housingMidThreshold: d.housingMidThreshold,
-            housingHighThreshold: d.housingHighThreshold,
-            otherAllowances: d.otherAllowances,
-            overtimeMultiplier: d.overtimeMultiplier,
-            statutoryOtMultiplier: d.statutoryOtMultiplier ?? 2.0,
-            poyaOtMultiplier: d.poyaOtMultiplier ?? 1.5,
-            publicHolidayOtMultiplier: d.publicHolidayOtMultiplier ?? 1.5,
-            offDayOtMultiplier: d.offDayOtMultiplier ?? 1.5,
-            salaryScale: d.salaryScale || { ...DEFAULT_SALARY_SCALE },
-          });
-        }
-      })
-      .catch(() => setPayrollError("Failed to load payroll settings"))
-      .finally(() => setPayrollLoading(false));
-  }, [activeTab]);
-
-  async function savePayrollSettings() {
-    setPayrollLoading(true); setPayrollError(null);
-    try {
-      const r = await fetch(apiUrl("/payroll-settings"), {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payrollCfg),
-      });
-      const d = await r.json();
-      if (d.id) { setPayrollSaved(true); setTimeout(() => setPayrollSaved(false), 2500); }
-      else setPayrollError(d.message || "Save failed");
-    } catch { setPayrollError("Failed to save payroll settings"); }
-    setPayrollLoading(false);
-  }
-
-  function setPay(k: string, v: any) { setPayrollCfg(s => ({ ...s, [k]: v })); }
-
-  function startEditSalary(designation: string) {
-    setEditingDesignation(designation);
-    setEditSalaryValue(String(payrollCfg.salaryScale[designation] ?? 40000));
-  }
-
-  function saveSalary(designation: string) {
-    const val = parseInt(editSalaryValue);
-    if (!isNaN(val) && val > 0) {
-      setPayrollCfg(s => ({ ...s, salaryScale: { ...s.salaryScale, [designation]: val } }));
-    }
-    setEditingDesignation(null);
-  }
 
   const serverUrl = `${window.location.origin}/api/biometric/push`;
   function handleCopy() { navigator.clipboard.writeText(serverUrl); setCopied(true); setTimeout(() => setCopied(false), 2000); }
@@ -399,7 +297,7 @@ export default function Settings() {
     setTimeout(() => setter(false), 2500);
   }
 
-  const activeInfo = SETTINGS_TABS.find(t => t.key === activeTab)!;
+  const activeInfo = SETTINGS_TABS.find(t => t.key === activeTab) ?? SETTINGS_TABS[0];
 
   return (
     <div className="flex gap-5 max-w-6xl mx-auto h-full">
@@ -766,253 +664,6 @@ export default function Settings() {
                 </div>
               </div>
             )}
-          </div>
-        )}
-
-        {/* ── Payroll Config ────────────────────────────────── */}
-        {activeTab === "payroll" && (
-          <div className="space-y-4">
-            {payrollError && (
-              <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm bg-red-50 text-red-700 border border-red-200">
-                <X className="w-4 h-4 shrink-0" />{payrollError}
-                <button onClick={() => setPayrollError(null)} className="ml-auto"><X className="w-3.5 h-3.5" /></button>
-              </div>
-            )}
-
-            {/* Statutory Deductions */}
-            <Card className="p-5">
-              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border">
-                <Percent className="w-4 h-4 text-primary" />
-                <span className="text-sm font-bold">Statutory Deductions & Contributions</span>
-                <span className="text-xs text-muted-foreground ml-1">— These percentages are applied during payroll calculation</span>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div>
-                  <Label className="text-xs font-medium">EPF — Employee Contribution %</Label>
-                  <div className="relative mt-1">
-                    <Input type="number" step="0.01" min="0" max="100"
-                      value={payrollCfg.epfEmployeePercent}
-                      onChange={e => setPay("epfEmployeePercent", parseFloat(e.target.value))}
-                      className="pr-8" />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">Deducted from employee gross (default: 8%)</p>
-                </div>
-                <div>
-                  <Label className="text-xs font-medium">EPF — Employer Contribution %</Label>
-                  <div className="relative mt-1">
-                    <Input type="number" step="0.01" min="0" max="100"
-                      value={payrollCfg.epfEmployerPercent}
-                      onChange={e => setPay("epfEmployerPercent", parseFloat(e.target.value))}
-                      className="pr-8" />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">Employer cost, not deducted from employee (default: 12%)</p>
-                </div>
-                <div>
-                  <Label className="text-xs font-medium">ETF — Employer Contribution %</Label>
-                  <div className="relative mt-1">
-                    <Input type="number" step="0.01" min="0" max="100"
-                      value={payrollCfg.etfEmployerPercent}
-                      onChange={e => setPay("etfEmployerPercent", parseFloat(e.target.value))}
-                      className="pr-8" />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">Employer Provident Fund contribution (default: 3%)</p>
-                </div>
-              </div>
-              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
-                <strong>Note:</strong> APIT (income tax) is automatically calculated per Sri Lanka IRD tax slabs (6%–30%) and cannot be configured manually.
-              </div>
-            </Card>
-
-            {/* Earnings / Allowances */}
-            <Card className="p-5">
-              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border">
-                <BadgeIndianRupee className="w-4 h-4 text-primary" />
-                <span className="text-sm font-bold">Earnings & Allowances</span>
-                <span className="text-xs text-muted-foreground ml-1">— Fixed monthly amounts added to basic salary</span>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div>
-                  <Label className="text-xs font-medium">Transport Allowance (Rs.)</Label>
-                  <Input type="number" min="0"
-                    value={payrollCfg.transportAllowance}
-                    onChange={e => setPay("transportAllowance", parseInt(e.target.value))}
-                    className="mt-1" />
-                  <p className="text-[10px] text-muted-foreground mt-1">Fixed amount for all employees</p>
-                </div>
-                <div>
-                  <Label className="text-xs font-medium">Lunch Incentive Money (Rs.)</Label>
-                  <Input type="number" min="0"
-                    value={(payrollCfg as any).lunchIncentive ?? 0}
-                    onChange={e => setPay("lunchIncentive", parseInt(e.target.value))}
-                    className="mt-1" />
-                  <p className="text-[10px] text-muted-foreground mt-1">Fixed monthly lunch incentive</p>
-                </div>
-                <div>
-                  <Label className="text-xs font-medium">Other Allowances (Rs.)</Label>
-                  <Input type="number" min="0"
-                    value={payrollCfg.otherAllowances}
-                    onChange={e => setPay("otherAllowances", parseInt(e.target.value))}
-                    className="mt-1" />
-                  <p className="text-[10px] text-muted-foreground mt-1">Miscellaneous allowances</p>
-                </div>
-                <div>
-                  <Label className="text-xs font-medium">Weekday OT Multiplier</Label>
-                  <Input type="number" step="0.1" min="1" max="5"
-                    value={payrollCfg.overtimeMultiplier}
-                    onChange={e => setPay("overtimeMultiplier", parseFloat(e.target.value))}
-                    className="mt-1" />
-                  <p className="text-[10px] text-muted-foreground mt-1">e.g. 1.5 = 1.5× hourly rate for regular OT</p>
-                </div>
-              </div>
-            </Card>
-
-            {/* Holiday OT Multipliers */}
-            <Card className="p-5">
-              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border">
-                <Calendar className="w-4 h-4 text-amber-600" />
-                <span className="text-sm font-bold">Holiday OT Multipliers</span>
-                <span className="text-xs text-muted-foreground ml-1">— Rate applied when working on a holiday</span>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <Label className="text-xs font-medium">Statutory Holiday</Label>
-                  <div className="relative mt-1">
-                    <Input type="number" step="0.1" min="1" max="5"
-                      value={payrollCfg.statutoryOtMultiplier}
-                      onChange={e => setPay("statutoryOtMultiplier", parseFloat(e.target.value))}
-                      className="pr-6" />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">×</span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">Gazetted statutory days (default: 2.0×)</p>
-                </div>
-                <div>
-                  <Label className="text-xs font-medium">Poya Day</Label>
-                  <div className="relative mt-1">
-                    <Input type="number" step="0.1" min="1" max="5"
-                      value={payrollCfg.poyaOtMultiplier}
-                      onChange={e => setPay("poyaOtMultiplier", parseFloat(e.target.value))}
-                      className="pr-6" />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">×</span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">Full moon / Poya holidays (default: 1.5×)</p>
-                </div>
-                <div>
-                  <Label className="text-xs font-medium">Public Holiday</Label>
-                  <div className="relative mt-1">
-                    <Input type="number" step="0.1" min="1" max="5"
-                      value={payrollCfg.publicHolidayOtMultiplier}
-                      onChange={e => setPay("publicHolidayOtMultiplier", parseFloat(e.target.value))}
-                      className="pr-6" />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">×</span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">Other public holidays (default: 1.5×)</p>
-                </div>
-                <div>
-                  <Label className="text-xs font-medium">Off-Day (Sunday)</Label>
-                  <div className="relative mt-1">
-                    <Input type="number" step="0.1" min="1" max="5"
-                      value={payrollCfg.offDayOtMultiplier}
-                      onChange={e => setPay("offDayOtMultiplier", parseFloat(e.target.value))}
-                      className="pr-6" />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">×</span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">Working on weekly off-day (default: 1.5×)</p>
-                </div>
-              </div>
-            </Card>
-
-            {/* Deductions */}
-            <Card className="p-5">
-              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border">
-                <X className="w-4 h-4 text-red-600" />
-                <span className="text-sm font-bold">Deduction Rules</span>
-              </div>
-              <div className="p-3 bg-muted/30 rounded-lg">
-                <p className="text-xs font-medium text-muted-foreground mb-1">Automatic Deductions</p>
-                <p className="text-[10px] text-muted-foreground">
-                  <strong>Late:</strong> (Late minutes × Minute Rate) — Minute Rate = Basic ÷ (Working Days × 8 × 60)<br />
-                  <strong>Absence:</strong> (Basic ÷ Working Days) × Absent Days<br />
-                  <strong>Half-day:</strong> (Daily Rate ÷ 2) × Half-day Count<br />
-                  <strong>Incomplete hours:</strong> Shortfall minutes × Minute Rate (exempt: Surf Instructors)
-                </p>
-                <p className="text-[10px] text-blue-600 mt-1">All deductions are automatically computed from attendance records.</p>
-              </div>
-            </Card>
-
-            {/* Salary Scale */}
-            <Card className="p-5">
-              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border">
-                <Banknote className="w-4 h-4 text-primary" />
-                <span className="text-sm font-bold">Designation Salary Scale</span>
-                <span className="text-xs text-muted-foreground ml-1">— Basic salary per designation (click to edit)</span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-muted/40 border-b border-border">
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">Designation</th>
-                      <th className="px-3 py-2 text-right text-xs font-semibold text-muted-foreground">Basic Salary (Rs.)</th>
-                      <th className="px-3 py-2 w-24 text-center text-xs font-semibold text-muted-foreground">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {Object.entries(payrollCfg.salaryScale).sort((a, b) => b[1] - a[1]).map(([designation, salary]) => (
-                      <tr key={designation} className="hover:bg-muted/30 transition-colors">
-                        <td className="px-3 py-2 font-medium">{designation}</td>
-                        <td className="px-3 py-2 text-right">
-                          {editingDesignation === designation ? (
-                            <div className="flex items-center justify-end gap-1">
-                              <Input
-                                type="number"
-                                value={editSalaryValue}
-                                onChange={e => setEditSalaryValue(e.target.value)}
-                                onKeyDown={e => { if (e.key === "Enter") saveSalary(designation); if (e.key === "Escape") setEditingDesignation(null); }}
-                                className="h-7 w-32 text-right text-sm"
-                                autoFocus
-                              />
-                              <button onClick={() => saveSalary(designation)} className="p-1 rounded bg-primary/10 text-primary hover:bg-primary/20">
-                                <Check className="w-3.5 h-3.5" />
-                              </button>
-                              <button onClick={() => setEditingDesignation(null)} className="p-1 rounded hover:bg-muted">
-                                <X className="w-3.5 h-3.5 text-muted-foreground" />
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="font-mono font-semibold">Rs. {salary.toLocaleString("en-LK")}</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-center">
-                          {editingDesignation !== designation && (
-                            <button
-                              onClick={() => startEditSalary(designation)}
-                              className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-
-            <div className="flex justify-end gap-3">
-              {payrollError && <p className="text-xs text-red-600 self-center">{payrollError}</p>}
-              <Button
-                onClick={savePayrollSettings}
-                disabled={payrollLoading}
-                className="text-xs flex items-center gap-2"
-              >
-                {payrollLoading ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Saving…</> :
-                 payrollSaved ? <><Check className="w-3.5 h-3.5 text-green-400" />Saved!</> :
-                 <><Save className="w-3.5 h-3.5" />Save Payroll Configuration</>}
-              </Button>
-            </div>
           </div>
         )}
 
