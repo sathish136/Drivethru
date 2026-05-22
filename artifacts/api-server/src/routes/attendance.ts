@@ -687,85 +687,155 @@ router.put("/:id", async (req, res) => {
 });
 
 /* GET /attendance/raw-punches
-   Reads from biometric_logs — one row per employee per day,
-   up to 8 individual punch timestamps as p1…p8 columns.
-   Also joins attendance_records for status/totalHours/OT. */
+   Primary source: attendance_records (has all imported data with proper employee names).
+   Supplement: biometric_logs provides individual punch timestamps when available.
+   One row per employee per day — up to 8 punch slots. */
 router.get("/raw-punches", async (req, res) => {
   try {
     const { employeeId, startDate, endDate, search, page = "1", limit: limitQ } = req.query;
 
-    // Build WHERE clauses
-    const conditions: ReturnType<typeof eq>[] = [];
-    if (employeeId) conditions.push(eq(biometricLogs.employeeId, Number(employeeId)));
-    if (startDate)  conditions.push(sql`DATE(${biometricLogs.punchTime}) >= ${String(startDate)}`  as any);
-    if (endDate)    conditions.push(sql`DATE(${biometricLogs.punchTime}) <= ${String(endDate)}`    as any);
+    // ── 1. Fetch attendance_records as PRIMARY source ──────────────────
+    const attConds: any[] = [];
+    // Only rows that have at least one punch time (exclude pure absent/holiday)
+    attConds.push(sql`${attendanceRecords.inTime1} IS NOT NULL`);
+    if (employeeId) attConds.push(eq(attendanceRecords.employeeId, Number(employeeId)));
+    if (startDate)  attConds.push(sql`${attendanceRecords.date} >= ${String(startDate)}`);
+    if (endDate)    attConds.push(sql`${attendanceRecords.date} <= ${String(endDate)}`);
 
-    // Fetch raw logs with employee info
-    const logs = await db
-      .select({
-        logId:       biometricLogs.id,
-        employeeId:  biometricLogs.employeeId,
-        punchTime:   biometricLogs.punchTime,
-        punchType:   biometricLogs.punchType,
-        empName:     employees.fullName,
-        empCode:     employees.employeeId,
-        branchName:  branches.name,
-      })
-      .from(biometricLogs)
-      .leftJoin(employees, eq(biometricLogs.employeeId, employees.id))
-      .leftJoin(branches,  eq(employees.branchId, branches.id))
-      .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(biometricLogs.punchTime);
-
-    // Also fetch attendance_records for status / totalHours / OT
     const attRecs = await db
       .select({
+        attId:         attendanceRecords.id,
         employeeId:    attendanceRecords.employeeId,
         date:          attendanceRecords.date,
         status:        attendanceRecords.status,
         source:        attendanceRecords.source,
+        inTime1:       attendanceRecords.inTime1,
+        outTime1:      attendanceRecords.outTime1,
+        inTime2:       attendanceRecords.inTime2,
+        outTime2:      attendanceRecords.outTime2,
         totalHours:    attendanceRecords.totalHours,
         overtimeHours: attendanceRecords.overtimeHours,
+        empName:       employees.fullName,
+        empCode:       employees.employeeId,
+        branchName:    branches.name,
       })
-      .from(attendanceRecords);
+      .from(attendanceRecords)
+      .leftJoin(employees, eq(attendanceRecords.employeeId, employees.id))
+      .leftJoin(branches,  eq(employees.branchId, branches.id))
+      .where(and(...attConds))
+      .orderBy(attendanceRecords.date);
 
-    // Index attendance records by employeeId+date
-    const attMap = new Map<string, typeof attRecs[0]>();
-    for (const r of attRecs) {
-      attMap.set(`${r.employeeId}|${r.date}`, r);
-    }
+    // ── 2. Fetch biometric_logs for supplemental individual punch times ─
+    const bioConds: any[] = [sql`${biometricLogs.employeeId} > 0`];
+    if (employeeId) bioConds.push(eq(biometricLogs.employeeId, Number(employeeId)));
+    if (startDate)  bioConds.push(sql`DATE(${biometricLogs.punchTime}) >= ${String(startDate)}`);
+    if (endDate)    bioConds.push(sql`DATE(${biometricLogs.punchTime}) <= ${String(endDate)}`);
 
-    // Group biometric logs by employeeId + date
-    type DayKey = string; // `${employeeId}|${date}`
-    const dayMap = new Map<DayKey, {
-      employeeId:  number;
-      employeeName: string;
-      employeeCode: string;
-      branchName:  string;
-      date:        string;
-      punches:     { time: string; type: string }[];
-    }>();
+    const bioLogs = await db
+      .select({
+        employeeId: biometricLogs.employeeId,
+        punchTime:  biometricLogs.punchTime,
+        punchType:  biometricLogs.punchType,
+      })
+      .from(biometricLogs)
+      .where(and(...bioConds))
+      .orderBy(biometricLogs.punchTime);
 
-    for (const log of logs) {
+    // Index biometric_logs by employeeId+date
+    const bioMap = new Map<string, { time: string; type: string }[]>();
+    for (const log of bioLogs) {
+      if (!log.employeeId) continue;
       const pt = log.punchTime instanceof Date ? log.punchTime : new Date(log.punchTime);
       const date = pt.toISOString().slice(0, 10);
       const timeStr = pt.toTimeString().slice(0, 8); // HH:MM:SS
-      const key: DayKey = `${log.employeeId}|${date}`;
-
-      if (!dayMap.has(key)) {
-        dayMap.set(key, {
-          employeeId:  log.employeeId ?? 0,
-          employeeName: log.empName   || "Unknown",
-          employeeCode: log.empCode   || "",
-          branchName:  log.branchName || "",
-          date,
-          punches: [],
-        });
-      }
-      dayMap.get(key)!.punches.push({ time: timeStr, type: log.punchType });
+      const key = `${log.employeeId}|${date}`;
+      if (!bioMap.has(key)) bioMap.set(key, []);
+      bioMap.get(key)!.push({ time: timeStr, type: log.punchType });
     }
 
-    // Apply search filter
+    // ── 3. Build day map — one entry per employee+date ─────────────────
+    type DayKey = string;
+    const dayMap = new Map<DayKey, {
+      employeeId:   number;
+      employeeName: string;
+      employeeCode: string;
+      branchName:   string;
+      date:         string;
+      status:       string;
+      source:       string;
+      punches:      { time: string; type: string }[];
+      totalHours:   number | null;
+      overtimeHours: number | null;
+    }>();
+
+    // Normalise a time string: "HH:MM" → "HH:MM:00", "HH:MM:SS" stays as is
+    const normTime = (t: string | null): string | null => {
+      if (!t) return null;
+      return t.length === 5 ? t + ":00" : t;
+    };
+
+    for (const r of attRecs) {
+      const key: DayKey = `${r.employeeId}|${r.date}`;
+      const bioPunches = bioMap.get(key);
+
+      let punches: { time: string; type: string }[];
+      if (bioPunches && bioPunches.length > 0) {
+        // Prefer individual biometric_logs punch records
+        punches = bioPunches;
+      } else {
+        // Reconstruct from attendance_records in/out time slots
+        punches = [];
+        const t1 = normTime(r.inTime1);
+        const t2 = normTime(r.outTime1);
+        const t3 = normTime(r.inTime2);
+        const t4 = normTime(r.outTime2);
+        if (t1) punches.push({ time: t1, type: "in"  });
+        if (t2) punches.push({ time: t2, type: "out" });
+        if (t3) punches.push({ time: t3, type: "in"  });
+        if (t4) punches.push({ time: t4, type: "out" });
+      }
+
+      dayMap.set(key, {
+        employeeId:   r.employeeId,
+        employeeName: r.empName    || "Unknown",
+        employeeCode: r.empCode    || "",
+        branchName:   r.branchName || "",
+        date:         r.date,
+        status:       r.status,
+        source:       r.source,
+        punches,
+        totalHours:   r.totalHours    ?? null,
+        overtimeHours: r.overtimeHours ?? null,
+      });
+    }
+
+    // Also include any biometric_logs entries that have no attendance_record (live push data)
+    for (const [key, punches] of bioMap) {
+      if (dayMap.has(key)) continue; // already covered by attendance_records
+      const [empIdStr, date] = key.split("|");
+      const empId = Number(empIdStr);
+      if (!empId) continue;
+      // Look up employee info from the bio logs join — fetch on demand
+      const [empRow] = await db
+        .select({ empName: employees.fullName, empCode: employees.employeeId, branchName: branches.name })
+        .from(employees)
+        .leftJoin(branches, eq(employees.branchId, branches.id))
+        .where(eq(employees.id, empId));
+      dayMap.set(key, {
+        employeeId:   empId,
+        employeeName: empRow?.empName    || "Unknown",
+        employeeCode: empRow?.empCode    || "",
+        branchName:   empRow?.branchName || "",
+        date,
+        status:       "unknown",
+        source:       "biometric",
+        punches,
+        totalHours:   null,
+        overtimeHours: null,
+      });
+    }
+
+    // ── 4. Apply search, sort, paginate ────────────────────────────────
     let dayEntries = [...dayMap.values()];
     if (search) {
       const q = String(search).toLowerCase();
@@ -775,7 +845,6 @@ router.get("/raw-punches", async (req, res) => {
       );
     }
 
-    // Sort newest first, then by name
     dayEntries.sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName));
 
     const total = dayEntries.length;
@@ -783,22 +852,21 @@ router.get("/raw-punches", async (req, res) => {
     const l = limitQ ? Math.min(Number(limitQ), 500) : 100;
     const paginated = dayEntries.slice((p - 1) * l, p * l);
 
-    // Build final response rows — spread up to 8 punches into p1…p8
+    // ── 5. Build response rows ─────────────────────────────────────────
     const responseRows = paginated.map((entry, i) => {
-      const att = attMap.get(`${entry.employeeId}|${entry.date}`);
       const ps = entry.punches.slice(0, 8);
       return {
-        id:           i + (p - 1) * l + 1,
-        employeeId:   entry.employeeId,
-        employeeName: entry.employeeName,
-        employeeCode: entry.employeeCode,
-        branchName:   entry.branchName,
-        date:         entry.date,
-        status:       att?.status  || "unknown",
-        source:       att?.source  || "biometric",
-        totalHours:   att?.totalHours    ?? null,
-        overtimeHours: att?.overtimeHours ?? null,
-        punchCount:   entry.punches.length,
+        id:            i + (p - 1) * l + 1,
+        employeeId:    entry.employeeId,
+        employeeName:  entry.employeeName,
+        employeeCode:  entry.employeeCode,
+        branchName:    entry.branchName,
+        date:          entry.date,
+        status:        entry.status,
+        source:        entry.source,
+        totalHours:    entry.totalHours,
+        overtimeHours: entry.overtimeHours,
+        punchCount:    entry.punches.length,
         p1: ps[0]?.time ?? null,
         p2: ps[1]?.time ?? null,
         p3: ps[2]?.time ?? null,
