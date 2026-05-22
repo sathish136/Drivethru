@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { PageHeader, Card, Button, Input, Label } from "@/components/ui";
 import {
   RefreshCw, AlertTriangle, X, Search, CheckCircle2,
-  CalendarDays, Users, Edit2, Save, RotateCcw, Download, FileText,
+  CalendarDays, Users, Edit2, Save, Download, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import drivethruLogo from "@/assets/drivethru-logo.png";
@@ -38,7 +38,6 @@ export default function LeaveBalances() {
   const [editId, setEditId] = useState<number | null>(null);
   const [editState, setEditState] = useState<EditState>({ leaveBalance: "21", leaveUsed: "0" });
   const [saving, setSaving] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -85,18 +84,6 @@ export default function LeaveBalances() {
     } catch { setError("Failed to save balance"); }
     setSaving(false);
     setTimeout(() => setActionMsg(null), 3000);
-  }
-
-  async function syncUsed() {
-    setSyncing(true); setError(null);
-    try {
-      const r = await fetch(apiUrl("/leave-balances/sync-used"), { method: "POST" });
-      const d = await r.json();
-      setActionMsg(d.message || "Sync complete.");
-      load();
-    } catch { setError("Failed to sync used leave"); }
-    setSyncing(false);
-    setTimeout(() => setActionMsg(null), 4000);
   }
 
   const filtered = records.filter(r =>
@@ -230,7 +217,7 @@ export default function LeaveBalances() {
       </div>`;
 
     const el = document.createElement("div");
-    el.style.cssText = "position:absolute;top:0;left:-9999px;width:1123px;background:#fff";
+    el.style.cssText = "position:fixed;top:0;left:0;width:1123px;background:#fff;z-index:-9999;opacity:0.01;pointer-events:none";
     el.innerHTML = html;
     document.body.appendChild(el);
 
@@ -285,16 +272,6 @@ export default function LeaveBalances() {
         <Button variant="outline" onClick={load} className="gap-2 shrink-0">
           <RefreshCw className="w-4 h-4" /> Refresh
         </Button>
-        <Button
-          variant="outline"
-          onClick={syncUsed}
-          disabled={syncing}
-          className="gap-2 shrink-0"
-        >
-          {syncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
-          Sync Used Leave
-        </Button>
-
         {/* Export icon buttons */}
         <div className="flex items-center gap-1 border border-border rounded-lg overflow-hidden shrink-0">
           <button
