@@ -1779,7 +1779,7 @@ export default function Employees() {
                 <table className="w-full text-xs">
                   <thead className="bg-muted/50 sticky top-0">
                     <tr>
-                      {["Emp ID","Name","Designation / Dept","Branch","NIC / Passport","Status","Actions"].map(h => (
+                      {["Emp ID","Bio ID","Name","Designation / Dept","Branch","NIC / Passport","Status","Actions"].map(h => (
                         <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -1788,6 +1788,7 @@ export default function Employees() {
                     {employees.map((emp: any) => (
                       <tr key={emp.id} className="hover:bg-muted/30 transition-colors group">
                         <td className="px-3 py-2.5 font-mono text-xs text-primary font-medium">{emp.employeeId}</td>
+                        <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{emp.biometricId || "—"}</td>
                         <td className="px-3 py-2.5">
                           <div className="flex items-center gap-2.5">
                             <div className="w-8 h-8 rounded-full bg-muted/60 border border-border overflow-hidden shrink-0 flex items-center justify-center">
