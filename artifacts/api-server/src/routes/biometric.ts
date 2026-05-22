@@ -8,7 +8,7 @@ import { db } from "@workspace/db";
 import {
   biometricDevices, biometricLogs, branches, employees, attendanceRecords, shifts,
 } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { loadDeptRules, findRule, timeToMins, calcOtHours, isNightShiftRecord } from "../lib/hr-rules.js";
 
 const require = createRequire(join(process.cwd(), "package.json"));
@@ -243,7 +243,7 @@ function nightSlots(sortedPunches: string[], otStartTime = "05:00"): {
   };
 }
 
-type AttRow = { pin: string; time: string; status: string };
+type AttRow = { pin: string; time: string; status: string; sn?: string };
 
 async function processAttRows(rows: AttRow[]) {
   type Stats = { created: number; updated: number; skipped: number; unmatched: number };
@@ -268,6 +268,10 @@ async function processAttRows(rows: AttRow[]) {
   const shiftMap = new Map(allShifts.map(s => [s.id, s]));
   const deptRules = await loadDeptRules();
 
+  // Fetch existing devices for biometric_logs insertion
+  const allDevices = await db.select({ id: biometricDevices.id, sn: biometricDevices.serialNumber }).from(biometricDevices);
+  const snToDeviceId = new Map<string, number>(allDevices.map(d => [d.sn, d.id]));
+
   // Pre-compute night-shift indicator per PIN so we can group correctly
   const nightShiftPins = new Set<string>();
   for (const [pin, emp] of empByBiometricId) {
@@ -277,6 +281,10 @@ async function processAttRows(rows: AttRow[]) {
 
   type DayLog = { time: string; type: "in" | "out" };
   const grouped = new Map<string, Map<string, DayLog[]>>();
+
+  // Collect raw punches for biometric_logs
+  type RawPunch = { sn: string; pin: string; punchTime: Date; punchType: "in" | "out" };
+  const rawPunches: RawPunch[] = [];
 
   for (const row of rows) {
     const pin = (row.pin || "").trim();
@@ -289,6 +297,9 @@ async function processAttRows(rows: AttRow[]) {
 
     const status = String(row.status || "0");
     const punchType: "in" | "out" = (status === "1" || status === "255") ? "out" : "in";
+
+    // Collect raw punch for biometric_logs
+    rawPunches.push({ sn: (row.sn || "").trim(), pin, punchTime: new Date(timeStr), punchType });
 
     // For night-shift employees: punches before noon belong to the previous shift's work date
     const workDate = nightShiftPins.has(pin)
@@ -416,6 +427,97 @@ async function processAttRows(rows: AttRow[]) {
     }
   }
 
+  // ── Insert raw punches into biometric_logs ───────────────────────────────
+  if (rawPunches.length > 0) {
+    // Auto-create device entries for any SN not yet registered
+    const uniqueSns = [...new Set(rawPunches.map(p => p.sn).filter(s => s.length > 0))];
+    for (const sn of uniqueSns) {
+      if (!snToDeviceId.has(sn)) {
+        try {
+          const [firstBranch] = await db.select({ id: branches.id }).from(branches).limit(1);
+          const branchId = firstBranch?.id ?? 1;
+          const [newDev] = await db.insert(biometricDevices).values({
+            name: `ZK Device (${sn})`,
+            serialNumber: sn,
+            model: "ZKTeco",
+            ipAddress: "0.0.0.0",
+            branchId,
+            status: "offline" as const,
+          }).returning({ id: biometricDevices.id });
+          snToDeviceId.set(sn, newDev.id);
+        } catch {
+          const [existing] = await db.select({ id: biometricDevices.id })
+            .from(biometricDevices).where(eq(biometricDevices.serialNumber, sn));
+          if (existing) snToDeviceId.set(sn, existing.id);
+        }
+      }
+    }
+
+    // Ensure a virtual "SYSTEM-IMPORT" device exists for rows with no SN (e.g. txt imports)
+    const hasNoSn = rawPunches.some(p => !p.sn);
+    if (hasNoSn && !snToDeviceId.has("SYSTEM-IMPORT")) {
+      const [existingVirtual] = await db.select({ id: biometricDevices.id })
+        .from(biometricDevices).where(eq(biometricDevices.serialNumber, "SYSTEM-IMPORT"));
+      if (existingVirtual) {
+        snToDeviceId.set("SYSTEM-IMPORT", existingVirtual.id);
+      } else {
+        const [firstBranch] = await db.select({ id: branches.id }).from(branches).limit(1);
+        const branchId = firstBranch?.id ?? 1;
+        const [newDev] = await db.insert(biometricDevices).values({
+          name: "System Import",
+          serialNumber: "SYSTEM-IMPORT",
+          model: "Virtual",
+          ipAddress: "0.0.0.0",
+          branchId,
+          status: "offline" as const,
+        }).returning({ id: biometricDevices.id });
+        snToDeviceId.set("SYSTEM-IMPORT", newDev.id);
+      }
+    }
+
+    // Build insert list
+    const logInserts: (typeof biometricLogs.$inferInsert)[] = [];
+    for (const punch of rawPunches) {
+      const snKey = punch.sn || "SYSTEM-IMPORT";
+      const deviceId = snToDeviceId.get(snKey);
+      if (!deviceId) continue;
+      const emp = empByBiometricId.get(punch.pin);
+      logInserts.push({
+        deviceId,
+        employeeId: emp?.id ?? null,
+        biometricId: punch.pin,
+        punchTime: punch.punchTime,
+        punchType: punch.punchType,
+        processed: true,
+      });
+    }
+
+    if (logInserts.length > 0) {
+      // Deduplicate: delete existing biometric_logs for each employee+date in this import
+      const seen = new Set<string>();
+      for (const ins of logInserts) {
+        if (!ins.employeeId) continue;
+        const dateStr = (ins.punchTime instanceof Date ? ins.punchTime : new Date(ins.punchTime as string))
+          .toISOString().slice(0, 10);
+        const key = `${ins.employeeId}|${dateStr}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          await db.delete(biometricLogs).where(
+            and(
+              eq(biometricLogs.employeeId, ins.employeeId as number),
+              sql`DATE(${biometricLogs.punchTime}) = ${dateStr}`
+            )
+          );
+        }
+      }
+
+      // Batch insert in chunks of 200
+      for (let i = 0; i < logInserts.length; i += 200) {
+        await db.insert(biometricLogs).values(logInserts.slice(i, i + 200));
+      }
+    }
+  }
+
   return stats;
 }
 
@@ -479,7 +581,7 @@ router.post("/sync-sqlite", upload.single("db"), async (req, res) => {
     const sqlite = new Database(tmpPath, { readonly: true });
 
     const rows: AttRow[] = sqlite.prepare(
-      "SELECT pin, time, status FROM attlog ORDER BY time ASC"
+      "SELECT sn, pin, time, status FROM attlog ORDER BY time ASC"
     ).all() as AttRow[];
 
     sqlite.close();
