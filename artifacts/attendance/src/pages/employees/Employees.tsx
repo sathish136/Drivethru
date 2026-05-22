@@ -1066,6 +1066,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 function DepartmentsTab() {
   const qc = useQueryClient();
   const { data: depts, isLoading } = useGet(["departments"], "/departments");
+  const { data: emps } = useGet(["employees"], "/employees");
   const createD = useMut("POST", "/departments", ["departments"]);
   const updateD = useMutation({
     mutationFn: ({ id, data }: any) => fetch(apiUrl(`/departments/${id}`), {
@@ -1080,6 +1081,17 @@ function DepartmentsTab() {
   const [form, setForm] = useState({ name:"", code:"", description:"" });
   const [editId, setEditId] = useState<number|null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number|null>(null);
+
+  // Build a map: department name (lowercase) → employee count
+  const empCountByDept = useMemo(() => {
+    const map: Record<string, number> = {};
+    (Array.isArray(emps) ? emps : []).forEach((e: any) => {
+      const key = (e.department || "").toLowerCase().trim();
+      if (key) map[key] = (map[key] || 0) + 1;
+    });
+    return map;
+  }, [emps]);
 
   function openEdit(d: any) { setForm({ name: d.name, code: d.code, description: d.description || "" }); setEditId(d.id); setShowForm(true); }
   function openNew() { setForm({ name:"", code:"", description:"" }); setEditId(null); setShowForm(true); }
@@ -1111,28 +1123,51 @@ function DepartmentsTab() {
         {isLoading ? <p className="text-center py-8 text-sm text-muted-foreground">Loading...</p> : (
           <table className="w-full text-xs">
             <thead className="bg-muted/50">
-              <tr>{["Code","Department Name","Description","Status","Actions"].map(h => <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground">{h}</th>)}</tr>
+              <tr>{["Code","Department Name","Description","Employees","Status","Actions"].map(h => <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground">{h}</th>)}</tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {(Array.isArray(depts) ? depts : []).map((d: any) => (
-                <tr key={d.id} className="hover:bg-muted/30">
-                  <td className="px-3 py-2.5 font-mono font-medium text-primary">{d.code}</td>
-                  <td className="px-3 py-2.5 font-medium">{d.name}</td>
-                  <td className="px-3 py-2.5 text-muted-foreground">{d.description || "—"}</td>
-                  <td className="px-3 py-2.5">
-                    <span className={cn("px-2 py-0.5 rounded text-xs", d.isActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500")}>
-                      {d.isActive ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex gap-1">
-                      <button onClick={() => openEdit(d)} className="p-1.5 hover:bg-muted rounded"><Edit2 className="w-3 h-3" /></button>
-                      <button onClick={() => { if(confirm(`Delete "${d.name}"?`)) deleteD.mutate(d.id); }} className="p-1.5 hover:bg-red-100 text-red-500 rounded"><Trash2 className="w-3 h-3" /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {!(Array.isArray(depts) ? depts : []).length && <tr><td colSpan={5} className="text-center py-8 text-muted-foreground">No departments found.</td></tr>}
+              {(Array.isArray(depts) ? depts : []).map((d: any) => {
+                const count = empCountByDept[(d.name || "").toLowerCase().trim()] || 0;
+                const isConfirming = confirmDeleteId === d.id;
+                return (
+                  <tr key={d.id} className={cn("transition-colors", isConfirming ? "bg-red-50" : "hover:bg-muted/30")}>
+                    <td className="px-3 py-2.5 font-mono font-medium text-primary">{d.code}</td>
+                    <td className="px-3 py-2.5 font-medium">{d.name}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{d.description || "—"}</td>
+                    <td className="px-3 py-2.5">
+                      <span className={cn(
+                        "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold",
+                        count > 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                      )}>
+                        <Users className="w-3 h-3" />
+                        {count}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className={cn("px-2 py-0.5 rounded text-xs", d.isActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500")}>
+                        {d.isActive ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      {isConfirming ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-red-600 font-medium whitespace-nowrap">Delete?</span>
+                          <button onClick={() => { deleteD.mutate(d.id); setConfirmDeleteId(null); }}
+                            className="flex items-center gap-1 px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-xs font-medium">Yes</button>
+                          <button onClick={() => setConfirmDeleteId(null)}
+                            className="flex items-center gap-1 px-2 py-1 rounded bg-muted hover:bg-muted/80 text-xs font-medium">No</button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-1">
+                          <button onClick={() => openEdit(d)} className="p-1.5 hover:bg-muted rounded"><Edit2 className="w-3 h-3" /></button>
+                          <button onClick={() => setConfirmDeleteId(d.id)} className="p-1.5 hover:bg-red-100 text-red-500 rounded"><Trash2 className="w-3 h-3" /></button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {!(Array.isArray(depts) ? depts : []).length && <tr><td colSpan={6} className="text-center py-8 text-muted-foreground">No departments found.</td></tr>}
             </tbody>
           </table>
         )}
