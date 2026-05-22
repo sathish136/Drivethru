@@ -355,7 +355,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
   const nextTab = tabIdx < tabKeys.length - 1 ? tabKeys[tabIdx + 1] : null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden">
+    <div className="flex flex-col h-full min-h-0 overflow-hidden -m-4 md:-m-6">
 
       {/* Page Header */}
       <div className="bg-background border-b border-border shrink-0">
@@ -1664,6 +1664,17 @@ export default function Employees() {
     a.download = "employees.csv"; a.click();
   }
 
+  if (drawerOpen) {
+    return (
+      <EmployeeDrawer
+        emp={drawerEmp}
+        branches={branches}
+        onClose={() => setDrawerOpen(false)}
+        onSaved={() => { setDrawerOpen(false); refetch(); }}
+      />
+    );
+  }
+
   return (
     <div className="space-y-4">
       <PageHeader title="Employee Management" description="Manage staff profiles, departments, and designations." />
@@ -1836,14 +1847,6 @@ export default function Employees() {
       {activeTab === "Designations" && <DesignationsTab />}
       {activeTab === "Payroll" && <PayrollTab />}
 
-      {drawerOpen && (
-        <EmployeeDrawer
-          emp={drawerEmp}
-          branches={branches}
-          onClose={() => setDrawerOpen(false)}
-          onSaved={() => { setDrawerOpen(false); refetch(); }}
-        />
-      )}
     </div>
   );
 }
