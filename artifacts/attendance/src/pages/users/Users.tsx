@@ -2,13 +2,13 @@ import { useState } from "react";
 import { useListUsers, useCreateUser, useUpdateUser, useDeleteUser, useListBranches } from "@workspace/api-client-react";
 import { PageHeader, Card, Button, Input, Select, Label } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { Plus, Edit2, Trash2, ShieldCheck, Eye, Building2 } from "lucide-react";
+import { Plus, Edit2, Trash2, ShieldCheck, Building2, X, Check } from "lucide-react";
 
 const ROLE_LABELS: Record<string, { label: string; cls: string }> = {
-  super_admin: { label: "Super Admin", cls: "bg-red-100 text-red-700" },
+  super_admin:    { label: "Super Admin",    cls: "bg-red-100 text-red-700"   },
   regional_admin: { label: "Regional Admin", cls: "bg-blue-100 text-blue-700" },
-  branch_admin: { label: "Branch Admin", cls: "bg-green-100 text-green-700" },
-  viewer: { label: "Viewer", cls: "bg-gray-100 text-gray-600" },
+  branch_admin:   { label: "Branch Admin",   cls: "bg-green-100 text-green-700" },
+  viewer:         { label: "Viewer",         cls: "bg-gray-100 text-gray-600"  },
 };
 
 interface UserForm {
@@ -28,26 +28,37 @@ export default function Users() {
   const create = useCreateUser();
   const update = useUpdateUser();
   const remove = useDeleteUser();
-  const [showForm, setShowForm] = useState(false);
-  const [editId, setEditId] = useState<number | null>(null);
-  const [form, setForm] = useState<UserForm>(EMPTY_FORM);
+
+  const [showForm,   setShowForm]   = useState(false);
+  const [editId,     setEditId]     = useState<number | null>(null);
+  const [form,       setForm]       = useState<UserForm>(EMPTY_FORM);
+  const [confirmId,  setConfirmId]  = useState<number | null>(null);
 
   function openCreate() { setForm(EMPTY_FORM); setEditId(null); setShowForm(true); }
   function openEdit(u: any) {
-    setForm({ username: u.username, fullName: u.fullName, email: u.email, password: "", role: u.role, branchIds: u.branchIds, isActive: u.isActive });
+    setForm({ username: u.username, fullName: u.fullName, email: u.email, password: "",
+              role: u.role, branchIds: u.branchIds, isActive: u.isActive });
     setEditId(u.id); setShowForm(true);
   }
+
   function handleSave() {
     if (editId) {
-      const payload: any = { fullName: form.fullName, email: form.email, role: form.role, branchIds: form.branchIds, isActive: form.isActive };
+      const payload: any = { fullName: form.fullName, email: form.email, role: form.role,
+                              branchIds: form.branchIds, isActive: form.isActive };
       if (form.password) payload.password = form.password;
       update.mutate({ id: editId, data: payload }, { onSuccess: () => { setShowForm(false); refetch(); } });
     } else {
       create.mutate({ data: { ...form } }, { onSuccess: () => { setShowForm(false); refetch(); } });
     }
   }
+
+  function handleDelete(id: number) {
+    remove.mutate({ id }, { onSuccess: () => { setConfirmId(null); refetch(); } });
+  }
+
   function toggleBranch(id: number) {
-    setForm(f => ({ ...f, branchIds: f.branchIds.includes(id) ? f.branchIds.filter(b => b !== id) : [...f.branchIds, id] }));
+    setForm(f => ({ ...f, branchIds: f.branchIds.includes(id)
+      ? f.branchIds.filter(b => b !== id) : [...f.branchIds, id] }));
   }
 
   const branchMap = new Map((branches || []).map(b => [b.id, b.name]));
@@ -72,20 +83,24 @@ export default function Users() {
             {!editId && (
               <div>
                 <Label className="text-xs">Username</Label>
-                <Input placeholder="username" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} />
+                <Input placeholder="username" value={form.username}
+                  onChange={e => setForm(f => ({ ...f, username: e.target.value }))} />
               </div>
             )}
             <div>
               <Label className="text-xs">Full Name</Label>
-              <Input placeholder="Full Name" value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))} />
+              <Input placeholder="Full Name" value={form.fullName}
+                onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))} />
             </div>
             <div>
               <Label className="text-xs">Email</Label>
-              <Input type="email" placeholder="user@org.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+              <Input type="email" placeholder="user@org.com" value={form.email}
+                onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
             </div>
             <div>
               <Label className="text-xs">{editId ? "New Password (leave blank to keep)" : "Password"}</Label>
-              <Input type="password" placeholder={editId ? "Leave blank to keep" : "Set password"} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+              <Input type="password" placeholder={editId ? "Leave blank to keep" : "Set password"}
+                value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
             </div>
             <div>
               <Label className="text-xs">Role</Label>
@@ -97,25 +112,31 @@ export default function Users() {
               </Select>
             </div>
             <div className="flex items-center gap-2 pt-5">
-              <input type="checkbox" checked={form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} className="accent-primary" id="userActive" />
+              <input type="checkbox" checked={form.isActive}
+                onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))}
+                className="accent-primary" id="userActive" />
               <label htmlFor="userActive" className="text-sm">Active</label>
             </div>
           </div>
 
           {form.role !== "super_admin" && (
             <div className="mt-4">
-              <Label className="text-xs mb-2 block">Allocated Branches <span className="text-muted-foreground">(user will only see data from these branches)</span></Label>
+              <Label className="text-xs mb-2 block">
+                Allocated Branches{" "}
+                <span className="text-muted-foreground">(user will only see data from these branches)</span>
+              </Label>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-48 overflow-y-auto border border-border rounded-lg p-3 bg-card">
                 {(branches || []).map(b => (
                   <label key={b.id} className={cn(
                     "flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-xs transition-colors",
                     form.branchIds.includes(b.id) ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"
                   )}>
-                    <input type="checkbox" checked={form.branchIds.includes(b.id)} onChange={() => toggleBranch(b.id)} className="accent-primary" />
+                    <input type="checkbox" checked={form.branchIds.includes(b.id)}
+                      onChange={() => toggleBranch(b.id)} className="accent-primary" />
                     <span className="truncate">{b.name}</span>
                     <span className={cn("ml-auto text-xs px-1 py-0.5 rounded shrink-0",
                       b.type === "head_office" ? "bg-purple-100 text-purple-600" :
-                      b.type === "regional" ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-600"
+                      b.type === "regional"    ? "bg-blue-100 text-blue-600"   : "bg-gray-100 text-gray-600"
                     )}>
                       {b.type === "head_office" ? "HO" : b.type === "regional" ? "RO" : "SB"}
                     </span>
@@ -151,8 +172,9 @@ export default function Users() {
               <tbody className="divide-y divide-border">
                 {(users || []).map((u: any) => {
                   const roleInfo = ROLE_LABELS[u.role] || ROLE_LABELS.viewer;
+                  const isConfirming = confirmId === u.id;
                   return (
-                    <tr key={u.id} className="hover:bg-muted/30 transition-colors">
+                    <tr key={u.id} className={cn("transition-colors", isConfirming ? "bg-red-50" : "hover:bg-muted/30")}>
                       <td className="px-3 py-2.5 font-mono font-medium">{u.username}</td>
                       <td className="px-3 py-2.5 font-medium whitespace-nowrap">{u.fullName}</td>
                       <td className="px-3 py-2.5 text-muted-foreground">{u.email}</td>
@@ -161,16 +183,20 @@ export default function Users() {
                       </td>
                       <td className="px-3 py-2.5">
                         {u.role === "super_admin" ? (
-                          <span className="flex items-center gap-1 text-muted-foreground"><ShieldCheck className="w-3 h-3" /> All Branches</span>
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            <ShieldCheck className="w-3 h-3" /> All Branches
+                          </span>
                         ) : u.branchIds?.length ? (
                           <div className="flex flex-wrap gap-1 max-w-[200px]">
-                            {u.branchIds.slice(0,3).map((id: number) => (
+                            {u.branchIds.slice(0, 3).map((id: number) => (
                               <span key={id} className="flex items-center gap-1 bg-muted px-1.5 py-0.5 rounded text-xs">
                                 <Building2 className="w-2.5 h-2.5" />
                                 {branchMap.get(id) || id}
                               </span>
                             ))}
-                            {u.branchIds.length > 3 && <span className="text-muted-foreground">+{u.branchIds.length - 3} more</span>}
+                            {u.branchIds.length > 3 && (
+                              <span className="text-muted-foreground">+{u.branchIds.length - 3} more</span>
+                            )}
                           </div>
                         ) : <span className="text-muted-foreground">No branches</span>}
                       </td>
@@ -183,15 +209,36 @@ export default function Users() {
                         {u.lastLogin ? new Date(u.lastLogin).toLocaleString() : "Never"}
                       </td>
                       <td className="px-3 py-2.5">
-                        <div className="flex gap-1">
-                          <button onClick={() => openEdit(u)} className="p-1.5 hover:bg-muted rounded text-muted-foreground">
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => { if(confirm(`Delete user "${u.username}"?`)) remove.mutate({ id: u.id }, { onSuccess: () => refetch() }); }}
-                            className="p-1.5 hover:bg-red-100 text-red-500 rounded">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        {isConfirming ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-red-600 font-medium whitespace-nowrap">Delete?</span>
+                            <button
+                              onClick={() => handleDelete(u.id)}
+                              disabled={remove.isPending}
+                              className="flex items-center gap-1 px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-xs font-medium disabled:opacity-50"
+                            >
+                              <Check className="w-3 h-3" />
+                              {remove.isPending ? "…" : "Yes"}
+                            </button>
+                            <button
+                              onClick={() => setConfirmId(null)}
+                              className="flex items-center gap-1 px-2 py-1 rounded bg-muted hover:bg-muted/80 text-xs font-medium"
+                            >
+                              <X className="w-3 h-3" />No
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-1">
+                            <button onClick={() => openEdit(u)}
+                              className="p-1.5 hover:bg-muted rounded text-muted-foreground">
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => setConfirmId(u.id)}
+                              className="p-1.5 hover:bg-red-100 text-red-500 rounded">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
