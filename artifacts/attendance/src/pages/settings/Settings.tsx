@@ -141,7 +141,7 @@ export default function Settings() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `attendance-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `attendance-backup-${new Date().toISOString().slice(0, 10)}.sql`;
       a.click();
       URL.revokeObjectURL(url);
     } catch { alert("Backup export failed. Please check server connection."); }
@@ -1419,15 +1419,18 @@ export default function Settings() {
               ) : dbStats ? (
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                   {[
-                    { label: "Companies",       value: dbStats.companies,      icon: "🏢" },
-                    { label: "Branches",        value: dbStats.branches,       icon: "🏬" },
-                    { label: "Departments",     value: dbStats.departments,    icon: "📂" },
-                    { label: "Designations",    value: dbStats.designations,   icon: "🏷️" },
-                    { label: "Shifts",          value: dbStats.shifts,         icon: "🕐" },
-                    { label: "Employees",       value: dbStats.employees,      icon: "👥" },
-                    { label: "Holidays",        value: dbStats.holidays,       icon: "📅" },
-                    { label: "Payroll Records", value: dbStats.payrollRecords, icon: "💰" },
-                    { label: "Loans",           value: dbStats.staffLoans,     icon: "🏦" },
+                    { label: "Branches",        value: dbStats.branches,        icon: "🏬" },
+                    { label: "Employees",       value: dbStats.employees,       icon: "👥" },
+                    { label: "Attendance",      value: dbStats.attendance,      icon: "🕐" },
+                    { label: "Departments",     value: dbStats.departments,     icon: "📂" },
+                    { label: "Designations",    value: dbStats.designations,    icon: "🏷️" },
+                    { label: "Shifts",          value: dbStats.shifts,          icon: "🔄" },
+                    { label: "Holidays",        value: dbStats.holidays,        icon: "📅" },
+                    { label: "Payroll Records", value: dbStats.payrollRecords,  icon: "💰" },
+                    { label: "Loans",           value: dbStats.staffLoans,      icon: "🏦" },
+                    { label: "Incentives",      value: dbStats.staffIncentives, icon: "🎁" },
+                    { label: "Leave Balances",  value: dbStats.leaveBalances,   icon: "🌴" },
+                    { label: "Users",           value: dbStats.users,           icon: "👤" },
                   ].map(item => (
                     <div key={item.label} className="bg-muted rounded-xl p-3 text-center border border-border">
                       <div className="text-lg mb-0.5">{item.icon}</div>
@@ -1448,8 +1451,8 @@ export default function Settings() {
                 <span className="text-sm font-bold text-foreground">Export Backup</span>
               </div>
               <p className="text-xs text-muted-foreground mb-4">
-                Download a full JSON backup of all your data including employees, branches, payroll records, loans, settings, and holidays.
-                Store this file safely — you can use it to restore the system at any time.
+                Downloads a complete SQL dump of every table in the database using <code className="bg-muted px-1 rounded text-[11px]">pg_dump</code>.
+                Store this file safely — it can be used to fully restore the system at any time.
               </p>
               <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 flex items-start gap-3 mb-4">
                 <div className="w-8 h-8 bg-teal-100 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
@@ -1458,11 +1461,11 @@ export default function Settings() {
                 <div>
                   <p className="text-xs font-semibold text-teal-800">What's included in the backup:</p>
                   <ul className="text-xs text-teal-700 mt-1 space-y-0.5 list-disc list-inside">
-                    <li>Companies, branches, departments, designations, shifts</li>
-                    <li>All employee records and profiles</li>
-                    <li>Payroll records and payroll settings</li>
-                    <li>Staff loans and advances</li>
-                    <li>Holidays and system settings</li>
+                    <li>All tables — branches, employees, attendance, shifts</li>
+                    <li>Payroll records, settings, loans, incentives</li>
+                    <li>Leave balances, holidays, biometric devices &amp; logs</li>
+                    <li>HR settings, weekoffs, system users</li>
+                    <li>Complete schema structure (CREATE TABLE statements)</li>
                   </ul>
                 </div>
               </div>
@@ -1472,7 +1475,7 @@ export default function Settings() {
                 disabled={backupDownloading}
               >
                 <Download className="w-4 h-4" />
-                {backupDownloading ? "Preparing download..." : "Download Backup (.json)"}
+                {backupDownloading ? "Preparing download..." : "Download Backup (.sql)"}
               </Button>
             </Card>
 
@@ -1518,7 +1521,7 @@ export default function Settings() {
                   <input
                     ref={restoreInputRef}
                     type="file"
-                    accept=".json"
+                    accept=".sql"
                     className="hidden"
                     onChange={e => { setRestoreFile(e.target.files?.[0] ?? null); setRestoreMsg(null); }}
                   />
@@ -1527,7 +1530,7 @@ export default function Settings() {
                         <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />{restoreFile.name}
                         <span className="text-muted-foreground font-normal">({(restoreFile.size / 1024).toFixed(1)} KB)</span>
                       </span>
-                    : <span>Click to select a backup file (.json)…</span>
+                    : <span>Click to select a backup file (.sql)…</span>
                   }
                 </div>
                 <div className="flex gap-2 shrink-0">
@@ -1560,8 +1563,8 @@ export default function Settings() {
                   <p className="text-xs font-bold text-red-700 mb-1">Important Notes</p>
                   <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
                     <li>Always download a fresh backup before restoring to avoid losing recent data.</li>
-                    <li>The restore process replaces all existing records — there is no partial restore.</li>
-                    <li>Attendance check-in records are <strong>not included</strong> in the backup (use the check-in import separately).</li>
+                    <li>The restore runs the full SQL dump against the live database — all tables are completely replaced.</li>
+                    <li>Only <code className="bg-muted px-1 rounded">.sql</code> files generated by this system's Export Backup are supported.</li>
                     <li>After restore, refresh the page to see updated data.</li>
                   </ul>
                 </div>
