@@ -12,7 +12,7 @@ import { eq, and } from "drizzle-orm";
 
 // ── Data from the provided table ─────────────────────────────────────────────
 // "Not Found" rows (no Days Left/Used given) are omitted — they default to 21/0 in the UI.
-const YEAR = 2025;
+const YEAR = 2026;
 
 const RECORDS: { code: string; balance: number; used: number }[] = [
   { code: "SC-EMP-00004", balance: 21,   used: 0    },
