@@ -1344,6 +1344,26 @@ function PayrollTab() {
   const { data } = useListEmployees({ limit: 500 });
   const allEmployees: any[] = (data?.employees || []).filter((e: any) => e.status === "active");
 
+  // Salary assignments from Payroll Settings → Salary Structures
+  const { data: salaryAssignmentsRaw } = useGet(["salary-assignments-all"], "/salary-structures/assignments/all");
+  // Build map: employee DB id → basicAmount
+  const salaryAssignMap = useMemo(() => {
+    const map: Record<number, number> = {};
+    (Array.isArray(salaryAssignmentsRaw) ? salaryAssignmentsRaw : []).forEach((row: any) => {
+      const empId = row.assignment?.employeeId ?? row.employee?.id;
+      const basic = row.assignment?.basicAmount;
+      if (empId != null && basic != null) map[empId] = Number(basic);
+    });
+    return map;
+  }, [salaryAssignmentsRaw]);
+
+  // Resolve basic salary: assignment → employee.basicSalary → SALARY_SCALE → 0
+  function getBasic(emp: any): number {
+    if (salaryAssignMap[emp.id] != null) return salaryAssignMap[emp.id];
+    if (emp.basicSalary) return Number(emp.basicSalary);
+    return SALARY_SCALE[emp.designation] ?? 0;
+  }
+
   const loadPayrollStatus = async () => {
     setLoadingPayroll(true);
     try {
@@ -1372,10 +1392,10 @@ function PayrollTab() {
     }
     return [...list].sort((a: any, b: any) => {
       const av = sortField === "name" ? empDisplayName(a) :
-                 sortField === "salary" ? (SALARY_SCALE[a.designation] ?? 40000) :
+                 sortField === "salary" ? getBasic(a) :
                  sortField === "type" ? (a.employeeType || "") : empDisplayName(a);
       const bv = sortField === "name" ? empDisplayName(b) :
-                 sortField === "salary" ? (SALARY_SCALE[b.designation] ?? 40000) :
+                 sortField === "salary" ? getBasic(b) :
                  sortField === "type" ? (b.employeeType || "") : empDisplayName(b);
       if (typeof av === "number") return sortAsc ? av - bv : bv - av;
       return sortAsc ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
@@ -1425,7 +1445,7 @@ function PayrollTab() {
     setGenerating(false);
   };
 
-  const totalBasic = allEmployees.reduce((s: number, e: any) => s + (SALARY_SCALE[e.designation] ?? 40000), 0);
+  const totalBasic = allEmployees.reduce((s: number, e: any) => s + getBasic(e), 0);
   const withPayroll = allEmployees.filter((e: any) => payrollMap[e.id]?.hasPayroll).length;
 
   const toggleSort = (f: string) => {
@@ -1564,7 +1584,7 @@ function PayrollTab() {
               ) : (
                 filtered.map((emp: any, i: number) => {
                   const ps = payrollMap[emp.id];
-                  const basicSalary = SALARY_SCALE[emp.designation] ?? 40000;
+                  const basicSalary = getBasic(emp);
                   const isSelected = selected.has(emp.id);
                   return (
                     <tr
