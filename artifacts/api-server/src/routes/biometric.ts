@@ -55,6 +55,14 @@ router.delete("/devices/:id", async (req, res) => {
   } catch (e) { res.status(500).json({ message: "Error", success: false }); }
 });
 
+router.get("/adms-status", async (_req, res) => {
+  try {
+    const online = await db.select({ id: biometricDevices.id, serialNumber: biometricDevices.serialNumber, name: biometricDevices.name, ipAddress: biometricDevices.ipAddress, lastSync: biometricDevices.lastSync })
+      .from(biometricDevices).where(eq(biometricDevices.status, "online"));
+    res.json({ active: true, port: 8081, onlineCount: online.length, devices: online.map(d => ({ ...d, lastSync: d.lastSync?.toISOString() || null })) });
+  } catch { res.json({ active: false, port: 8081, onlineCount: 0, devices: [] }); }
+});
+
 router.post("/devices/:id/test", async (req, res) => {
   try {
     const [dev] = await db.select().from(biometricDevices).where(eq(biometricDevices.id, Number(req.params.id)));
@@ -245,7 +253,7 @@ function nightSlots(sortedPunches: string[], otStartTime = "05:00"): {
 
 type AttRow = { pin: string; time: string; status: string; sn?: string };
 
-async function processAttRows(rows: AttRow[]) {
+export async function processAttRows(rows: AttRow[]) {
   type Stats = { created: number; updated: number; skipped: number; unmatched: number };
   const stats: Stats = { created: 0, updated: 0, skipped: 0, unmatched: 0 };
 

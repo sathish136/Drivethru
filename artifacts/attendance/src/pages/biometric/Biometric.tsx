@@ -1,8 +1,19 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useListBiometricDevices, useCreateBiometricDevice, useUpdateBiometricDevice, useDeleteBiometricDevice, useTestBiometricDevice, useListBranches, useListBiometricLogs } from "@workspace/api-client-react";
 import { PageHeader, Card, Button, Input, Select, Label } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { Plus, Edit2, Trash2, Wifi, WifiOff, AlertCircle, RefreshCw, Info, Copy, Upload, Database, CheckCircle2, XCircle, FileText, User, Calendar, Clock } from "lucide-react";
+import { Plus, Edit2, Trash2, Wifi, WifiOff, AlertCircle, RefreshCw, Info, Copy, Upload, Database, CheckCircle2, XCircle, FileText, User, Calendar, Clock, Radio, Server } from "lucide-react";
+
+const BASE_API = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+async function fetchAdmsStatus(): Promise<{ active: boolean; port: number; onlineCount: number; devices: { serialNumber: string; name: string; ipAddress: string; lastSync: string | null }[] }> {
+  try {
+    const r = await fetch(`${BASE_API}/api/biometric/adms-status`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("auth_token") || ""}` },
+    });
+    return r.ok ? r.json() : { active: false, port: 8081, onlineCount: 0, devices: [] };
+  } catch { return { active: false, port: 8081, onlineCount: 0, devices: [] }; }
+}
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -12,6 +23,7 @@ const DEVICE_STATUS: Record<string, { cls: string; icon: React.ElementType }> = 
   error: { cls: "bg-red-100 text-red-700", icon: AlertCircle },
 };
 
+type AdmsStatus = { active: boolean; port: number; onlineCount: number; devices: { serialNumber: string; name: string; ipAddress: string; lastSync: string | null }[] };
 type Tab = "devices" | "logs" | "pdf-import" | "sqlite" | "setup";
 
 interface DeviceForm {
@@ -28,10 +40,39 @@ const EMPTY_FORM: DeviceForm = {
 
 export default function Biometric() {
   const [tab, setTab] = useState<Tab>("devices");
+  const [admsStatus, setAdmsStatus] = useState<AdmsStatus | null>(null);
+
+  useEffect(() => {
+    fetchAdmsStatus().then(setAdmsStatus);
+    const id = setInterval(() => fetchAdmsStatus().then(setAdmsStatus), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   return (
     <div className="space-y-4">
       <PageHeader title="Biometric Devices" description="Manage ZKTeco biometric devices and ZK Push ADMS configuration." />
+
+      {admsStatus && (
+        <div className={cn(
+          "flex items-center gap-3 px-4 py-2.5 rounded-lg border text-xs font-medium",
+          admsStatus.active
+            ? "bg-green-50 border-green-200 text-green-800"
+            : "bg-amber-50 border-amber-200 text-amber-800"
+        )}>
+          <Radio className={cn("w-3.5 h-3.5 flex-shrink-0", admsStatus.active ? "text-green-600" : "text-amber-600")} />
+          <span>
+            {admsStatus.active
+              ? <>ZK Push ADMS server <strong>active on port 8081</strong> — point your ZKTeco devices here and they will appear automatically.</>
+              : <>ZK Push ADMS server is <strong>not running</strong>. Restart the API server to enable auto-discovery.</>
+            }
+          </span>
+          {admsStatus.active && admsStatus.onlineCount > 0 && (
+            <span className="ml-auto flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+              <Wifi className="w-3 h-3" />{admsStatus.onlineCount} online
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-1 border-b border-border overflow-x-auto">
         {([
@@ -60,8 +101,14 @@ export default function Biometric() {
 }
 
 function DevicesTab() {
-  const { data: devices, isLoading } = useListBiometricDevices();
+  const { data: devices, isLoading, refetch } = useListBiometricDevices();
   const { data: branches } = useListBranches();
+
+  // Auto-refresh every 30 s so newly-connected devices appear without page reload
+  useEffect(() => {
+    const id = setInterval(() => refetch(), 30_000);
+    return () => clearInterval(id);
+  }, [refetch]);
   const create = useCreateBiometricDevice();
   const update = useUpdateBiometricDevice();
   const remove = useDeleteBiometricDevice();
@@ -91,10 +138,19 @@ function DevicesTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button onClick={openCreate} className="flex items-center gap-2 text-xs">
-          <Plus className="w-4 h-4" />Add Device
-        </Button>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+          <Server className="w-3.5 h-3.5 text-primary" />
+          Devices connecting to port <strong>8081</strong> appear here automatically — no manual entry needed for ZK Push devices.
+        </p>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => refetch()} className="flex items-center gap-2 text-xs">
+            <RefreshCw className="w-3.5 h-3.5" />Refresh
+          </Button>
+          <Button onClick={openCreate} className="flex items-center gap-2 text-xs">
+            <Plus className="w-4 h-4" />Add Device
+          </Button>
+        </div>
       </div>
 
       {showForm && (
@@ -151,7 +207,7 @@ function DevicesTab() {
             <table className="w-full text-xs">
               <thead className="bg-muted/50">
                 <tr>
-                  {["Device Name","Model","Serial No.","Branch","IP Address","Port","Push Method","Status","Last Sync","Actions"].map(h => (
+                  {["Device Name","Model","Serial No.","Branch","IP Address","ADMS Port","Push Method","Status","Last Seen","Actions"].map(h => (
                     <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -201,7 +257,9 @@ function DevicesTab() {
                 })}
                 {!devices?.length && (
                   <tr><td colSpan={10} className="text-center py-10 text-muted-foreground">
-                    No biometric devices configured. Click "Add Device" to register your first ZKTeco machine.
+                    <Server className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                    <p className="font-medium text-foreground mb-1">No devices connected yet</p>
+                    <p className="text-xs">Configure your ZKTeco device to push to <strong>port 8081</strong> on this server — it will appear here automatically.</p>
                   </td></tr>
                 )}
               </tbody>
@@ -278,39 +336,40 @@ function CopyField({ label, value }: { label: string; value: string }) {
 }
 
 function SetupGuide() {
-  const domain = typeof window !== "undefined" ? window.location.origin : "https://your-domain.com";
+  const domain = typeof window !== "undefined" ? window.location.host : "your-domain.com";
+  const hostOnly = domain.split(":")[0];
   return (
     <div className="space-y-4 max-w-4xl">
-      <Card className="p-5 border-blue-200 bg-blue-50/20">
+      <Card className="p-5 border-green-200 bg-green-50/20">
         <div className="flex items-center gap-3 mb-4">
-          <Info className="w-5 h-5 text-blue-600" />
-          <h3 className="font-semibold text-sm text-blue-900">ZKTeco ADMS (ZK Push) Configuration</h3>
+          <Radio className="w-5 h-5 text-green-600" />
+          <h3 className="font-semibold text-sm text-green-900">Built-in ZK Push ADMS Server — Port 8081</h3>
         </div>
         <p className="text-xs text-muted-foreground mb-4">
-          ZK Push (Attendance Data Management System) allows ZKTeco biometric devices to automatically push attendance data to this server over HTTP/HTTPS. Follow the steps below to configure each device.
+          This system runs a native ZKTeco ADMS push server on <strong>port 8081</strong>. No Python service or external middleware is needed. Configure each device to push directly here and it will auto-register and appear in the Devices tab.
         </p>
 
         <div className="space-y-5">
           <div>
-            <h4 className="font-semibold text-sm mb-2">Step 1: Server URLs to configure in device</h4>
+            <h4 className="font-semibold text-sm mb-2">Step 1: Server details to enter on the device</h4>
             <div className="space-y-2">
-              <CopyField label="ADMS Server Domain" value={domain} />
-              <CopyField label="ZK Push Endpoint" value={`${domain}/api/biometric/push`} />
-              <CopyField label="Server Port" value="80" />
+              <CopyField label="ADMS Server Address / Domain" value={hostOnly} />
+              <CopyField label="ADMS Server Port" value="8081" />
+              <CopyField label="Full URL (for reference)" value={`http://${hostOnly}:8081/iclock/cdata`} />
             </div>
           </div>
 
           <div>
-            <h4 className="font-semibold text-sm mb-3">Step 2: Configure the ZKTeco Device</h4>
+            <h4 className="font-semibold text-sm mb-3">Step 2: Configure each ZKTeco Device</h4>
             <div className="space-y-2">
               {[
-                ["1. Access Device Menu", "Press Menu on the device → Go to Comm. Settings → Cloud Server Settings"],
-                ["2. Enable ADMS", "Set ADMS Enable = Yes / On"],
-                ["3. Server Address", `Enter the ADMS Server Domain: ${domain}`],
-                ["4. Server Port", "Set port to 80 (or 443 for HTTPS)"],
-                ["5. ADMS Upload Interval", "Set to 5 minutes (recommended)"],
-                ["6. Enable Push", "Enable Attendance Push, enable Real-time Upload if available"],
-                ["7. Save & Restart", "Save settings and restart the device to apply changes"],
+                ["1. Access Device Menu", "Press Menu on the device → Comm. Settings → Cloud Server Settings (ADMS)"],
+                ["2. Enable ADMS / Cloud Server", "Set ADMS Enable = Yes / On"],
+                ["3. Server Address", `Enter: ${hostOnly}`],
+                ["4. Server Port", "Enter: 8081"],
+                ["5. Upload Interval", "Set to 1 minute for near real-time (5 minutes is fine too)"],
+                ["6. Enable Attendance Push", "Enable Attendance Push and Real-time Upload if shown"],
+                ["7. Save & Restart", "Save settings and restart the device — it will connect within seconds"],
               ].map(([title, desc]) => (
                 <div key={title} className="flex gap-3 p-3 bg-card rounded-lg border border-border">
                   <div className="text-xs">
@@ -323,18 +382,20 @@ function SetupGuide() {
           </div>
 
           <div>
-            <h4 className="font-semibold text-sm mb-2">Step 3: Verify Connection</h4>
-            <p className="text-xs text-muted-foreground">After configuration, go to Devices tab and click the test icon (↻) next to the device. You should see "online" status and recent logs appear in the Push Logs tab within a few minutes.</p>
+            <h4 className="font-semibold text-sm mb-2">Step 3: Auto-Discovery</h4>
+            <p className="text-xs text-muted-foreground">
+              Once the device connects to port 8081, it will appear automatically in the <strong>Devices</strong> tab with status <span className="text-green-700 font-medium">online</span>. No manual device registration is required. The device is marked <span className="text-gray-600 font-medium">offline</span> after 3 minutes without a heartbeat.
+            </p>
           </div>
 
           <div className="border border-amber-200 bg-amber-50/30 rounded-lg p-4">
             <h4 className="font-semibold text-sm text-amber-800 mb-2">⚠ Important Notes</h4>
             <ul className="text-xs text-amber-700 space-y-1 list-disc list-inside">
-              <li>Ensure this server is accessible from the device's network (check firewall rules)</li>
-              <li>Each employee must have a matching Biometric ID registered in the system (Employee → Biometric ID field)</li>
-              <li>ZK Push supports ZKTeco models: F18, F19, F21, K40, MA300, UA300, FR1200, and compatible devices</li>
-              <li>For HTTPS/SSL, ensure your certificate is valid — self-signed certs may not work with all devices</li>
-              <li>ADMS polling interval: device will push every N minutes (default: 5 minutes)</li>
+              <li>Port 8081 must be reachable from the device's network — check firewall / NAT rules</li>
+              <li>Each employee must have a <strong>Biometric ID</strong> set in their profile matching the PIN stored on the device</li>
+              <li>Supported models: F18, F19, F21, K40, MA300, UA300, FR1200, iClock series, and all ADMS-compatible ZKTeco devices</li>
+              <li>No Python bio_sync or sync service needed — this server handles everything natively</li>
+              <li>The device list auto-refreshes every 30 seconds</li>
             </ul>
           </div>
 

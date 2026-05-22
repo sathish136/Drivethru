@@ -1,0 +1,44 @@
+erp@drivethru:~$ systemctl status sync.service
+● sync.service - Biometric Sync Service - Syncs attendance data to API
+     Loaded: loaded (/etc/systemd/system/sync.service; enabled; preset: enabled)
+     Active: active (running) since Fri 2026-05-22 05:16:37 UTC; 2h 29min ago
+   Main PID: 994 (python3)
+      Tasks: 1 (limit: 4603)
+     Memory: 11.9M (peak: 22.3M swap: 11.5M swap peak: 11.5M)
+        CPU: 6.513s
+     CGroup: /system.slice/sync.service
+             └─994 /usr/bin/python3 sync.py
+
+May 22 05:17:11 drivethru sync[994]: 2026-05-22 05:17:11 [INFO] Batch 1 OK — created=17, updated=0, skipped=0, unmatched=3 (48/48 total)
+May 22 05:17:11 drivethru sync[994]: 2026-05-22 05:17:11 [INFO] All batches completed successfully — 48 records synced
+May 22 06:55:19 drivethru sync[994]: 2026-05-22 06:55:19 [INFO] Found 2 new punch(es) — processing in batches of 500...
+May 22 06:55:19 drivethru sync[994]: 2026-05-22 06:55:19 [INFO] Processing batch 1/1 (2 records)...
+May 22 06:55:23 drivethru sync[994]: 2026-05-22 06:55:23 [INFO] Batch 1 OK — created=0, updated=2, skipped=0, unmatched=0 (2/2 total)
+May 22 06:55:23 drivethru sync[994]: 2026-05-22 06:55:23 [INFO] All batches completed successfully — 2 records synced
+May 22 06:56:23 drivethru sync[994]: 2026-05-22 06:56:23 [INFO] Found 1 new punch(es) — processing in batches of 500...
+May 22 06:56:23 drivethru sync[994]: 2026-05-22 06:56:23 [INFO] Processing batch 1/1 (1 records)...
+May 22 06:56:26 drivethru sync[994]: 2026-05-22 06:56:26 [INFO] Batch 1 OK — created=0, updated=1, skipped=0, unmatched=0 (1/1 total)
+May 22 06:56:26 drivethru sync[994]: 2026-05-22 06:56:26 [INFO] All batches completed successfully — 1 records synced
+erp@drivethru:~$ ^C
+erp@drivethru:~$ systemctl status bio_sync.service
+● bio_sync.service - Bio Sync Service - ZKTeco Push Server
+     Loaded: loaded (/etc/systemd/system/bio_sync.service; enabled; preset: enabled)
+     Active: active (running) since Fri 2026-05-22 05:16:37 UTC; 2h 30min ago
+   Main PID: 984 (python)
+      Tasks: 1 (limit: 4603)
+     Memory: 20.3M (peak: 25.4M swap: 8.4M swap peak: 8.4M)
+        CPU: 40.398s
+     CGroup: /system.slice/bio_sync.service
+             └─984 /home/erp/drive/erp-sync/venv/bin/python bio_sync.py
+
+May 22 07:46:29 drivethru bio_sync[984]: 2026-05-22 07:46:29 - werkzeug - INFO - 112.134.237.124 - - [22/May/2026 07:46:29] "GET /iclock/getrequest?SN=SPK7254300008 HTTP/1.1" 200 -
+May 22 07:46:30 drivethru bio_sync[984]: 2026-05-22 07:46:30 - werkzeug - INFO - 14.1.78.250 - - [22/May/2026 07:46:30] "GET /iclock/getrequest?SN=SPK7254300003 HTTP/1.1" 200 -
+May 22 07:46:32 drivethru bio_sync[984]: 2026-05-22 07:46:32 - werkzeug - INFO - 112.134.237.124 - - [22/May/2026 07:46:32] "GET /iclock/getrequest?SN=SPK7254300008 HTTP/1.1" 200 -
+May 22 07:46:33 drivethru bio_sync[984]: 2026-05-22 07:46:33 - werkzeug - INFO - 14.1.78.250 - - [22/May/2026 07:46:33] "GET /iclock/getrequest?SN=SPK7254300003 HTTP/1.1" 200 -
+May 22 07:46:35 drivethru bio_sync[984]: 2026-05-22 07:46:35 - werkzeug - INFO - 112.134.237.124 - - [22/May/2026 07:46:35] "GET /iclock/getrequest?SN=SPK7254300008 HTTP/1.1" 200 -
+May 22 07:46:36 drivethru bio_sync[984]: 2026-05-22 07:46:36 - werkzeug - INFO - 14.1.78.250 - - [22/May/2026 07:46:36] "GET /iclock/getrequest?SN=SPK7254300003 HTTP/1.1" 200 -
+May 22 07:46:38 drivethru bio_sync[984]: 2026-05-22 07:46:38 - werkzeug - INFO - 112.134.237.124 - - [22/May/2026 07:46:38] "GET /iclock/getrequest?SN=SPK7254300008 HTTP/1.1" 200 -
+May 22 07:46:39 drivethru bio_sync[984]: 2026-05-22 07:46:39 - werkzeug - INFO - 14.1.78.250 - - [22/May/2026 07:46:39] "GET /iclock/getrequest?SN=SPK7254300003 HTTP/1.1" 200 -
+May 22 07:46:41 drivethru bio_sync[984]: 2026-05-22 07:46:41 - werkzeug - INFO - 112.134.237.124 - - [22/May/2026 07:46:41] "GET /iclock/getrequest?SN=SPK7254300008 HTTP/1.1" 200 -
+May 22 07:46:42 drivethru bio_sync[984]: 2026-05-22 07:46:42 - werkzeug - INFO - 14.1.78.250 - - [22/May/2026 07:46:42] "GET /iclock/getrequest?SN=SPK7254300003 HTTP/1.1" 200 -
+erp@drivethru:~$
