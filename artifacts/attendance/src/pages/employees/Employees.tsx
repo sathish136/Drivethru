@@ -1181,6 +1181,7 @@ function DesignationsTab() {
   const qc = useQueryClient();
   const { data: desigs, isLoading } = useGet(["designations"], "/designations");
   const { data: depts } = useGet(["departments"], "/departments");
+  const { data: emps } = useGet(["employees"], "/employees");
   const createDes = useMut("POST", "/designations", ["designations"]);
   const updateDes = useMutation({
     mutationFn: ({ id, data }: any) => fetch(apiUrl(`/designations/${id}`), {
@@ -1195,8 +1196,19 @@ function DesignationsTab() {
   const [form, setForm] = useState({ name:"", code:"", departmentId:"", level:1, description:"" });
   const [editId, setEditId] = useState<number|null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number|null>(null);
 
   const LEVEL_LABEL = ["","Staff","Officer","Supervisor","Manager","Head"];
+
+  // Build map: designation name (lowercase) → employee count
+  const empCountByDesig = useMemo(() => {
+    const map: Record<string, number> = {};
+    (Array.isArray(emps) ? emps : []).forEach((e: any) => {
+      const key = (e.designation || "").toLowerCase().trim();
+      if (key) map[key] = (map[key] || 0) + 1;
+    });
+    return map;
+  }, [emps]);
 
   function openEdit(d: any) { setForm({ name: d.name, code: d.code, departmentId: d.departmentId || "", level: d.level || 1, description: d.description || "" }); setEditId(d.id); setShowForm(true); }
   function openNew() { setForm({ name:"", code:"", departmentId:"", level:1, description:"" }); setEditId(null); setShowForm(true); }
@@ -1242,29 +1254,52 @@ function DesignationsTab() {
         {isLoading ? <p className="text-center py-8 text-sm text-muted-foreground">Loading...</p> : (
           <table className="w-full text-xs">
             <thead className="bg-muted/50">
-              <tr>{["Code","Designation","Department","Level","Status","Actions"].map(h => <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground">{h}</th>)}</tr>
+              <tr>{["Code","Designation","Department","Level","Employees","Status","Actions"].map(h => <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground">{h}</th>)}</tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {(Array.isArray(desigs) ? desigs : []).map((d: any) => (
-                <tr key={d.id} className="hover:bg-muted/30">
-                  <td className="px-3 py-2.5 font-mono text-primary font-medium">{d.code}</td>
-                  <td className="px-3 py-2.5 font-medium">{d.name}</td>
-                  <td className="px-3 py-2.5 text-muted-foreground">{d.departmentName || "—"}</td>
-                  <td className="px-3 py-2.5"><span className="px-2 py-0.5 bg-muted rounded text-xs">{LEVEL_LABEL[d.level] || "Staff"}</span></td>
-                  <td className="px-3 py-2.5">
-                    <span className={cn("px-2 py-0.5 rounded text-xs", d.isActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500")}>
-                      {d.isActive ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex gap-1">
-                      <button onClick={() => openEdit(d)} className="p-1.5 hover:bg-muted rounded"><Edit2 className="w-3 h-3" /></button>
-                      <button onClick={() => { if(confirm(`Delete "${d.name}"?`)) deleteDes.mutate(d.id); }} className="p-1.5 hover:bg-red-100 text-red-500 rounded"><Trash2 className="w-3 h-3" /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {!(Array.isArray(desigs) ? desigs : []).length && <tr><td colSpan={6} className="text-center py-8 text-muted-foreground">No designations found.</td></tr>}
+              {(Array.isArray(desigs) ? desigs : []).map((d: any) => {
+                const count = empCountByDesig[(d.name || "").toLowerCase().trim()] || 0;
+                const isConfirming = confirmDeleteId === d.id;
+                return (
+                  <tr key={d.id} className={cn("transition-colors", isConfirming ? "bg-red-50" : "hover:bg-muted/30")}>
+                    <td className="px-3 py-2.5 font-mono text-primary font-medium">{d.code}</td>
+                    <td className="px-3 py-2.5 font-medium">{d.name}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{d.departmentName || "—"}</td>
+                    <td className="px-3 py-2.5"><span className="px-2 py-0.5 bg-muted rounded text-xs">{LEVEL_LABEL[d.level] || "Staff"}</span></td>
+                    <td className="px-3 py-2.5">
+                      <span className={cn(
+                        "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold",
+                        count > 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                      )}>
+                        <Users className="w-3 h-3" />
+                        {count}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className={cn("px-2 py-0.5 rounded text-xs", d.isActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500")}>
+                        {d.isActive ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      {isConfirming ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-red-600 font-medium whitespace-nowrap">Delete?</span>
+                          <button onClick={() => { deleteDes.mutate(d.id); setConfirmDeleteId(null); }}
+                            className="flex items-center gap-1 px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-xs font-medium">Yes</button>
+                          <button onClick={() => setConfirmDeleteId(null)}
+                            className="flex items-center gap-1 px-2 py-1 rounded bg-muted hover:bg-muted/80 text-xs font-medium">No</button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-1">
+                          <button onClick={() => openEdit(d)} className="p-1.5 hover:bg-muted rounded"><Edit2 className="w-3 h-3" /></button>
+                          <button onClick={() => setConfirmDeleteId(d.id)} className="p-1.5 hover:bg-red-100 text-red-500 rounded"><Trash2 className="w-3 h-3" /></button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {!(Array.isArray(desigs) ? desigs : []).length && <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">No designations found.</td></tr>}
             </tbody>
           </table>
         )}
