@@ -797,7 +797,7 @@ function DepartmentsTab() {
     mutationFn: (id: number) => fetch(apiUrl(`/departments/${id}`), { method: "DELETE" }).then(r => r.json()),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["departments"] }),
   });
-  const [form, setForm] = useState({ name:"", code:"", description:"" });
+  const [form, setForm] = useState({ name:"", description:"" });
   const [editId, setEditId] = useState<number|null>(null);
   const [showForm, setShowForm] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number|null>(null);
@@ -812,11 +812,13 @@ function DepartmentsTab() {
     return map;
   }, [emps]);
 
-  function openEdit(d: any) { setForm({ name: d.name, code: d.code, description: d.description || "" }); setEditId(d.id); setShowForm(true); }
-  function openNew() { setForm({ name:"", code:"", description:"" }); setEditId(null); setShowForm(true); }
+  function openEdit(d: any) { setForm({ name: d.name, description: d.description || "" }); setEditId(d.id); setShowForm(true); }
+  function openNew() { setForm({ name:"", description:"" }); setEditId(null); setShowForm(true); }
   function handleSave() {
-    if (editId) updateD.mutate({ id: editId, data: form }, { onSuccess: () => setShowForm(false) });
-    else createD.mutate(form, { onSuccess: () => setShowForm(false) });
+    const code = form.name.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6) || "DEPT";
+    const payload = { ...form, code };
+    if (editId) updateD.mutate({ id: editId, data: payload }, { onSuccess: () => setShowForm(false) });
+    else createD.mutate(payload, { onSuccess: () => setShowForm(false) });
   }
 
   return (
@@ -827,9 +829,8 @@ function DepartmentsTab() {
       {showForm && (
         <Card className="p-4 border-primary/20 bg-primary/5">
           <p className="text-xs font-semibold mb-3">{editId ? "Edit Department" : "New Department"}</p>
-          <div className="grid grid-cols-3 gap-3">
-            <div><Label className="text-xs">Department Name</Label><Input placeholder="e.g. Operations" value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} /></div>
-            <div><Label className="text-xs">Code</Label><Input placeholder="OPS" value={form.code} onChange={e => setForm(f => ({...f, code: e.target.value.toUpperCase()}))} /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><Label className="text-xs">Department Name</Label><Input placeholder="e.g. Kitchen" value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} /></div>
             <div><Label className="text-xs">Description</Label><Input placeholder="Short description" value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} /></div>
           </div>
           <div className="flex gap-2 justify-end mt-3">
@@ -842,7 +843,7 @@ function DepartmentsTab() {
         {isLoading ? <p className="text-center py-8 text-sm text-muted-foreground">Loading...</p> : (
           <table className="w-full text-xs">
             <thead className="bg-muted/50">
-              <tr>{["Code","Department Name","Description","Employees","Status","Actions"].map(h => <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground">{h}</th>)}</tr>
+              <tr>{["Department Name","Description","Employees","Status","Actions"].map(h => <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground">{h}</th>)}</tr>
             </thead>
             <tbody className="divide-y divide-border">
               {(Array.isArray(depts) ? depts : []).map((d: any) => {
@@ -850,7 +851,6 @@ function DepartmentsTab() {
                 const isConfirming = confirmDeleteId === d.id;
                 return (
                   <tr key={d.id} className={cn("transition-colors", isConfirming ? "bg-red-50" : "hover:bg-muted/30")}>
-                    <td className="px-3 py-2.5 font-mono font-medium text-primary">{d.code}</td>
                     <td className="px-3 py-2.5 font-medium">{d.name}</td>
                     <td className="px-3 py-2.5 text-muted-foreground">{d.description || "—"}</td>
                     <td className="px-3 py-2.5">
@@ -886,7 +886,7 @@ function DepartmentsTab() {
                   </tr>
                 );
               })}
-              {!(Array.isArray(depts) ? depts : []).length && <tr><td colSpan={6} className="text-center py-8 text-muted-foreground">No departments found.</td></tr>}
+              {!(Array.isArray(depts) ? depts : []).length && <tr><td colSpan={5} className="text-center py-8 text-muted-foreground">No departments found.</td></tr>}
             </tbody>
           </table>
         )}
