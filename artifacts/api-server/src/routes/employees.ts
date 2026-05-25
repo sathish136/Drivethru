@@ -174,7 +174,10 @@ router.get("/", async (req, res) => {
 function sanitizeDates(body: Record<string, any>) {
   const DATE_FIELDS = ["dateOfBirth", "joiningDate"];
   for (const f of DATE_FIELDS) {
-    if (body[f] === "" || body[f] === undefined) body[f] = null;
+    if (body[f] === "") body[f] = null;
+    // If the field is not present in the body at all, leave it untouched
+    // so partial updates (e.g. only shiftId) don't overwrite existing DB values
+    if (body[f] === undefined) delete body[f];
   }
 }
 
