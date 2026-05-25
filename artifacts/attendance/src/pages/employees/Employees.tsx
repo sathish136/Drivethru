@@ -208,7 +208,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
   const [photoPreview, setPhotoPreview] = useState<string>(emp?.photoUrl || "");
   const [photoUploading, setPhotoUploading] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
-  const [regionalInfo, setRegionalInfo] = useState<{ prefix: string; nextId: string; regionalName: string } | null>(null);
+  const [regionalInfo, setRegionalInfo] = useState<{ prefix: string; nextId: string; regionalName: string; branchName: string } | null>(null);
   const [empIdError, setEmpIdError] = useState<string>("");
 
   useEffect(() => {
@@ -219,8 +219,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
       .then(r => r.json())
       .then(data => {
         if (!data.noRegional) {
-          setRegionalInfo({ prefix: data.prefix, nextId: data.nextId, regionalName: data.regionalName });
-          setForm(f => ({ ...f, employeeId: data.nextId }));
+          setRegionalInfo({ prefix: data.prefix, nextId: data.nextId, regionalName: data.regionalName, branchName: data.branchName || "" });
           setEmpIdError("");
         } else {
           setRegionalInfo(null);
@@ -228,6 +227,23 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
       })
       .catch(() => {});
   }, [form.branchId, emp]);
+
+  useEffect(() => {
+    if (emp) return;
+    const bioNum = parseInt(String(form.biometricId), 10);
+    if (!form.biometricId || isNaN(bioNum) || bioNum <= 0) return;
+    const branchObj2 = branches.find((b: any) => b.id === Number(form.branchId));
+    const branchName = branchObj2?.name || regionalInfo?.branchName || "";
+    const words = branchName.replace(/[-–]/g, " ").split(/\s+/).filter((w: string) => w.length > 1);
+    const prefix = words.length === 1
+      ? words[0]
+      : words.length > 1
+        ? words.map((w: string) => w[0].toUpperCase()).join("")
+        : (regionalInfo?.prefix || "EMP");
+    const newId = `${prefix}${String(bioNum).padStart(5, "0")}`;
+    setForm(f => ({ ...f, employeeId: newId }));
+    setEmpIdError("");
+  }, [form.biometricId, form.branchId]);
 
   async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -519,16 +535,25 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                   <div>
                     <FLabel label="Employee ID" required />
                     <input
-                      className={cn(INP, "font-mono uppercase", empIdError ? "border-red-400" : "")}
-                      placeholder={regionalInfo ? `${regionalInfo.prefix}001` : "EMP-0001"}
+                      className={cn(INP, "font-mono", empIdError ? "border-red-400" : "")}
+                      placeholder="Auto-filled from Biometric ID"
                       value={form.employeeId}
-                      onChange={e => { set("employeeId", e.target.value.toUpperCase()); setEmpIdError(""); }}
+                      onChange={e => { set("employeeId", e.target.value); setEmpIdError(""); }}
                       disabled={!!emp}
                     />
-                    {regionalInfo && !emp && (
-                      <p className="text-[10px] text-primary mt-0.5">Prefix: {regionalInfo.prefix}</p>
+                    {!emp && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Auto-fills when Biometric ID is entered (Joining tab)</p>
                     )}
                   </div>
+                  <div>
+                    <FLabel label="First Name" required />
+                    <input className={INP} placeholder="First name" value={form.firstName} onChange={e => set("firstName", e.target.value)} />
+                  </div>
+                  <div>
+                    <FLabel label="Last Name" />
+                    <input className={INP} placeholder="Last name" value={form.lastName} onChange={e => set("lastName", e.target.value)} />
+                  </div>
+
                   <div>
                     <FLabel label="Gender" />
                     <select className={SEL} value={form.gender} onChange={e => set("gender", e.target.value)}>
@@ -538,26 +563,8 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                     </select>
                   </div>
                   <div>
-                    <FLabel label="Date of Joining" required />
-                    <input type="date" className={INP} value={form.joiningDate} onChange={e => set("joiningDate", e.target.value)} />
-                  </div>
-
-                  <div>
-                    <FLabel label="First Name" required />
-                    <input className={INP} placeholder="First name" value={form.firstName} onChange={e => set("firstName", e.target.value)} />
-                  </div>
-                  <div>
                     <FLabel label="Date of Birth" />
                     <input type="date" className={INP} value={form.dateOfBirth} onChange={e => set("dateOfBirth", e.target.value)} />
-                  </div>
-                  <div>
-                    <FLabel label="Biometric ID" />
-                    <input className={INP} placeholder="e.g. 101" value={form.biometricId} onChange={e => set("biometricId", e.target.value)} />
-                  </div>
-
-                  <div>
-                    <FLabel label="Last Name" />
-                    <input className={INP} placeholder="Last name" value={form.lastName} onChange={e => set("lastName", e.target.value)} />
                   </div>
                   <div>
                     <FLabel label="Status" />
@@ -568,6 +575,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                       <option value="terminated">Terminated</option>
                     </select>
                   </div>
+
                   <div>
                     <FLabel label="Type of Employment" />
                     <select className={SEL} value={form.employeeType} onChange={e => set("employeeType", e.target.value)}>
@@ -620,7 +628,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
             <div className="space-y-6">
               <div>
                 <div className="flex items-center gap-2 mb-4">
-                  <span className="text-xs font-bold text-foreground">Employment Information</span>
+                  <span className="text-xs font-bold text-foreground">Joining Details</span>
                   <div className="flex-1 border-t border-border" />
                 </div>
                 <div className="grid grid-cols-3 gap-x-6 gap-y-4">
@@ -629,57 +637,16 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                     <input type="date" className={INP} value={form.joiningDate} onChange={e => set("joiningDate", e.target.value)} />
                   </div>
                   <div>
-                    <FLabel label="Status" />
-                    <select className={SEL} value={form.status} onChange={e => set("status", e.target.value)}>
-                      <option value="active">Active</option>
-                      <option value="on_leave">On Leave</option>
-                      <option value="resigned">Resigned</option>
-                      <option value="terminated">Terminated</option>
-                    </select>
-                  </div>
-                  <div>
-                    <FLabel label="Employee Type" />
-                    <select className={SEL} value={form.employeeType} onChange={e => set("employeeType", e.target.value)}>
-                      <option value="permanent">Permanent</option>
-                      <option value="contract">Contract</option>
-                      <option value="casual">Casual</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-xs font-bold text-foreground">Placement</span>
-                  <div className="flex-1 border-t border-border" />
-                </div>
-                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
-                  <div>
-                    <FLabel label="Department" required />
-                    <select className={SEL} value={form.department} onChange={e => set("department", e.target.value)}>
-                      <option value="">— Select —</option>
-                      {(deptOptions.length > 0 ? deptOptions : DEPT_LIST).map(d => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <FLabel label="Branch" required />
-                    <select className={SEL} value={form.branchId} onChange={e => set("branchId", Number(e.target.value))}>
-                      {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <FLabel label="Shift Assignment" />
-                    <select className={SEL} value={form.shiftId} onChange={e => set("shiftId", e.target.value)}>
-                      <option value="">— No Shift —</option>
-                      {allShifts.map((s: any) => (
-                        <option key={s.id} value={s.id}>{s.name} ({s.startTime1}–{s.endTime1})</option>
-                      ))}
-                    </select>
-                    {selectedShift && (
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        {selectedShift.type === "split" ? "Split" : "Normal"} · {selectedShift.startTime1}–{selectedShift.endTime1} · {selectedShift.graceMinutes}min grace
+                    <FLabel label="Biometric Device ID" />
+                    <input
+                      className={INP}
+                      placeholder="e.g. 50"
+                      value={form.biometricId}
+                      onChange={e => set("biometricId", e.target.value)}
+                    />
+                    {!emp && form.biometricId && (
+                      <p className="text-[10px] text-primary mt-0.5">
+                        Employee ID will be auto-set to <span className="font-mono font-semibold">{form.employeeId}</span>
                       </p>
                     )}
                   </div>
@@ -703,10 +670,6 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                         ))}
                       </div>
                     )}
-                  </div>
-                  <div>
-                    <FLabel label="Biometric Device ID" />
-                    <input className={INP} placeholder="e.g. 101" value={form.biometricId} onChange={e => set("biometricId", e.target.value)} />
                   </div>
                 </div>
               </div>
@@ -742,35 +705,6 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
           {/* ── PERSONAL TAB ── */}
           {tab === "personal" && (
             <div className="space-y-6">
-              <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-xs font-bold text-foreground">Personal Details</span>
-                  <div className="flex-1 border-t border-border" />
-                </div>
-                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
-                  <div>
-                    <FLabel label="First Name" required />
-                    <input className={INP} placeholder="First name" value={form.firstName} onChange={e => set("firstName", e.target.value)} />
-                  </div>
-                  <div>
-                    <FLabel label="Last Name" />
-                    <input className={INP} placeholder="Last name" value={form.lastName} onChange={e => set("lastName", e.target.value)} />
-                  </div>
-                  <div>
-                    <FLabel label="Gender" />
-                    <select className={SEL} value={form.gender} onChange={e => set("gender", e.target.value)}>
-                      <option value="male">Male</option>
-                      <option value="female">Female</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </div>
-                  <div>
-                    <FLabel label="Date of Birth" />
-                    <input type="date" className={INP} value={form.dateOfBirth} onChange={e => set("dateOfBirth", e.target.value)} />
-                  </div>
-                </div>
-              </div>
-
               <div>
                 <div className="flex items-center gap-2 mb-4">
                   <span className="text-xs font-bold text-foreground">Government Identity</span>

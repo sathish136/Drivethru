@@ -44,16 +44,7 @@ async function validateEmployeeId(
   const regional = await getRegionalInfo(branchId);
   if (!regional) return { valid: true };
 
-  const prefix = regional.regionalCode.toUpperCase();
   const empIdUpper = employeeId.toUpperCase();
-
-  if (!empIdUpper.startsWith(prefix)) {
-    return {
-      valid: false,
-      message: `Employee ID must start with regional code "${prefix}" (e.g. ${prefix}001). This branch belongs to the ${regional.regionalName} Regional Office.`,
-    };
-  }
-
   const branchIds = await getBranchIdsInRegion(regional.regionalId);
   const existing = await db.select({ id: employees.id, employeeId: employees.employeeId })
     .from(employees)
@@ -102,9 +93,10 @@ router.get("/next-id", async (req, res) => {
   try {
     const branchId = Number(req.query.branchId);
     if (!branchId) { res.status(400).json({ message: "branchId required", success: false }); return; }
+    const [branch] = await db.select().from(branches).where(eq(branches.id, branchId));
     const regional = await getRegionalInfo(branchId);
     if (!regional) {
-      res.json({ prefix: "", nextId: "", regionalName: "", noRegional: true });
+      res.json({ prefix: "", nextId: "", regionalName: "", noRegional: true, branchName: branch?.name || "" });
       return;
     }
     const prefix = regional.regionalCode.toUpperCase();
@@ -115,15 +107,15 @@ router.get("/next-id", async (req, res) => {
 
     let maxNum = 0;
     for (const e of existing) {
-      const id = e.employeeId.toUpperCase();
-      if (id.startsWith(prefix)) {
-        const numPart = parseInt(id.slice(prefix.length), 10);
-        if (!isNaN(numPart) && numPart > maxNum) maxNum = numPart;
+      const numMatch = e.employeeId.match(/(\d+)$/);
+      if (numMatch) {
+        const n = parseInt(numMatch[1], 10);
+        if (!isNaN(n) && n > maxNum) maxNum = n;
       }
     }
     const nextNum = maxNum + 1;
-    const nextId = `${prefix}${String(nextNum).padStart(3, "0")}`;
-    res.json({ prefix, nextId, regionalName: regional.regionalName, regionalId: regional.regionalId });
+    const nextId = `${prefix}${String(nextNum).padStart(5, "0")}`;
+    res.json({ prefix, nextId, regionalName: regional.regionalName, regionalId: regional.regionalId, branchName: branch?.name || "" });
   } catch (e) { console.error(e); res.status(500).json({ message: "Error", success: false }); }
 });
 
