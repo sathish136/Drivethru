@@ -438,6 +438,77 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
   const [regionalInfo, setRegionalInfo] = useState<{ prefix: string; nextId: string; regionalName: string; branchName: string } | null>(null);
   const [empIdError, setEmpIdError] = useState<string>("");
 
+  /* ── Salary Structure Assignment state ── */
+  const [allSalaryStructures, setAllSalaryStructures] = useState<any[]>([]);
+  const [currentAssignment, setCurrentAssignment] = useState<any>(null);
+  const [assignStructId, setAssignStructId] = useState<number | "">("");
+  const [assignBasicAmt, setAssignBasicAmt] = useState("");
+  const [assignEffDate, setAssignEffDate] = useState(new Date().toISOString().slice(0, 10));
+  const [assignSaving, setAssignSaving] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const [assignSuccess, setAssignSuccess] = useState(false);
+  const [structLoading, setStructLoading] = useState(false);
+
+  /* ── Load salary structures + existing assignment when payroll tab opens ── */
+  useEffect(() => {
+    if (tab !== "payroll") return;
+    setStructLoading(true);
+    fetch(apiUrl("/salary-structures"))
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setAllSalaryStructures(d.filter((s: any) => s.status === "active")); })
+      .catch(() => {})
+      .finally(() => setStructLoading(false));
+
+    if (!emp?.id) return;
+    fetch(apiUrl(`/salary-structures/assignment/${emp.id}`))
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d && !d.error) {
+          setCurrentAssignment(d);
+          setAssignStructId(d.structureId);
+          setAssignBasicAmt(String(d.basicAmount || ""));
+        }
+      })
+      .catch(() => {});
+  }, [tab, emp?.id]);
+
+  async function saveAssignment() {
+    if (!emp?.id) { setAssignError("Save the employee first before assigning a salary structure."); return; }
+    if (!assignStructId) { setAssignError("Please select a salary structure."); return; }
+    setAssignSaving(true); setAssignError(null);
+    try {
+      const r = await fetch(apiUrl("/salary-structures/assignments"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeId: emp.id, salaryStructureId: assignStructId, basicAmount: parseFloat(assignBasicAmt) || 0, effectiveDate: assignEffDate }),
+      });
+      if (r.ok) {
+        fetch(apiUrl(`/salary-structures/assignment/${emp.id}`))
+          .then(r2 => r2.ok ? r2.json() : null)
+          .then(d => { if (d && !d.error) setCurrentAssignment(d); })
+          .catch(() => {});
+        setAssignSuccess(true);
+        setTimeout(() => setAssignSuccess(false), 3000);
+      } else {
+        const d = await r.json();
+        setAssignError(d.message || "Failed to save assignment");
+      }
+    } catch { setAssignError("Failed to save. Check connection."); }
+    setAssignSaving(false);
+  }
+
+  async function removeAssignment() {
+    if (!emp?.id) return;
+    setAssignSaving(true);
+    try {
+      await fetch(apiUrl(`/salary-structures/assignments/${emp.id}`), { method: "DELETE" });
+      setCurrentAssignment(null);
+      setAssignStructId("");
+      setAssignBasicAmt("");
+    } catch {}
+    setAssignSaving(false);
+  }
+
   useEffect(() => {
     if (emp) return;
     const branchId = Number(form.branchId);
@@ -983,63 +1054,277 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
           )}
 
           {/* ── PAYROLL TAB ── */}
-          {tab === "payroll" && (
-            <div className="space-y-6">
-              <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-xs font-bold text-foreground">Salary Details</span>
-                  <div className="flex-1 border-t border-border" />
-                </div>
-                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
-                  <div>
-                    <FLabel label="Basic Salary (LKR)" />
-                    <input type="number" className={INP} placeholder="e.g. 45000" value={form.basicSalary} onChange={e => set("basicSalary", e.target.value)} />
-                  </div>
-                </div>
-              </div>
+          {tab === "payroll" && (() => {
+            const SS_STATUTORY = ["EPF – Employee", "EPF – Employer", "ETF"];
+            const SS_STATUTORY_DEFS = [
+              { component: "EPF – Employee", pct: 8 },
+              { component: "EPF – Employer", pct: 12 },
+              { component: "ETF", pct: 3 },
+            ];
+            const selStruct = allSalaryStructures.find(s => s.id === Number(assignStructId));
+            const basicForCalc = parseFloat(assignBasicAmt) || 0;
+            const earnings: any[]   = selStruct ? (Array.isArray(selStruct.earnings)   ? selStruct.earnings   : JSON.parse(selStruct.earnings   || "[]")) : [];
+            const deductions: any[] = selStruct ? (Array.isArray(selStruct.deductions) ? selStruct.deductions : JSON.parse(selStruct.deductions || "[]")) : [];
+            const nonStatutoryDeds = deductions.filter((d: any) => !SS_STATUTORY.includes(d.component));
+            const totalEarnings = earnings.reduce((s: number, e: any) => {
+              if ((e.component ?? "").toLowerCase() === "basic") return s + basicForCalc;
+              return s + (Number(e.amount) || 0);
+            }, 0);
+            const epfEe = +(basicForCalc * 0.08).toFixed(2);
+            const epfEr = +(basicForCalc * 0.12).toFixed(2);
+            const etf   = +(basicForCalc * 0.03).toFixed(2);
+            const totalStatDeduct = epfEe + epfEr + etf;
+            const totalOtherDeduct = nonStatutoryDeds.reduce((s: number, d: any) => s + (Number(d.amount) || 0), 0);
+            const totalDeductions = totalStatDeduct + totalOtherDeduct;
+            const netSalary = totalEarnings - epfEe - totalOtherDeduct;
 
-              <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-xs font-bold text-foreground">Provident Fund</span>
-                  <div className="flex-1 border-t border-border" />
-                </div>
-                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
-                  <div>
-                    <FLabel label="EPF Number" />
-                    <input className={cn(INP, "font-mono")} placeholder="Employees' Provident Fund No." value={form.epfNumber} onChange={e => set("epfNumber", e.target.value)} />
-                  </div>
-                  <div>
-                    <FLabel label="ETF Number" />
-                    <input className={cn(INP, "font-mono")} placeholder="Employees' Trust Fund No." value={form.etfNumber} onChange={e => set("etfNumber", e.target.value)} />
-                  </div>
-                </div>
-              </div>
+            return (
+              <div className="space-y-5">
 
-              <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-xs font-bold text-foreground">Remarks</span>
-                  <div className="flex-1 border-t border-border" />
-                </div>
-                <textarea
-                  className="w-full min-h-[90px] resize-y rounded-lg border border-border bg-background px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary transition-colors placeholder:text-muted-foreground/50"
-                  placeholder="e.g. Late deduction after 8:15 am / OT after 5:30pm"
-                  value={form.remarks}
-                  onChange={e => set("remarks", e.target.value)}
-                />
-              </div>
+                {/* ── Salary Structure Assignment ── */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <BadgeIndianRupee className="w-3.5 h-3.5 text-primary" />
+                    <span className="text-xs font-bold text-foreground">Salary Structure</span>
+                    <div className="flex-1 border-t border-border" />
+                    {currentAssignment && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">Assigned</span>
+                    )}
+                  </div>
 
-              {(form.basicSalary || form.epfNumber || form.etfNumber) && (
-                <div className="rounded-xl border border-green-200 bg-green-50 p-4">
-                  <p className="text-xs font-semibold text-green-800 mb-2">Payroll Summary</p>
-                  <div className="space-y-1 text-xs text-green-700">
-                    {form.basicSalary && <div className="flex justify-between"><span>Basic Salary</span><span className="font-mono font-bold">LKR {parseFloat(form.basicSalary).toLocaleString("en-LK")}</span></div>}
-                    {form.epfNumber && <div className="flex justify-between"><span>EPF No.</span><span className="font-mono">{form.epfNumber}</span></div>}
-                    {form.etfNumber && <div className="flex justify-between"><span>ETF No.</span><span className="font-mono">{form.etfNumber}</span></div>}
+                  {!emp?.id && (
+                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-700 mb-3">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      Save the employee record first to assign a salary structure.
+                    </div>
+                  )}
+
+                  {assignError && (
+                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 mb-3">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      {assignError}
+                      <button onClick={() => setAssignError(null)} className="ml-auto"><X className="w-3 h-3" /></button>
+                    </div>
+                  )}
+                  {assignSuccess && (
+                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-green-50 border border-green-200 text-xs text-green-700 mb-3">
+                      <Check className="w-3.5 h-3.5 shrink-0" />
+                      Salary structure assigned successfully.
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-3 gap-x-5 gap-y-3">
+                    <div className="col-span-1">
+                      <FLabel label="Salary Structure" />
+                      {structLoading ? (
+                        <div className={cn(INP, "flex items-center text-muted-foreground gap-2")}>
+                          <RefreshCw className="w-3 h-3 animate-spin" /> Loading…
+                        </div>
+                      ) : (
+                        <select
+                          className={SEL}
+                          value={assignStructId}
+                          onChange={e => setAssignStructId(e.target.value ? Number(e.target.value) : "")}
+                          disabled={!emp?.id}
+                        >
+                          <option value="">— Select Structure —</option>
+                          {allSalaryStructures.map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                    <div>
+                      <FLabel label="Basic Amount (LKR)" />
+                      <input
+                        type="number" min="0"
+                        className={INP}
+                        placeholder="e.g. 45000"
+                        value={assignBasicAmt}
+                        onChange={e => setAssignBasicAmt(e.target.value)}
+                        disabled={!emp?.id}
+                      />
+                    </div>
+                    <div>
+                      <FLabel label="Effective Date" />
+                      <input
+                        type="date"
+                        className={INP}
+                        value={assignEffDate}
+                        onChange={e => setAssignEffDate(e.target.value)}
+                        disabled={!emp?.id}
+                      />
+                    </div>
+                  </div>
+
+                  {emp?.id && (
+                    <div className="flex items-center gap-2 mt-3">
+                      <button
+                        onClick={saveAssignment}
+                        disabled={assignSaving || !assignStructId}
+                        className={cn(
+                          "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
+                          assignStructId
+                            ? "bg-primary text-white hover:bg-primary/90"
+                            : "bg-muted text-muted-foreground cursor-not-allowed"
+                        )}
+                      >
+                        {assignSaving
+                          ? <RefreshCw className="w-3 h-3 animate-spin" />
+                          : assignSuccess ? <Check className="w-3 h-3" /> : <Save className="w-3 h-3" />}
+                        {assignSuccess ? "Saved!" : "Save Assignment"}
+                      </button>
+                      {currentAssignment && (
+                        <button
+                          onClick={removeAssignment}
+                          disabled={assignSaving}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50 border border-red-200 transition-colors"
+                        >
+                          <Trash2 className="w-3 h-3" /> Remove
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Salary Splitup ── */}
+                {selStruct && (
+                  <div className="space-y-3">
+                    {/* Earnings */}
+                    <div className="rounded-xl border border-green-200 overflow-hidden">
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-green-50/60 border-b border-green-200">
+                        <BadgeIndianRupee className="w-3.5 h-3.5 text-green-600" />
+                        <span className="text-xs font-bold text-green-900">Earnings</span>
+                        <span className="ml-auto px-1.5 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded-full">{earnings.length} components</span>
+                      </div>
+                      <div className="divide-y divide-green-100">
+                        {earnings.map((e: any, i: number) => {
+                          const isBasic = (e.component ?? "").toLowerCase() === "basic";
+                          const amt = isBasic ? basicForCalc : (Number(e.amount) || 0);
+                          return (
+                            <div key={i} className="flex items-center gap-3 px-4 py-2">
+                              <span className="text-[10px] text-muted-foreground w-4 shrink-0">{i + 1}</span>
+                              <span className={cn("text-xs flex-1", isBasic ? "font-semibold text-foreground" : "text-foreground")}>
+                                {e.component || "—"}
+                                {isBasic && <span className="ml-1.5 text-[10px] text-muted-foreground font-normal">Basic Salary</span>}
+                              </span>
+                              <span className={cn("text-xs font-mono font-semibold", amt > 0 ? "text-green-700" : "text-muted-foreground")}>
+                                {amt > 0 ? `LKR ${amt.toLocaleString("en-LK", { minimumFractionDigits: 2 })}` : "—"}
+                              </span>
+                            </div>
+                          );
+                        })}
+                        {earnings.length === 0 && (
+                          <div className="px-4 py-4 text-xs text-muted-foreground text-center">No earnings components defined in this structure.</div>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-green-50/60 border-t border-green-200">
+                        <span className="text-xs font-bold text-green-900">Total Earnings</span>
+                        <span className="text-sm font-bold font-mono text-green-700">LKR {totalEarnings.toLocaleString("en-LK", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+
+                    {/* Deductions */}
+                    <div className="rounded-xl border border-red-200 overflow-hidden">
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-red-50/60 border-b border-red-200">
+                        <X className="w-3.5 h-3.5 text-red-500" />
+                        <span className="text-xs font-bold text-red-900">Deductions</span>
+                      </div>
+
+                      {/* Statutory */}
+                      <div className="px-4 py-1.5 bg-muted/20 border-b border-red-100">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Statutory</span>
+                      </div>
+                      <div className="divide-y divide-red-50">
+                        {SS_STATUTORY_DEFS.map((def, i) => {
+                          const computed = def.component === "EPF – Employee" ? epfEe : def.component === "EPF – Employer" ? epfEr : etf;
+                          return (
+                            <div key={i} className="flex items-center gap-3 px-4 py-2">
+                              <span className="text-[10px] text-muted-foreground w-4 shrink-0">{i + 1}</span>
+                              <span className="text-xs flex-1">{def.component}</span>
+                              <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded-full shrink-0">{def.pct}%</span>
+                              <span className={cn("text-xs font-mono font-semibold w-28 text-right", basicForCalc > 0 ? "text-red-700" : "text-muted-foreground")}>
+                                {basicForCalc > 0 ? `LKR ${computed.toLocaleString("en-LK", { minimumFractionDigits: 2 })}` : "—"}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Other deductions */}
+                      {nonStatutoryDeds.length > 0 && (
+                        <>
+                          <div className="px-4 py-1.5 bg-muted/20 border-y border-red-100">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Other</span>
+                          </div>
+                          <div className="divide-y divide-red-50">
+                            {nonStatutoryDeds.map((d: any, i: number) => (
+                              <div key={i} className="flex items-center gap-3 px-4 py-2">
+                                <span className="text-[10px] text-muted-foreground w-4 shrink-0">{i + 1}</span>
+                                <span className="text-xs flex-1">{d.component || "—"}</span>
+                                <span className={cn("text-xs font-mono font-semibold", Number(d.amount) > 0 ? "text-red-700" : "text-muted-foreground")}>
+                                  {Number(d.amount) > 0 ? `LKR ${Number(d.amount).toLocaleString("en-LK", { minimumFractionDigits: 2 })}` : "—"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-red-50/60 border-t border-red-200">
+                        <span className="text-xs font-bold text-red-900">Total Deductions</span>
+                        <span className="text-sm font-bold font-mono text-red-700">LKR {totalDeductions.toLocaleString("en-LK", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+
+                    {/* Net Pay */}
+                    {basicForCalc > 0 && (
+                      <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-bold text-foreground">Estimated Net Pay</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">Gross – EPF Employee deduction – other deductions</p>
+                        </div>
+                        <span className="text-xl font-bold font-mono text-primary">LKR {netSalary.toLocaleString("en-LK", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Provident Fund ── */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-xs font-bold text-foreground">Provident Fund</span>
+                    <div className="flex-1 border-t border-border" />
+                  </div>
+                  <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                    <div>
+                      <FLabel label="EPF Number" />
+                      <input className={cn(INP, "font-mono")} placeholder="Employees' Provident Fund No." value={form.epfNumber} onChange={e => set("epfNumber", e.target.value)} />
+                    </div>
+                    <div>
+                      <FLabel label="ETF Number" />
+                      <input className={cn(INP, "font-mono")} placeholder="Employees' Trust Fund No." value={form.etfNumber} onChange={e => set("etfNumber", e.target.value)} />
+                    </div>
                   </div>
                 </div>
-              )}
-            </div>
-          )}
+
+                {/* ── Remarks ── */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-xs font-bold text-foreground">Remarks</span>
+                    <div className="flex-1 border-t border-border" />
+                  </div>
+                  <textarea
+                    className="w-full min-h-[80px] resize-y rounded-lg border border-border bg-background px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary transition-colors placeholder:text-muted-foreground/50"
+                    placeholder="e.g. Late deduction after 8:15 am / OT after 5:30pm"
+                    value={form.remarks}
+                    onChange={e => set("remarks", e.target.value)}
+                  />
+                </div>
+
+              </div>
+            );
+          })()}
 
           {tab === "connections" && (
             emp?.id
