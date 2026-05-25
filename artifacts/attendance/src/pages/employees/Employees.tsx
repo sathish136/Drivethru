@@ -785,7 +785,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 function DepartmentsTab() {
   const qc = useQueryClient();
   const { data: depts, isLoading } = useGet(["departments"], "/departments");
-  const { data: emps } = useGet(["employees"], "/employees");
+  const { data: emps } = useGet(["employees-all"], "/employees?limit=9999&page=1");
   const createD = useMut("POST", "/departments", ["departments"]);
   const updateD = useMutation({
     mutationFn: ({ id, data }: any) => fetch(apiUrl(`/departments/${id}`), {
@@ -805,7 +805,8 @@ function DepartmentsTab() {
   // Build a map: department name (lowercase) → employee count
   const empCountByDept = useMemo(() => {
     const map: Record<string, number> = {};
-    (Array.isArray(emps) ? emps : []).forEach((e: any) => {
+    const list = Array.isArray(emps) ? emps : (emps as any)?.employees ?? [];
+    list.forEach((e: any) => {
       const key = (e.department || "").toLowerCase().trim();
       if (key) map[key] = (map[key] || 0) + 1;
     });
