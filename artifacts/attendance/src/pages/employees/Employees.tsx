@@ -1053,15 +1053,15 @@ function ShiftDetailsTab() {
                       {/* Type */}
                       <td className={TD}>
                         {isEditing ? (
-                          <Select
-                            className="h-7 text-xs w-24"
+                          <select
+                            className="h-7 text-xs w-24 rounded-md border border-input bg-background text-foreground px-2 focus:outline-none focus:ring-1 focus:ring-primary"
                             value={r.type}
                             onChange={e => { e.stopPropagation(); patch(s.id, "type", e.target.value); }}
                             onClick={(e: any) => e.stopPropagation()}
                           >
                             <option value="normal">Normal</option>
                             <option value="split">Split</option>
-                          </Select>
+                          </select>
                         ) : (
                           <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[10px] font-bold uppercase">
                             {r.type === "split" ? "Split" : "Normal"}
@@ -1147,8 +1147,8 @@ function ShiftDetailsTab() {
                       {/* Flexible Hours */}
                       <td className={TD}>
                         {isEditing ? (
-                          <Select
-                            className="h-7 text-xs w-32"
+                          <select
+                            className="h-7 text-xs w-32 rounded-md border border-input bg-background text-foreground px-2 focus:outline-none focus:ring-1 focus:ring-primary"
                             value={r.category}
                             onChange={e => { e.stopPropagation(); patch(s.id, "category", e.target.value); }}
                             onClick={(e: any) => e.stopPropagation()}
@@ -1156,7 +1156,7 @@ function ShiftDetailsTab() {
                             <option value="REGULAR">No (Fixed)</option>
                             <option value="FLEXIBLE">Yes (Flexible)</option>
                             <option value="NIGHT">Night</option>
-                          </Select>
+                          </select>
                         ) : (
                           <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-bold uppercase", CATEGORY_BADGE[r.category] || CATEGORY_BADGE.REGULAR)}>
                             {r.category === "FLEXIBLE" ? "Flexible" : r.category === "NIGHT" ? "Night" : "Fixed"}
