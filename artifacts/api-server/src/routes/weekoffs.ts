@@ -68,7 +68,7 @@ router.get("/:id/employees", async (req, res) => {
       id: employees.id,
       employeeId: employees.employeeId,
       fullName: employees.fullName,
-      designation: employees.designation,
+      designation: employees.department,
       department: employees.department,
     }).from(employees).where(eq(employees.weekoffScheduleId, id));
     res.json(rows);

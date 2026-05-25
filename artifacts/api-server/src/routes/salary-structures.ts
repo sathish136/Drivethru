@@ -154,7 +154,7 @@ router.get("/assignments/all", async (_req, res) => {
         id: employees.id,
         employeeId: employees.employeeId,
         fullName: employees.fullName,
-        designation: employees.designation,
+        designation: employees.department,
         department: employees.department,
         status: employees.status,
       },

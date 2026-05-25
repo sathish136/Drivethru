@@ -15,7 +15,7 @@ router.get("/", async (req, res) => {
       id: employees.id,
       employeeId: employees.employeeId,
       fullName: employees.fullName,
-      designation: employees.designation,
+      designation: employees.department,
       department: employees.department,
       branchId: employees.branchId,
       status: employees.status,

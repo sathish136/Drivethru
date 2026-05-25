@@ -83,7 +83,7 @@ router.get("/", async (req, res) => {
         employeeId: employees.id,
         employeeCode: employees.employeeId,
         employeeName: employees.fullName,
-        designation: employees.designation,
+        designation: employees.department,
         department: employees.department,
         branchId: manualSalaryEntries.branchId,
       })

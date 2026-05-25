@@ -13,7 +13,7 @@ import {
   Briefcase, Phone, Hash, CreditCard, Calendar,
   IdCard, Home, Shield, Camera, BadgeIndianRupee,
   Banknote, UserCheck, ListChecks, CheckCircle, Clock,
-  CircleDashed, BadgeCheck, RefreshCw, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Settings, Save, Check,
+  CircleDashed, BadgeCheck, RefreshCw, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Settings, Save, Check, Network,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -179,8 +179,235 @@ const EMPTY_EMP = {
 };
 
 
+// ── Employee Connections + Heatmap Tab ─────────────────────────────────────────
+function EmployeeConnectionsTab({ emp }: { emp: any }) {
+  const [heatmap, setHeatmap] = useState<Record<string, string>>({});
+  const [heatLoading, setHeatLoading] = useState(true);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!emp?.id) return;
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(start.getDate() - 364);
+    const startDate = start.toISOString().slice(0, 10);
+    const endDate = today.toISOString().slice(0, 10);
+
+    setHeatLoading(true);
+    fetch(apiUrl(`/attendance?employeeId=${emp.id}&startDate=${startDate}&endDate=${endDate}&limit=9999`))
+      .then(r => r.json())
+      .then(data => {
+        const map: Record<string, string> = {};
+        (data.records || []).forEach((r: any) => { map[r.date] = r.status; });
+        setHeatmap(map);
+        setCounts(c => ({ ...c, attendance: data.total ?? (data.records?.length ?? 0) }));
+      })
+      .catch(() => {})
+      .finally(() => setHeatLoading(false));
+
+    fetch(apiUrl(`/biometric/logs?employeeId=${emp.id}&limit=9999`))
+      .then(r => r.json())
+      .then(data => setCounts(c => ({ ...c, biometric: data.total ?? 0 })))
+      .catch(() => {});
+
+    fetch(apiUrl(`/incentives?employeeId=${emp.id}`))
+      .then(r => r.json())
+      .then(data => setCounts(c => ({ ...c, incentives: Array.isArray(data) ? data.length : 0 })))
+      .catch(() => {});
+
+    fetch(apiUrl(`/loans?employeeId=${emp.id}`))
+      .then(r => r.json())
+      .then(data => setCounts(c => ({ ...c, loans: Array.isArray(data) ? data.length : 0 })))
+      .catch(() => {});
+
+    fetch(apiUrl(`/leave-balances/employee/${emp.id}`))
+      .then(r => r.json())
+      .then(data => {
+        const annual = data?.annualLeaveBalance ?? data?.annualLeave ?? 0;
+        const casual = data?.casualLeaveBalance ?? data?.casualLeave ?? 0;
+        setCounts(c => ({ ...c, leaveAnnual: Number(annual), leaveCasual: Number(casual) }));
+      })
+      .catch(() => {});
+  }, [emp?.id]);
+
+  // Build 52-week grid anchored to this Sunday
+  const today = new Date();
+  const startSun = new Date(today);
+  startSun.setDate(today.getDate() - today.getDay()); // this Sunday
+  const weeks: Date[][] = [];
+  for (let w = 51; w >= 0; w--) {
+    const week: Date[] = [];
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(startSun);
+      day.setDate(startSun.getDate() - w * 7 + d);
+      week.push(day);
+    }
+    weeks.push(week);
+  }
+
+  // Month labels (show label at first week of each month)
+  const monthLabels: Record<number, string> = {};
+  let lastMonth = -1;
+  weeks.forEach((week, i) => {
+    const m = week[0].getMonth();
+    if (m !== lastMonth) {
+      monthLabels[i] = week[0].toLocaleString("default", { month: "short" }).toUpperCase();
+      lastMonth = m;
+    }
+  });
+
+  const STATUS_CLS: Record<string, string> = {
+    present:  "bg-green-500",
+    late:     "bg-amber-400",
+    absent:   "bg-red-500",
+    half_day: "bg-yellow-400",
+    leave:    "bg-purple-400",
+    holiday:  "bg-slate-400",
+  };
+  const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  function dotCls(date: Date) {
+    if (date > today) return "bg-transparent";
+    const ds = date.toISOString().slice(0, 10);
+    const st = heatmap[ds];
+    if (!st) return (date.getDay() === 0 || date.getDay() === 6) ? "bg-slate-200" : "bg-muted/60";
+    return STATUS_CLS[st] ?? "bg-slate-300";
+  }
+
+  function CountBadge({ n }: { n?: number }) {
+    if (!n) return null;
+    return (
+      <span className="mr-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary tabular-nums">
+        {n > 99 ? "99+" : n}
+      </span>
+    );
+  }
+
+  function ConnItem({ label, count }: { label: string; count?: number }) {
+    return (
+      <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border bg-background text-xs font-medium text-foreground select-none">
+        <CountBadge n={count} />
+        <span className="flex-1">{label}</span>
+        <Plus className="w-3 h-3 text-muted-foreground shrink-0" />
+      </div>
+    );
+  }
+
+  const CONN_GROUPS = [
+    {
+      title: "Attendance",
+      items: [
+        { label: "Attendance Records", count: counts.attendance },
+        { label: "Biometric Logs",     count: counts.biometric  },
+      ],
+    },
+    {
+      title: "Leave",
+      items: [
+        { label: "Annual Leave Balance",  count: counts.leaveAnnual  },
+        { label: "Casual Leave Balance",  count: counts.leaveCasual  },
+      ],
+    },
+    {
+      title: "Payroll & Finance",
+      items: [
+        { label: "Incentives",  count: counts.incentives },
+        { label: "Staff Loans", count: counts.loans      },
+      ],
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Attendance Heatmap */}
+      <div>
+        {heatLoading ? (
+          <div className="h-28 flex items-center justify-center text-xs text-muted-foreground animate-pulse">
+            Loading attendance heatmap…
+          </div>
+        ) : (
+          <div className="overflow-x-auto pb-1">
+            <div className="inline-flex flex-col gap-0.5 min-w-max">
+              {/* Month row */}
+              <div className="flex gap-[3px] mb-0.5 pl-8">
+                {weeks.map((_, i) => (
+                  <div key={i} style={{ width: 11 }} className="text-[8px] text-muted-foreground leading-none">
+                    {monthLabels[i] ?? ""}
+                  </div>
+                ))}
+              </div>
+
+              {/* Day rows (Sun–Sat) */}
+              {DAY_LABELS.map((lbl, dayIdx) => (
+                <div key={dayIdx} className="flex items-center gap-[3px]">
+                  <span className="w-7 text-[8px] text-muted-foreground text-right pr-1 shrink-0">
+                    {dayIdx % 2 === 1 ? lbl : ""}
+                  </span>
+                  {weeks.map((week, wi) => {
+                    const d = week[dayIdx];
+                    const ds = d.toISOString().slice(0, 10);
+                    return (
+                      <div
+                        key={wi}
+                        title={`${ds}: ${heatmap[ds] ?? "no data"}`}
+                        className={cn("w-[11px] h-[11px] rounded-sm transition-opacity hover:opacity-80", dotCls(d))}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+
+            {/* Legend */}
+            <div className="flex items-center gap-4 mt-3 flex-wrap">
+              {[
+                { label: "Present",  cls: "bg-green-500"  },
+                { label: "Late",     cls: "bg-amber-400"  },
+                { label: "Absent",   cls: "bg-red-500"    },
+                { label: "Half Day", cls: "bg-yellow-400" },
+                { label: "Leave",    cls: "bg-purple-400" },
+                { label: "Holiday",  cls: "bg-slate-400"  },
+              ].map(({ label, cls }) => (
+                <div key={label} className="flex items-center gap-1">
+                  <div className={cn("w-[11px] h-[11px] rounded-sm", cls)} />
+                  <span className="text-[10px] text-muted-foreground">{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <p className="text-[10px] text-muted-foreground mt-2">
+          Attendance heatmap for this employee — last 12 months
+        </p>
+      </div>
+
+      {/* Connections */}
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-xs font-bold text-foreground">Connections</span>
+          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+          <div className="flex-1 border-t border-border" />
+        </div>
+        <div className="grid grid-cols-3 gap-x-8 gap-y-6">
+          {CONN_GROUPS.map(g => (
+            <div key={g.title}>
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">{g.title}</p>
+              <div className="flex flex-col gap-1.5">
+                {g.items.map(it => (
+                  <ConnItem key={it.label} label={it.label} count={it.count} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Employee Profile Drawer ─────────────────────────────────────────────────────
 function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branches: any[]; onClose: () => void; onSaved: () => void }) {
-  const [tab, setTab] = useState<"overview"|"joining"|"contacts"|"personal"|"documents"|"payroll">("overview");
+  const [tab, setTab] = useState<"overview"|"joining"|"contacts"|"personal"|"documents"|"payroll"|"connections">("overview");
   const { data: deptData } = useGet(["departments"], "/departments");
   const { data: weekoffData } = useGet(["weekoff-schedules"], "/weekoffs");
   const { data: shiftsData } = useGet(["shifts-list"], "/shifts");
@@ -311,12 +538,13 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
     : form.firstName?.[0]?.toUpperCase() || "E";
 
   const PROFILE_TABS = [
-    { key: "overview",   label: "Overview"              },
-    { key: "joining",    label: "Joining"               },
-    { key: "contacts",   label: "Address & Contacts"    },
-    { key: "personal",   label: "Personal"              },
-    { key: "documents",  label: "Documents"             },
-    { key: "payroll",    label: "Payroll"               },
+    { key: "overview",     label: "Overview"              },
+    { key: "joining",      label: "Joining"               },
+    { key: "contacts",     label: "Address & Contacts"    },
+    { key: "personal",     label: "Personal"              },
+    { key: "documents",    label: "Documents"             },
+    { key: "payroll",      label: "Payroll"               },
+    { key: "connections",  label: "Connections"           },
   ] as const;
 
   const INP = "w-full rounded border border-border bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary transition-colors text-foreground placeholder:text-muted-foreground/50";
@@ -811,6 +1039,15 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                 </div>
               )}
             </div>
+          )}
+
+          {tab === "connections" && (
+            emp?.id
+              ? <EmployeeConnectionsTab emp={emp} />
+              : <div className="flex flex-col items-center justify-center h-40 text-xs text-muted-foreground gap-2">
+                  <Network className="w-8 h-8 opacity-30" />
+                  <p>Save the employee record first to view connections.</p>
+                </div>
           )}
 
         </div>

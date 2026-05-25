@@ -26,7 +26,6 @@ router.get("/", async (req, res) => {
         employeeId: employees.id,
         employeeCode: employees.employeeId,
         employeeName: employees.fullName,
-        designation: employees.designation,
         department: employees.department,
       })
       .from(staffLoans)

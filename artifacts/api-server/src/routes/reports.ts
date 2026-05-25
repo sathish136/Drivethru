@@ -270,7 +270,7 @@ router.get("/attendance", async (req, res) => {
       rec: attendanceRecords,
       empName: employees.fullName,
       empCode: employees.employeeId,
-      empDesignation: employees.designation,
+      empDesignation: employees.department,
       empDepartment: employees.department,
       empShiftId: employees.shiftId,
       branchName: branches.name,
@@ -394,7 +394,7 @@ router.get("/attendance", async (req, res) => {
     if (startDate && endDate) {
       const allEmps = await db.select({
         id: employees.id, fullName: employees.fullName, employeeCode: employees.employeeId,
-        designation: employees.designation, department: employees.department,
+        designation: employees.department, department: employees.department,
         branchId: employees.branchId, shiftId: employees.shiftId,
         joiningDate: employees.joiningDate, status: employees.status,
       }).from(employees);

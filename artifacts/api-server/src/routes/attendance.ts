@@ -410,7 +410,7 @@ router.get("/pending-approvals", async (req, res) => {
       rec: attendanceRecords,
       empName: employees.fullName,
       empCode: employees.employeeId,
-      empDesignation: employees.designation,
+      empDesignation: employees.department,
       branchName: branches.name,
     }).from(attendanceRecords)
       .leftJoin(employees, eq(attendanceRecords.employeeId, employees.id))
