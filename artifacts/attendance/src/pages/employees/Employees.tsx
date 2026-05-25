@@ -8,7 +8,7 @@ import { PageHeader, Card, Button, Input, Label, Select } from "@/components/ui"
 import { cn } from "@/lib/utils";
 import {
   Search, Plus, Edit2, Trash2, Download, Mail,
-  MapPin, X, Building2, Users, Layers,
+  MapPin, X, Building2, Users,
   FileText, Upload, CheckCircle2, AlertCircle, UserCircle,
   Briefcase, Phone, Hash, CreditCard, Calendar,
   IdCard, Home, Shield, Camera, BadgeIndianRupee,
@@ -30,11 +30,10 @@ const EMP_TYPE_STYLE: Record<string, string> = {
   casual:    "bg-gray-100 text-gray-600",
 };
 
-const TABS = ["Employee List", "Departments", "Designations", "Payroll"] as const;
+const TABS = ["Employee List", "Departments", "Payroll"] as const;
 type Tab = typeof TABS[number];
 
 const DEPT_LIST = ["Operations","Finance & Accounts","Human Resources","Information Technology","Postal Services","Customer Service","Administration","Logistics & Delivery"];
-const DESIGNATION_LIST = ["Postmaster","Assistant Postmaster","Supervisor","Postal Officer","Counter Clerk","Sorting Officer","Delivery Agent","Data Entry Operator","Accounts Officer","HR Officer","IT Officer","Driver","Security Officer","Clerical Assistant"];
 
 function apiUrl(path: string) { return `${BASE}/api${path}`; }
 
@@ -174,7 +173,7 @@ function DocUploadRow({
 const EMPTY_EMP = {
   employeeId:"", firstName:"", lastName:"", gender:"male", dateOfBirth:"", phone:"", email:"",
   address:"", nicNumber:"", panNumber:"", aadharNumber:"",
-  designation:"", department:"", branchId:1, shiftId:"", weekoffScheduleId:"", joiningDate:"",
+  department:"", branchId:1, shiftId:"", weekoffScheduleId:"", joiningDate:"",
   employeeType:"permanent", reportingManagerId:"", biometricId:"", status:"active",
   epfNumber:"", etfNumber:"", basicSalary:"", remarks:"",
 };
@@ -211,13 +210,11 @@ function findHrRule(rules: any[], department: string, shiftName?: string | null)
 function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branches: any[]; onClose: () => void; onSaved: () => void }) {
   const [tab, setTab] = useState<"personal"|"professional"|"documents"|"payroll"|"policy">("personal");
   const { data: deptData } = useGet(["departments"], "/departments");
-  const { data: desigData } = useGet(["designations"], "/designations");
   const { data: hrSettingsData } = useGet(["hr-settings-policy"], "/hr-settings");
   const { data: shiftsData } = useGet(["shifts-for-policy"], "/shifts");
   const { data: weekoffData } = useGet(["weekoff-schedules"], "/weekoffs");
   const allWeekoffs: any[] = Array.isArray(weekoffData) ? weekoffData : [];
   const deptOptions: string[] = Array.isArray(deptData) ? deptData.filter((d: any) => d.isActive).map((d: any) => d.name) : [];
-  const desigOptions: string[] = Array.isArray(desigData) ? desigData.filter((d: any) => d.isActive).map((d: any) => d.name) : [];
   const hrRules: any[] = Array.isArray(hrSettingsData?.departmentRules) ? hrSettingsData.departmentRules : [];
   const allShifts: any[] = Array.isArray(shiftsData) ? shiftsData : [];
   const [form, setForm] = useState(emp ? {
@@ -303,11 +300,6 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
     if (!form.department) {
       setTab("professional");
       alert("Please select a Department before saving.");
-      return;
-    }
-    if (!form.designation) {
-      setTab("professional");
-      alert("Please select a Designation before saving.");
       return;
     }
     const payload = {
@@ -628,18 +620,6 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                     </Select>
                     {deptOptions.length === 0 && (
                       <p className="text-[10px] text-amber-600 mt-1">No departments found. Add them in the Departments tab first.</p>
-                    )}
-                  </div>
-                  <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">Designation <span className="text-red-500">*</span></Label>
-                    <Select value={form.designation} onChange={e => set("designation", e.target.value)}>
-                      <option value="">— Select Designation —</option>
-                      {(desigOptions.length > 0 ? desigOptions : DESIGNATION_LIST).map(d => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                    </Select>
-                    {desigOptions.length === 0 && (
-                      <p className="text-[10px] text-amber-600 mt-1">No designations found. Add them in the Designations tab first.</p>
                     )}
                   </div>
                   <div>
@@ -1176,137 +1156,6 @@ function DepartmentsTab() {
   );
 }
 
-// ── Designations Tab ───────────────────────────────────────────────────────────
-function DesignationsTab() {
-  const qc = useQueryClient();
-  const { data: desigs, isLoading } = useGet(["designations"], "/designations");
-  const { data: depts } = useGet(["departments"], "/departments");
-  const { data: emps } = useGet(["employees"], "/employees");
-  const createDes = useMut("POST", "/designations", ["designations"]);
-  const updateDes = useMutation({
-    mutationFn: ({ id, data }: any) => fetch(apiUrl(`/designations/${id}`), {
-      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
-    }).then(r => r.json()),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["designations"] }),
-  });
-  const deleteDes = useMutation({
-    mutationFn: (id: number) => fetch(apiUrl(`/designations/${id}`), { method: "DELETE" }).then(r => r.json()),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["designations"] }),
-  });
-  const [form, setForm] = useState({ name:"", code:"", departmentId:"", level:1, description:"" });
-  const [editId, setEditId] = useState<number|null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<number|null>(null);
-
-  const LEVEL_LABEL = ["","Staff","Officer","Supervisor","Manager","Head"];
-
-  // Build map: designation name (lowercase) → employee count
-  const empCountByDesig = useMemo(() => {
-    const map: Record<string, number> = {};
-    (Array.isArray(emps) ? emps : []).forEach((e: any) => {
-      const key = (e.designation || "").toLowerCase().trim();
-      if (key) map[key] = (map[key] || 0) + 1;
-    });
-    return map;
-  }, [emps]);
-
-  function openEdit(d: any) { setForm({ name: d.name, code: d.code, departmentId: d.departmentId || "", level: d.level || 1, description: d.description || "" }); setEditId(d.id); setShowForm(true); }
-  function openNew() { setForm({ name:"", code:"", departmentId:"", level:1, description:"" }); setEditId(null); setShowForm(true); }
-  function handleSave() {
-    const payload = { ...form, departmentId: form.departmentId ? Number(form.departmentId) : null };
-    if (editId) updateDes.mutate({ id: editId, data: payload }, { onSuccess: () => setShowForm(false) });
-    else createDes.mutate(payload, { onSuccess: () => setShowForm(false) });
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="flex justify-end">
-        <Button onClick={openNew} className="text-xs flex items-center gap-1.5 h-8 px-3"><Plus className="w-3.5 h-3.5" />Add Designation</Button>
-      </div>
-      {showForm && (
-        <Card className="p-4 border-primary/20 bg-primary/5">
-          <p className="text-xs font-semibold mb-3">{editId ? "Edit Designation" : "New Designation"}</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div><Label className="text-xs">Designation Name</Label><Input value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} /></div>
-            <div><Label className="text-xs">Code</Label><Input value={form.code} onChange={e => setForm(f => ({...f, code: e.target.value.toUpperCase()}))} /></div>
-            <div>
-              <Label className="text-xs">Department</Label>
-              <Select value={form.departmentId} onChange={e => setForm(f => ({...f, departmentId: e.target.value}))}>
-                <option value="">— Any —</option>
-                {(Array.isArray(depts) ? depts : []).map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Level</Label>
-              <Select value={form.level} onChange={e => setForm(f => ({...f, level: Number(e.target.value)}))}>
-                {[1,2,3,4,5].map(l => <option key={l} value={l}>{l} – {LEVEL_LABEL[l]}</option>)}
-              </Select>
-            </div>
-            <div className="col-span-2 md:col-span-4"><Label className="text-xs">Description</Label><Input value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} /></div>
-          </div>
-          <div className="flex gap-2 justify-end mt-3">
-            <Button variant="outline" className="text-xs h-8" onClick={() => setShowForm(false)}>Cancel</Button>
-            <Button className="text-xs h-8" onClick={handleSave}>Save</Button>
-          </div>
-        </Card>
-      )}
-      <Card className="overflow-hidden">
-        {isLoading ? <p className="text-center py-8 text-sm text-muted-foreground">Loading...</p> : (
-          <table className="w-full text-xs">
-            <thead className="bg-muted/50">
-              <tr>{["Code","Designation","Department","Level","Employees","Status","Actions"].map(h => <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground">{h}</th>)}</tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {(Array.isArray(desigs) ? desigs : []).map((d: any) => {
-                const count = empCountByDesig[(d.name || "").toLowerCase().trim()] || 0;
-                const isConfirming = confirmDeleteId === d.id;
-                return (
-                  <tr key={d.id} className={cn("transition-colors", isConfirming ? "bg-red-50" : "hover:bg-muted/30")}>
-                    <td className="px-3 py-2.5 font-mono text-primary font-medium">{d.code}</td>
-                    <td className="px-3 py-2.5 font-medium">{d.name}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{d.departmentName || "—"}</td>
-                    <td className="px-3 py-2.5"><span className="px-2 py-0.5 bg-muted rounded text-xs">{LEVEL_LABEL[d.level] || "Staff"}</span></td>
-                    <td className="px-3 py-2.5">
-                      <span className={cn(
-                        "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold",
-                        count > 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                      )}>
-                        <Users className="w-3 h-3" />
-                        {count}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <span className={cn("px-2 py-0.5 rounded text-xs", d.isActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500")}>
-                        {d.isActive ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      {isConfirming ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs text-red-600 font-medium whitespace-nowrap">Delete?</span>
-                          <button onClick={() => { deleteDes.mutate(d.id); setConfirmDeleteId(null); }}
-                            className="flex items-center gap-1 px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-xs font-medium">Yes</button>
-                          <button onClick={() => setConfirmDeleteId(null)}
-                            className="flex items-center gap-1 px-2 py-1 rounded bg-muted hover:bg-muted/80 text-xs font-medium">No</button>
-                        </div>
-                      ) : (
-                        <div className="flex gap-1">
-                          <button onClick={() => openEdit(d)} className="p-1.5 hover:bg-muted rounded"><Edit2 className="w-3 h-3" /></button>
-                          <button onClick={() => setConfirmDeleteId(d.id)} className="p-1.5 hover:bg-red-100 text-red-500 rounded"><Trash2 className="w-3 h-3" /></button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-              {!(Array.isArray(desigs) ? desigs : []).length && <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">No designations found.</td></tr>}
-            </tbody>
-          </table>
-        )}
-      </Card>
-    </div>
-  );
-}
 
 // ── Salary scale (mirrors server) ──────────────────────────────────────────────
 const SALARY_SCALE: Record<string, number> = {
@@ -1361,7 +1210,7 @@ function PayrollTab() {
   function getBasic(emp: any): number {
     if (salaryAssignMap[emp.id] != null) return salaryAssignMap[emp.id];
     if (emp.basicSalary) return Number(emp.basicSalary);
-    return SALARY_SCALE[emp.designation] ?? 0;
+    return 0;
   }
 
   const loadPayrollStatus = async () => {
@@ -1386,7 +1235,6 @@ function PayrollTab() {
       list = list.filter((e: any) =>
         empDisplayName(e).toLowerCase().includes(q) ||
         (e.employeeId || "").toLowerCase().includes(q) ||
-        (e.designation || "").toLowerCase().includes(q) ||
         (e.department || "").toLowerCase().includes(q)
       );
     }
@@ -1558,7 +1406,7 @@ function PayrollTab() {
                 {[
                   { label: "Emp ID", f: null },
                   { label: "Name", f: "name" },
-                  { label: "Designation / Dept", f: null },
+                  { label: "Department", f: null },
                   { label: "Type", f: "type" },
                   { label: "Basic Salary", f: "salary" },
                   { label: "EPF / ETF No.", f: null },
@@ -1615,8 +1463,7 @@ function PayrollTab() {
                         <div className="text-[10px] text-muted-foreground">{emp.email}</div>
                       </td>
                       <td className="px-3 py-2.5">
-                        <div className="text-foreground">{emp.designation || "—"}</div>
-                        <div className="text-[10px] text-muted-foreground">{emp.department || ""}</div>
+                        <div className="text-foreground">{emp.department || "—"}</div>
                       </td>
                       <td className="px-3 py-2.5">
                         <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium", EMP_TYPE_STYLE[emp.employeeType] || EMP_TYPE_STYLE.permanent)}>
@@ -1742,10 +1589,10 @@ export default function Employees() {
   }, [allEmployees, search, filterBranchId]);
 
   function exportCSV() {
-    const headers = ["Employee ID","Biometric ID","First Name","Last Name","Gender","Designation","Department","Branch","Type","Status","Phone","Email","NIC Number","Passport No.","Basic Salary (LKR)","EPF No.","ETF No.","Joining Date"];
+    const headers = ["Employee ID","Biometric ID","First Name","Last Name","Gender","Department","Branch","Type","Status","Phone","Email","NIC Number","Passport No.","Basic Salary (LKR)","EPF No.","ETF No.","Joining Date"];
     const rows = employees.map((e: any) => [
       e.employeeId, e.biometricId || "", e.firstName || "", e.lastName || e.fullName || "",
-      e.gender, e.designation, e.department,
+      e.gender, e.department,
       e.branchName, e.employeeType, e.status, e.phone, e.email,
       e.nicNumber || "", e.panNumber || "", e.basicSalary || "", e.epfNumber || "", e.etfNumber || "", e.joiningDate
     ]);
@@ -1767,7 +1614,7 @@ export default function Employees() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Employee Management" description="Manage staff profiles, departments, and designations." />
+      <PageHeader title="Employee Management" description="Manage staff profiles and departments." />
 
       {/* Mini Dashboard */}
       <EmployeeMiniDashboard
@@ -1788,7 +1635,6 @@ export default function Employees() {
               )}>
               {t === "Employee List" && <Users className="w-3.5 h-3.5" />}
               {t === "Departments" && <Building2 className="w-3.5 h-3.5" />}
-              {t === "Designations" && <Layers className="w-3.5 h-3.5" />}
               {t === "Payroll" && <BadgeIndianRupee className="w-3.5 h-3.5" />}
               {t}
               {t === "Employee List" && (
@@ -1869,7 +1715,7 @@ export default function Employees() {
                 <table className="w-full text-xs">
                   <thead className="bg-muted/50 sticky top-0">
                     <tr>
-                      {["Emp ID","Bio ID","Name","Designation / Dept","Branch","NIC / Passport","Status","Actions"].map(h => (
+                      {["Emp ID","Bio ID","Name","Department","Branch","NIC / Passport","Status","Actions"].map(h => (
                         <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -1895,8 +1741,7 @@ export default function Employees() {
                           </div>
                         </td>
                         <td className="px-3 py-2.5">
-                          <div className="font-medium">{emp.designation}</div>
-                          <div className="text-muted-foreground">{emp.department}</div>
+                          <div className="font-medium">{emp.department}</div>
                         </td>
                         <td className="px-3 py-2.5 text-muted-foreground">
                           <div className="flex items-center gap-1"><MapPin className="w-3 h-3 shrink-0" /><span className="truncate max-w-[120px]">{emp.branchName}</span></div>

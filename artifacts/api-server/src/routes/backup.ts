@@ -3,7 +3,7 @@ import multer from "multer";
 import { spawn } from "child_process";
 import { db } from "@workspace/db";
 import {
-  companies, branches, departments, designations, shifts,
+  companies, branches, departments, shifts,
   employees, systemSettings, holidays,
   payrollSettings, payrollRecords, staffLoans, staffIncentives,
   attendanceRecords, leaveBalances,
@@ -70,7 +70,6 @@ router.get("/stats", async (_req, res) => {
       { key: "attendance",        tbl: attendanceRecords },
       { key: "shifts",            tbl: shifts },
       { key: "departments",       tbl: departments },
-      { key: "designations",      tbl: designations },
       { key: "holidays",          tbl: holidays },
       { key: "payrollRecords",    tbl: payrollRecords },
       { key: "staffLoans",        tbl: staffLoans },

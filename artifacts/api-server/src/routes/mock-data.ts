@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import {
-  branches, shifts, departments, designations, employees, holidays, systemSettings, attendanceRecords
+  branches, shifts, departments, employees, holidays, systemSettings, attendanceRecords
 } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -135,26 +135,6 @@ const SL_DEPARTMENTS = [
   { name: "Logistics & Transport", code: "LOG", description: "Vehicle management and route planning", isActive: true },
 ];
 
-const SL_DESIGNATIONS = [
-  { name: "Postmaster General", code: "PMG", level: 5, description: "Head of Sri Lanka Post", isActive: true },
-  { name: "Deputy Postmaster General", code: "DPMG", level: 5, description: "Deputy head", isActive: true },
-  { name: "Regional Postmaster", code: "RPM", level: 4, description: "Regional operations head", isActive: true },
-  { name: "Sub Postmaster", code: "SPM", level: 3, description: "Sub-branch head", isActive: true },
-  { name: "Postal Supervisor", code: "PSUP", level: 3, description: "Supervises postal operations", isActive: true },
-  { name: "Senior Postal Officer", code: "SPSO", level: 2, description: "Senior counter and operations officer", isActive: true },
-  { name: "Postal Officer", code: "PSO", level: 2, description: "General postal officer", isActive: true },
-  { name: "Counter Clerk", code: "CCK", level: 1, description: "Front counter services", isActive: true },
-  { name: "Sorting Officer", code: "STO", level: 1, description: "Mail sorting and processing", isActive: true },
-  { name: "Delivery Agent", code: "DLA", level: 1, description: "Last-mile mail delivery", isActive: true },
-  { name: "Accounts Officer", code: "ACO", level: 2, description: "Financial accounts management", isActive: true },
-  { name: "HR Officer", code: "HRO", level: 2, description: "Human resources management", isActive: true },
-  { name: "IT Officer", code: "ITO", level: 2, description: "IT systems administration", isActive: true },
-  { name: "Driver", code: "DRV", level: 1, description: "Vehicle operator", isActive: true },
-  { name: "Security Officer", code: "SCO", level: 1, description: "Premises security", isActive: true },
-  { name: "Clerical Assistant", code: "CLA", level: 1, description: "Administrative support", isActive: true },
-  { name: "Data Entry Operator", code: "DEO", level: 1, description: "Data processing and entry", isActive: true },
-  { name: "PSB Officer", code: "PSBO", level: 2, description: "Postal Savings Bank officer", isActive: true },
-];
 
 const SL_HOLIDAYS_2026 = [
   { name: "New Year's Day", date: "2026-01-01", type: "national" as const, description: "Public holiday" },
@@ -200,7 +180,7 @@ function randomDate(startYear: number, endYear: number): string {
   return `${y}-${padZ(m)}-${padZ(d)}`;
 }
 
-function buildEmployees(branchIds: number[], shiftIds: number[], deptNames: string[], desigNames: string[]) {
+function buildEmployees(branchIds: number[], shiftIds: number[], deptNames: string[]) {
   const list: any[] = [];
   const genders: Array<"male" | "female"> = ["male", "female"];
   const types: Array<"permanent" | "contract" | "casual"> = ["permanent", "permanent", "permanent", "contract", "casual"];
@@ -213,7 +193,6 @@ function buildEmployees(branchIds: number[], shiftIds: number[], deptNames: stri
     const fullName = `${firstName} ${lastName}`;
     const empId = `SLP${padZ(1000 + i, 4)}`;
     const dept = deptNames[i % deptNames.length];
-    const desig = desigNames[i % desigNames.length];
     const branchId = branchIds[i % branchIds.length];
     const shiftId = shiftIds[i % shiftIds.length];
     const joiningDate = randomDate(2010, 2024);
@@ -228,7 +207,6 @@ function buildEmployees(branchIds: number[], shiftIds: number[], deptNames: stri
       firstName,
       lastName,
       fullName,
-      designation: desig,
       department: dept,
       branchId,
       shiftId,
@@ -264,24 +242,8 @@ router.post("/import", async (_req, res) => {
       const deptMap: Record<string, number> = {};
       allDepts.forEach(d => { deptMap[d.code] = d.id; });
 
-      const desigRows = SL_DESIGNATIONS.map(d => {
-        const deptCode = d.code === "PMG" || d.code === "DPMG" ? "ADM"
-          : d.code === "RPM" || d.code === "SPM" || d.code === "PSUP" || d.code === "SPSO" || d.code === "PSO" || d.code === "CCK" || d.code === "STO" || d.code === "DLA" ? "OPS"
-          : d.code === "ACO" ? "FIN"
-          : d.code === "HRO" ? "HR"
-          : d.code === "ITO" || d.code === "DEO" ? "IT"
-          : d.code === "PSBO" ? "PSB"
-          : d.code === "SCO" ? "ADM"
-          : d.code === "DRV" ? "LOG"
-          : "ADM";
-        return { ...d, departmentId: deptMap[deptCode] || null };
-      });
-
-      await tx.insert(designations).values(desigRows).onConflictDoNothing();
-
       const deptNames = SL_DEPARTMENTS.map(d => d.name);
-      const desigNames = SL_DESIGNATIONS.map(d => d.name);
-      const empList = buildEmployees(branchIds, shiftIds, deptNames, desigNames);
+      const empList = buildEmployees(branchIds, shiftIds, deptNames);
       await tx.insert(employees).values(empList).onConflictDoNothing();
 
       const holidayRows = SL_HOLIDAYS_2026.map(h => ({ ...h, type: h.type as "national" | "religious" | "optional" }));
@@ -325,7 +287,6 @@ router.delete("/clear", async (_req, res) => {
     await db.transaction(async (tx) => {
       await tx.delete(attendanceRecords);
       await tx.delete(employees);
-      await tx.delete(designations);
       await tx.delete(departments);
       await tx.delete(shifts);
       await tx.delete(branches);

@@ -14,24 +14,12 @@ export const departments = pgTable("departments", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const designations = pgTable("designations", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  code: text("code").notNull().unique(),
-  departmentId: integer("department_id").references(() => departments.id),
-  level: integer("level").default(1),
-  description: text("description"),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
 export const employees = pgTable("employees", {
   id: serial("id").primaryKey(),
   employeeId: text("employee_id").notNull().unique(),
   firstName: text("first_name"),
   lastName: text("last_name"),
   fullName: text("full_name").notNull(),
-  designation: text("designation").notNull(),
   department: text("department").notNull(),
   companyId: integer("company_id").references(() => companies.id),
   branchId: integer("branch_id").notNull().references(() => branches.id),
@@ -63,9 +51,7 @@ export const employees = pgTable("employees", {
 
 export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: true, createdAt: true });
 export const insertDepartmentSchema = createInsertSchema(departments).omit({ id: true, createdAt: true });
-export const insertDesignationSchema = createInsertSchema(designations).omit({ id: true, createdAt: true });
 
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
 export type Employee = typeof employees.$inferSelect;
 export type Department = typeof departments.$inferSelect;
-export type Designation = typeof designations.$inferSelect;

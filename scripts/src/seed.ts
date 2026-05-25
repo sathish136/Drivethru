@@ -166,7 +166,6 @@ async function seed() {
 
   const firstNames = ["Priya", "Nuwan", "Kasun", "Dilshan", "Tharindu", "Chamara", "Sachith", "Ruwani", "Malsha", "Lasith", "Amaya", "Dineth", "Hiruni", "Supun", "Nadeesha", "Chathura", "Sewwandi", "Asitha", "Thilanka", "Kanchana"];
   const lastNames  = ["Fernando", "Silva", "Perera", "Jayawardena", "Bandara", "Wijesinghe", "Herath", "Gunawardena", "Rathnayake", "Wickramasinghe", "Kumara", "Dissanayake", "Senanayake", "Karunaratne", "Amarasinghe"];
-  const designations = ["Postmaster", "Assistant Postmaster", "Postal Officer", "Counter Clerk", "Delivery Agent", "Sorting Officer", "Data Entry Operator", "Driver", "Security Officer", "Supervisor"];
   const departments  = ["Operations", "Counter Services", "Delivery", "Finance", "Administration", "IT", "Security"];
 
   // Build employee list — IDs use the regional key code as prefix, unique per region
@@ -189,7 +188,6 @@ async function seed() {
     empData.push({
       employeeId: nextEmpId("HO"),
       fullName: `${fn} ${ln}`,
-      designation: designations[nameIdx % designations.length],
       department: departments[nameIdx % departments.length],
       branchId: ho.id,
       shiftId: [shift1.id, shift2.id, shift3.id][nameIdx % 3],
@@ -211,7 +209,6 @@ async function seed() {
       empData.push({
         employeeId: nextEmpId(rb.code),
         fullName: `${fn} ${ln}`,
-        designation: designations[nameIdx % designations.length],
         department: departments[nameIdx % departments.length],
         branchId: rb.id,
         shiftId: [shift1.id, shift2.id, shift3.id][nameIdx % 3],
@@ -235,7 +232,6 @@ async function seed() {
       empData.push({
         employeeId: nextEmpId(sb.parentCode),
         fullName: `${fn} ${ln}`,
-        designation: designations[nameIdx % designations.length],
         department: departments[nameIdx % departments.length],
         branchId: sb.id,
         shiftId: [shift1.id, shift2.id, shift3.id][nameIdx % 3],

@@ -150,7 +150,6 @@ router.get("/", async (req, res) => {
       filtered = filtered.filter(r =>
         r.emp.fullName.toLowerCase().includes(s) ||
         r.emp.employeeId.toLowerCase().includes(s) ||
-        r.emp.designation.toLowerCase().includes(s) ||
         (r.emp.nicNumber || "").toLowerCase().includes(s) ||
         (r.emp.aadharNumber || "").toLowerCase().includes(s) ||
         (r.emp.panNumber || "").toLowerCase().includes(s) ||
