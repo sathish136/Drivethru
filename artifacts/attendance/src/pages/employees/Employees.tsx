@@ -30,7 +30,7 @@ const EMP_TYPE_STYLE: Record<string, string> = {
   casual:    "bg-gray-100 text-gray-600",
 };
 
-const TABS = ["Employee List", "Departments", "Payroll"] as const;
+const TABS = ["Employee List", "Departments", "Shift Details", "Payroll"] as const;
 type Tab = typeof TABS[number];
 
 const DEPT_LIST = ["Operations","Finance & Accounts","Human Resources","Information Technology","Postal Services","Customer Service","Administration","Logistics & Delivery"];
@@ -918,6 +918,186 @@ const PAY_STATUS_STYLE: Record<string, string> = {
   paid:     "bg-emerald-100 text-emerald-700",
 };
 
+// ── Shift Details Tab ──────────────────────────────────────────────────────────
+function ShiftDetailsTab() {
+  const qc = useQueryClient();
+  const { data: shiftsRaw, isLoading } = useGet(["shifts-detail"], "/shifts");
+  const shifts: any[] = Array.isArray(shiftsRaw) ? shiftsRaw.filter((s: any) => s.isActive) : [];
+
+  const [editShift, setEditShift] = useState<any | null>(null);
+  const [form, setForm] = useState<any>({});
+
+  const updateShift = useMutation({
+    mutationFn: ({ id, data }: any) =>
+      fetch(apiUrl(`/shifts/${id}`), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }).then(r => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["shifts-detail"] }); setEditShift(null); },
+  });
+
+  function openEdit(s: any) {
+    setForm({
+      name: s.name,
+      type: s.type,
+      startTime1: s.startTime1,
+      endTime1: s.endTime1,
+      graceMinutes: s.graceMinutes ?? 10,
+      overtimeThreshold: s.overtimeThreshold ?? 30,
+      category: s.category ?? "REGULAR",
+    });
+    setEditShift(s);
+  }
+
+  function calcHours(start: string, end: string) {
+    if (!start || !end) return "—";
+    const [sh, sm] = start.split(":").map(Number);
+    const [eh, em] = end.split(":").map(Number);
+    let mins = (eh * 60 + em) - (sh * 60 + sm);
+    if (mins < 0) mins += 24 * 60;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  }
+
+  const CATEGORY_COLORS: Record<string, string> = {
+    REGULAR:  "bg-blue-100 text-blue-700",
+    NIGHT:    "bg-indigo-100 text-indigo-700",
+    FLEXIBLE: "bg-green-100 text-green-700",
+  };
+
+  return (
+    <div className="space-y-4">
+      {isLoading ? (
+        <div className="text-center py-12 text-muted-foreground text-sm">Loading shifts…</div>
+      ) : shifts.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground text-sm">No active shifts found.</div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3">
+          {shifts.map((s: any) => (
+            <Card key={s.id} className="overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-muted/30">
+                <div className="flex items-center gap-3">
+                  <Clock className="w-4 h-4 text-primary" />
+                  <span className="font-semibold text-sm">{s.name}</span>
+                  <span className={cn("px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide", CATEGORY_COLORS[s.category] || CATEGORY_COLORS.REGULAR)}>
+                    {s.category || "REGULAR"}
+                  </span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-muted text-muted-foreground uppercase">
+                    {s.type === "split" ? "Split" : "Normal"}
+                  </span>
+                </div>
+                <button onClick={() => openEdit(s)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-muted transition-colors">
+                  <Edit2 className="w-3.5 h-3.5" /> Edit
+                </button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-0 divide-x divide-border">
+                {[
+                  {
+                    label: "Working Hours",
+                    icon: <Clock className="w-3.5 h-3.5 text-primary" />,
+                    value: <span className="font-mono">{s.startTime1} – {s.endTime1}</span>,
+                    sub: calcHours(s.startTime1, s.endTime1) + " total",
+                  },
+                  {
+                    label: "OT Eligible After",
+                    icon: <BadgeIndianRupee className="w-3.5 h-3.5 text-amber-500" />,
+                    value: s.overtimeThreshold > 0
+                      ? <span>{s.overtimeThreshold} min past end</span>
+                      : <span className="text-muted-foreground">Not eligible</span>,
+                    sub: s.overtimeThreshold > 0 ? "after shift end time" : "OT not applicable",
+                  },
+                  {
+                    label: "Late Entry Threshold",
+                    icon: <AlertCircle className="w-3.5 h-3.5 text-orange-500" />,
+                    value: <span>{s.graceMinutes} min grace</span>,
+                    sub: s.graceMinutes === 0 ? "No grace period" : `Late after ${s.startTime1} +${s.graceMinutes}m`,
+                  },
+                  {
+                    label: "Flexible Hours",
+                    icon: <Shield className="w-3.5 h-3.5 text-green-500" />,
+                    value: s.category === "FLEXIBLE"
+                      ? <span className="text-green-600 font-semibold">Enabled</span>
+                      : <span className="text-muted-foreground">Disabled</span>,
+                    sub: s.category === "FLEXIBLE" ? "Employee sets own hours" : "Fixed schedule",
+                  },
+                ].map(item => (
+                  <div key={item.label} className="flex flex-col gap-1.5 px-5 py-4">
+                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                      {item.icon}{item.label}
+                    </div>
+                    <div className="text-sm font-semibold">{item.value}</div>
+                    <div className="text-[11px] text-muted-foreground">{item.sub}</div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editShift && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-background rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-primary" />
+                <span className="font-bold text-sm">Edit Shift — {editShift.name}</span>
+              </div>
+              <button onClick={() => setEditShift(null)} className="p-1.5 rounded-lg hover:bg-muted">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs">Start Time</Label>
+                  <Input type="time" value={form.startTime1} onChange={e => setForm((f: any) => ({ ...f, startTime1: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">End Time</Label>
+                  <Input type="time" value={form.endTime1} onChange={e => setForm((f: any) => ({ ...f, endTime1: e.target.value }))} />
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs">Late Entry Threshold (minutes grace)</Label>
+                <Input type="number" min={0} max={120} value={form.graceMinutes}
+                  onChange={e => setForm((f: any) => ({ ...f, graceMinutes: Number(e.target.value) }))} />
+                <p className="text-[11px] text-muted-foreground mt-1">Minutes after start time before marking late</p>
+              </div>
+              <div>
+                <Label className="text-xs">OT Eligible After (minutes past end time)</Label>
+                <Input type="number" min={0} max={180} value={form.overtimeThreshold}
+                  onChange={e => setForm((f: any) => ({ ...f, overtimeThreshold: Number(e.target.value) }))} />
+                <p className="text-[11px] text-muted-foreground mt-1">Set to 0 to disable OT for this shift</p>
+              </div>
+              <div>
+                <Label className="text-xs">Flexible Hours</Label>
+                <Select value={form.category} onChange={e => setForm((f: any) => ({ ...f, category: e.target.value }))}>
+                  <option value="REGULAR">No — Fixed schedule</option>
+                  <option value="FLEXIBLE">Yes — Employee sets own hours</option>
+                  <option value="NIGHT">Night shift</option>
+                </Select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-6 py-4 border-t border-border bg-muted/20">
+              <Button variant="outline" className="text-xs h-9" onClick={() => setEditShift(null)}>Cancel</Button>
+              <Button className="text-xs h-9 flex items-center gap-1.5"
+                disabled={updateShift.isPending}
+                onClick={() => updateShift.mutate({ id: editShift.id, data: form })}>
+                <Save className="w-3.5 h-3.5" />
+                {updateShift.isPending ? "Saving…" : "Save Changes"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Payroll Tab ────────────────────────────────────────────────────────────────
 function PayrollTab() {
   const now = new Date();
@@ -1378,6 +1558,7 @@ export default function Employees() {
               )}>
               {t === "Employee List" && <Users className="w-3.5 h-3.5" />}
               {t === "Departments" && <Building2 className="w-3.5 h-3.5" />}
+              {t === "Shift Details" && <Clock className="w-3.5 h-3.5" />}
               {t === "Payroll" && <BadgeIndianRupee className="w-3.5 h-3.5" />}
               {t}
               {t === "Employee List" && (
@@ -1521,6 +1702,7 @@ export default function Employees() {
 
       {activeTab === "Departments" && <DepartmentsTab onFilterByDept={dept => { setFilterDept(dept); setActiveTab("Employee List"); }} />}
       {activeTab === "Designations" && <DesignationsTab />}
+      {activeTab === "Shift Details" && <ShiftDetailsTab />}
       {activeTab === "Payroll" && <PayrollTab />}
 
     </div>
