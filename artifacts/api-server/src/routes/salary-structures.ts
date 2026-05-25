@@ -195,6 +195,70 @@ router.post("/assignments", async (req, res) => {
   }
 });
 
+/* PUT /salary-structures/employee/:employeeId — upsert per-employee structure inline */
+router.put("/employee/:employeeId", async (req, res) => {
+  try {
+    const empId = parseInt(req.params.employeeId);
+    const { basicAmount = 0, effectiveDate, earnings = [], deductions = [] } = req.body;
+    if (!effectiveDate) return res.status(400).json({ message: "effectiveDate is required" });
+
+    const [emp] = await db.select({ id: employees.id, employeeId: employees.employeeId, fullName: employees.fullName })
+      .from(employees).where(eq(employees.id, empId));
+    if (!emp) return res.status(404).json({ message: "Employee not found" });
+
+    const STATUTORY = [
+      { component: "EPF – Employee", abbr: "EPF_EE", amount: 0, dependsOn: "basic", isTaxApplicable: false, amountBasedOn: "Basic Salary", formula: "basic * 0.08" },
+      { component: "EPF – Employer", abbr: "EPF_ER", amount: 0, dependsOn: "basic", isTaxApplicable: false, amountBasedOn: "Basic Salary", formula: "basic * 0.12" },
+      { component: "ETF",            abbr: "ETF",    amount: 0, dependsOn: "basic", isTaxApplicable: false, amountBasedOn: "Basic Salary", formula: "basic * 0.03" },
+    ];
+    const STAT_NAMES = STATUTORY.map(s => s.component);
+
+    const hasBasic = earnings.some((e: any) => (e.component || "").toLowerCase() === "basic");
+    const fullEarnings = hasBasic
+      ? earnings
+      : [{ component: "Basic", abbr: "BA", amount: parseFloat(basicAmount) || 0, dependsOn: "", isTaxApplicable: false, amountBasedOn: "Basic Salary", formula: "" }, ...earnings];
+
+    const customDeds = deductions.filter((d: any) => !STAT_NAMES.includes(d.component));
+    const fullDeductions = [...STATUTORY, ...customDeds];
+
+    const [existing] = await db.select().from(employeeSalaryAssignments)
+      .where(eq(employeeSalaryAssignments.employeeId, empId));
+
+    if (existing) {
+      await db.update(salaryStructures).set({
+        earnings: JSON.stringify(fullEarnings),
+        deductions: JSON.stringify(fullDeductions),
+        updatedAt: new Date(),
+      }).where(eq(salaryStructures.id, existing.salaryStructureId));
+      await db.update(employeeSalaryAssignments).set({
+        basicAmount: parseFloat(basicAmount) || 0,
+        effectiveDate,
+        updatedAt: new Date(),
+      }).where(eq(employeeSalaryAssignments.id, existing.id));
+      res.json({ success: true, structureId: existing.salaryStructureId });
+    } else {
+      const [newStruct] = await db.insert(salaryStructures).values({
+        name: `${emp.employeeId} – ${emp.fullName}`,
+        currency: "LKR",
+        status: "active",
+        earnings: JSON.stringify(fullEarnings),
+        deductions: JSON.stringify(fullDeductions),
+        variablePay: "[]",
+      }).returning();
+      await db.insert(employeeSalaryAssignments).values({
+        employeeId: empId,
+        salaryStructureId: newStruct.id,
+        basicAmount: parseFloat(basicAmount) || 0,
+        effectiveDate,
+      });
+      res.json({ success: true, structureId: newStruct.id });
+    }
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Failed to save employee salary structure" });
+  }
+});
+
 /* DELETE /salary-structures/assignments/:employeeId */
 router.delete("/assignments/:employeeId", async (req, res) => {
   try {

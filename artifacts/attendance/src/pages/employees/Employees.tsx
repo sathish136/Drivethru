@@ -438,60 +438,58 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
   const [regionalInfo, setRegionalInfo] = useState<{ prefix: string; nextId: string; regionalName: string; branchName: string } | null>(null);
   const [empIdError, setEmpIdError] = useState<string>("");
 
-  /* ── Salary Structure Assignment state ── */
-  const [allSalaryStructures, setAllSalaryStructures] = useState<any[]>([]);
+  /* ── Per-employee salary structure state ── */
   const [currentAssignment, setCurrentAssignment] = useState<any>(null);
-  const [assignStructId, setAssignStructId] = useState<number | "">("");
   const [assignBasicAmt, setAssignBasicAmt] = useState("");
   const [assignEffDate, setAssignEffDate] = useState(new Date().toISOString().slice(0, 10));
+  const [empEarnings, setEmpEarnings] = useState<Array<{ id: string; component: string; amount: number }>>([]);
+  const [empCustomDeds, setEmpCustomDeds] = useState<Array<{ id: string; component: string; amount: number }>>([]);
   const [assignSaving, setAssignSaving] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
   const [assignSuccess, setAssignSuccess] = useState(false);
-  const [structLoading, setStructLoading] = useState(false);
 
-  /* ── Load salary structures + existing assignment when payroll tab opens ── */
+  const SS_STAT_NAMES = ["EPF – Employee", "EPF – Employer", "ETF"];
+  function newRow() { return { id: Math.random().toString(36).slice(2), component: "", amount: 0 }; }
+
+  /* ── Load existing salary assignment when payroll tab opens ── */
   useEffect(() => {
-    if (tab !== "payroll") return;
-    setStructLoading(true);
-    fetch(apiUrl("/salary-structures"))
-      .then(r => r.json())
-      .then(d => { if (Array.isArray(d)) setAllSalaryStructures(d.filter((s: any) => s.status === "active")); })
-      .catch(() => {})
-      .finally(() => setStructLoading(false));
-
-    if (!emp?.id) return;
+    if (tab !== "payroll" || !emp?.id) return;
     fetch(apiUrl(`/salary-structures/assignment/${emp.id}`))
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (d && !d.error) {
           setCurrentAssignment(d);
-          setAssignStructId(d.structureId);
           setAssignBasicAmt(String(d.basicAmount || ""));
+          const earns = (d.earnings || []).filter((e: any) => (e.component || "").toLowerCase() !== "basic");
+          setEmpEarnings(earns.map((e: any) => ({ id: Math.random().toString(36).slice(2), component: e.component || "", amount: Number(e.amount) || 0 })));
+          const deds = (d.deductions || []).filter((d: any) => !SS_STAT_NAMES.includes(d.component));
+          setEmpCustomDeds(deds.map((d: any) => ({ id: Math.random().toString(36).slice(2), component: d.component || "", amount: Number(d.amount) || 0 })));
         }
       })
       .catch(() => {});
   }, [tab, emp?.id]);
 
   async function saveAssignment() {
-    if (!emp?.id) { setAssignError("Save the employee first before assigning a salary structure."); return; }
-    if (!assignStructId) { setAssignError("Please select a salary structure."); return; }
+    if (!emp?.id) { setAssignError("Save the employee record first."); return; }
     setAssignSaving(true); setAssignError(null);
     try {
-      const r = await fetch(apiUrl("/salary-structures/assignments"), {
-        method: "POST",
+      const r = await fetch(apiUrl(`/salary-structures/employee/${emp.id}`), {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ employeeId: emp.id, salaryStructureId: assignStructId, basicAmount: parseFloat(assignBasicAmt) || 0, effectiveDate: assignEffDate }),
+        body: JSON.stringify({
+          basicAmount: parseFloat(assignBasicAmt) || 0,
+          effectiveDate: assignEffDate,
+          earnings: empEarnings.map(({ id: _, ...rest }) => rest),
+          deductions: empCustomDeds.map(({ id: _, ...rest }) => rest),
+        }),
       });
       if (r.ok) {
-        fetch(apiUrl(`/salary-structures/assignment/${emp.id}`))
-          .then(r2 => r2.ok ? r2.json() : null)
-          .then(d => { if (d && !d.error) setCurrentAssignment(d); })
-          .catch(() => {});
+        setCurrentAssignment((p: any) => ({ ...p, basicAmount: parseFloat(assignBasicAmt) || 0 }));
         setAssignSuccess(true);
         setTimeout(() => setAssignSuccess(false), 3000);
       } else {
         const d = await r.json();
-        setAssignError(d.message || "Failed to save assignment");
+        setAssignError(d.message || "Failed to save");
       }
     } catch { setAssignError("Failed to save. Check connection."); }
     setAssignSaving(false);
@@ -503,8 +501,9 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
     try {
       await fetch(apiUrl(`/salary-structures/assignments/${emp.id}`), { method: "DELETE" });
       setCurrentAssignment(null);
-      setAssignStructId("");
       setAssignBasicAmt("");
+      setEmpEarnings([]);
+      setEmpCustomDeds([]);
     } catch {}
     setAssignSaving(false);
   }
@@ -1055,237 +1054,186 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
           {/* ── PAYROLL TAB ── */}
           {tab === "payroll" && (() => {
-            const SS_STATUTORY = ["EPF – Employee", "EPF – Employer", "ETF"];
-            const SS_STATUTORY_DEFS = [
-              { component: "EPF – Employee", pct: 8 },
-              { component: "EPF – Employer", pct: 12 },
-              { component: "ETF", pct: 3 },
-            ];
-            const selStruct = allSalaryStructures.find(s => s.id === Number(assignStructId));
-            const basicForCalc = parseFloat(assignBasicAmt) || 0;
-            const earnings: any[]   = selStruct ? (Array.isArray(selStruct.earnings)   ? selStruct.earnings   : JSON.parse(selStruct.earnings   || "[]")) : [];
-            const deductions: any[] = selStruct ? (Array.isArray(selStruct.deductions) ? selStruct.deductions : JSON.parse(selStruct.deductions || "[]")) : [];
-            const nonStatutoryDeds = deductions.filter((d: any) => !SS_STATUTORY.includes(d.component));
-            const totalEarnings = earnings.reduce((s: number, e: any) => {
-              if ((e.component ?? "").toLowerCase() === "basic") return s + basicForCalc;
-              return s + (Number(e.amount) || 0);
-            }, 0);
-            const epfEe = +(basicForCalc * 0.08).toFixed(2);
-            const epfEr = +(basicForCalc * 0.12).toFixed(2);
-            const etf   = +(basicForCalc * 0.03).toFixed(2);
-            const totalStatDeduct = epfEe + epfEr + etf;
-            const totalOtherDeduct = nonStatutoryDeds.reduce((s: number, d: any) => s + (Number(d.amount) || 0), 0);
-            const totalDeductions = totalStatDeduct + totalOtherDeduct;
-            const netSalary = totalEarnings - epfEe - totalOtherDeduct;
+            const basic = parseFloat(assignBasicAmt) || 0;
+            const epfEe = +(basic * 0.08).toFixed(2);
+            const epfEr = +(basic * 0.12).toFixed(2);
+            const etf   = +(basic * 0.03).toFixed(2);
+            const totalEarnings = basic + empEarnings.reduce((s, e) => s + (e.amount || 0), 0);
+            const totalCustomDeds = empCustomDeds.reduce((s, d) => s + (d.amount || 0), 0);
+            const totalDeductions = epfEe + epfEr + etf + totalCustomDeds;
+            const netPay = totalEarnings - epfEe - totalCustomDeds;
+            const fmt = (n: number) => n.toLocaleString("en-LK", { minimumFractionDigits: 2 });
 
             return (
               <div className="space-y-5">
 
-                {/* ── Salary Structure Assignment ── */}
+                {/* ── Alerts ── */}
+                {!emp?.id && (
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-700">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    Save the employee record first before configuring salary.
+                  </div>
+                )}
+                {assignError && (
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />{assignError}
+                    <button onClick={() => setAssignError(null)} className="ml-auto"><X className="w-3 h-3" /></button>
+                  </div>
+                )}
+                {assignSuccess && (
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-green-50 border border-green-200 text-xs text-green-700">
+                    <Check className="w-3.5 h-3.5 shrink-0" />Salary structure saved successfully.
+                  </div>
+                )}
+
+                {/* ── Basic Salary + Date ── */}
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <BadgeIndianRupee className="w-3.5 h-3.5 text-primary" />
-                    <span className="text-xs font-bold text-foreground">Salary Structure</span>
+                    <span className="text-xs font-bold text-foreground">Salary Details</span>
                     <div className="flex-1 border-t border-border" />
-                    {currentAssignment && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">Assigned</span>
-                    )}
+                    {currentAssignment && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">Saved</span>}
                   </div>
-
-                  {!emp?.id && (
-                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-700 mb-3">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                      Save the employee record first to assign a salary structure.
-                    </div>
-                  )}
-
-                  {assignError && (
-                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 mb-3">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                      {assignError}
-                      <button onClick={() => setAssignError(null)} className="ml-auto"><X className="w-3 h-3" /></button>
-                    </div>
-                  )}
-                  {assignSuccess && (
-                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-green-50 border border-green-200 text-xs text-green-700 mb-3">
-                      <Check className="w-3.5 h-3.5 shrink-0" />
-                      Salary structure assigned successfully.
-                    </div>
-                  )}
-
                   <div className="grid grid-cols-3 gap-x-5 gap-y-3">
-                    <div className="col-span-1">
-                      <FLabel label="Salary Structure" />
-                      {structLoading ? (
-                        <div className={cn(INP, "flex items-center text-muted-foreground gap-2")}>
-                          <RefreshCw className="w-3 h-3 animate-spin" /> Loading…
-                        </div>
-                      ) : (
-                        <select
-                          className={SEL}
-                          value={assignStructId}
-                          onChange={e => setAssignStructId(e.target.value ? Number(e.target.value) : "")}
-                          disabled={!emp?.id}
-                        >
-                          <option value="">— Select Structure —</option>
-                          {allSalaryStructures.map(s => (
-                            <option key={s.id} value={s.id}>{s.name}</option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
                     <div>
-                      <FLabel label="Basic Amount (LKR)" />
-                      <input
-                        type="number" min="0"
-                        className={INP}
-                        placeholder="e.g. 45000"
-                        value={assignBasicAmt}
-                        onChange={e => setAssignBasicAmt(e.target.value)}
-                        disabled={!emp?.id}
-                      />
+                      <FLabel label="Basic Salary (LKR)" />
+                      <input type="number" min="0" className={INP} placeholder="e.g. 45000"
+                        value={assignBasicAmt} onChange={e => setAssignBasicAmt(e.target.value)} disabled={!emp?.id} />
                     </div>
                     <div>
                       <FLabel label="Effective Date" />
-                      <input
-                        type="date"
-                        className={INP}
-                        value={assignEffDate}
-                        onChange={e => setAssignEffDate(e.target.value)}
-                        disabled={!emp?.id}
-                      />
+                      <input type="date" className={INP} value={assignEffDate}
+                        onChange={e => setAssignEffDate(e.target.value)} disabled={!emp?.id} />
                     </div>
                   </div>
-
-                  {emp?.id && (
-                    <div className="flex items-center gap-2 mt-3">
-                      <button
-                        onClick={saveAssignment}
-                        disabled={assignSaving || !assignStructId}
-                        className={cn(
-                          "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
-                          assignStructId
-                            ? "bg-primary text-white hover:bg-primary/90"
-                            : "bg-muted text-muted-foreground cursor-not-allowed"
-                        )}
-                      >
-                        {assignSaving
-                          ? <RefreshCw className="w-3 h-3 animate-spin" />
-                          : assignSuccess ? <Check className="w-3 h-3" /> : <Save className="w-3 h-3" />}
-                        {assignSuccess ? "Saved!" : "Save Assignment"}
-                      </button>
-                      {currentAssignment && (
-                        <button
-                          onClick={removeAssignment}
-                          disabled={assignSaving}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50 border border-red-200 transition-colors"
-                        >
-                          <Trash2 className="w-3 h-3" /> Remove
-                        </button>
-                      )}
-                    </div>
-                  )}
                 </div>
 
-                {/* ── Salary Splitup ── */}
-                {selStruct && (
-                  <div className="space-y-3">
-                    {/* Earnings */}
-                    <div className="rounded-xl border border-green-200 overflow-hidden">
-                      <div className="flex items-center gap-2 px-4 py-2.5 bg-green-50/60 border-b border-green-200">
-                        <BadgeIndianRupee className="w-3.5 h-3.5 text-green-600" />
-                        <span className="text-xs font-bold text-green-900">Earnings</span>
-                        <span className="ml-auto px-1.5 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded-full">{earnings.length} components</span>
-                      </div>
-                      <div className="divide-y divide-green-100">
-                        {earnings.map((e: any, i: number) => {
-                          const isBasic = (e.component ?? "").toLowerCase() === "basic";
-                          const amt = isBasic ? basicForCalc : (Number(e.amount) || 0);
-                          return (
-                            <div key={i} className="flex items-center gap-3 px-4 py-2">
-                              <span className="text-[10px] text-muted-foreground w-4 shrink-0">{i + 1}</span>
-                              <span className={cn("text-xs flex-1", isBasic ? "font-semibold text-foreground" : "text-foreground")}>
-                                {e.component || "—"}
-                                {isBasic && <span className="ml-1.5 text-[10px] text-muted-foreground font-normal">Basic Salary</span>}
-                              </span>
-                              <span className={cn("text-xs font-mono font-semibold", amt > 0 ? "text-green-700" : "text-muted-foreground")}>
-                                {amt > 0 ? `LKR ${amt.toLocaleString("en-LK", { minimumFractionDigits: 2 })}` : "—"}
-                              </span>
-                            </div>
-                          );
-                        })}
-                        {earnings.length === 0 && (
-                          <div className="px-4 py-4 text-xs text-muted-foreground text-center">No earnings components defined in this structure.</div>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between px-4 py-2.5 bg-green-50/60 border-t border-green-200">
-                        <span className="text-xs font-bold text-green-900">Total Earnings</span>
-                        <span className="text-sm font-bold font-mono text-green-700">LKR {totalEarnings.toLocaleString("en-LK", { minimumFractionDigits: 2 })}</span>
-                      </div>
+                {/* ── Earnings Components ── */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-bold text-green-800">Earnings</span>
+                    <div className="flex-1 border-t border-green-200" />
+                    <button onClick={() => setEmpEarnings(p => [...p, newRow()])} disabled={!emp?.id}
+                      className="flex items-center gap-1 text-[10px] font-semibold text-green-700 hover:text-green-900 disabled:opacity-40">
+                      <Plus className="w-3 h-3" /> Add
+                    </button>
+                  </div>
+                  <div className="rounded-xl border border-green-200 overflow-hidden">
+                    {/* Basic row (fixed) */}
+                    <div className="flex items-center gap-3 px-3 py-2 bg-green-50/40 border-b border-green-100">
+                      <span className="text-[10px] text-muted-foreground w-4 shrink-0">1</span>
+                      <span className="text-xs font-semibold flex-1 text-foreground">Basic Salary</span>
+                      <span className="text-xs text-muted-foreground">LKR</span>
+                      <span className="text-xs font-mono font-semibold text-green-700 w-28 text-right">{basic > 0 ? fmt(basic) : "—"}</span>
+                      <span className="w-5 shrink-0" />
                     </div>
-
-                    {/* Deductions */}
-                    <div className="rounded-xl border border-red-200 overflow-hidden">
-                      <div className="flex items-center gap-2 px-4 py-2.5 bg-red-50/60 border-b border-red-200">
-                        <X className="w-3.5 h-3.5 text-red-500" />
-                        <span className="text-xs font-bold text-red-900">Deductions</span>
+                    {/* Additional earnings */}
+                    {empEarnings.map((row, i) => (
+                      <div key={row.id} className="flex items-center gap-2 px-3 py-1.5 border-b border-green-50 last:border-0">
+                        <span className="text-[10px] text-muted-foreground w-4 shrink-0">{i + 2}</span>
+                        <input className={cn(INP, "flex-1 h-7")} placeholder="e.g. Transport Allowance"
+                          value={row.component} onChange={e => setEmpEarnings(p => p.map(r => r.id === row.id ? { ...r, component: e.target.value } : r))} />
+                        <span className="text-xs text-muted-foreground shrink-0">LKR</span>
+                        <input type="number" min="0" className={cn(INP, "w-28 h-7 text-right")} placeholder="0"
+                          value={row.amount || ""} onChange={e => setEmpEarnings(p => p.map(r => r.id === row.id ? { ...r, amount: parseFloat(e.target.value) || 0 } : r))} />
+                        <button onClick={() => setEmpEarnings(p => p.filter(r => r.id !== row.id))}
+                          className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500">
+                          <X className="w-3 h-3" />
+                        </button>
                       </div>
-
-                      {/* Statutory */}
-                      <div className="px-4 py-1.5 bg-muted/20 border-b border-red-100">
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Statutory</span>
-                      </div>
-                      <div className="divide-y divide-red-50">
-                        {SS_STATUTORY_DEFS.map((def, i) => {
-                          const computed = def.component === "EPF – Employee" ? epfEe : def.component === "EPF – Employer" ? epfEr : etf;
-                          return (
-                            <div key={i} className="flex items-center gap-3 px-4 py-2">
-                              <span className="text-[10px] text-muted-foreground w-4 shrink-0">{i + 1}</span>
-                              <span className="text-xs flex-1">{def.component}</span>
-                              <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded-full shrink-0">{def.pct}%</span>
-                              <span className={cn("text-xs font-mono font-semibold w-28 text-right", basicForCalc > 0 ? "text-red-700" : "text-muted-foreground")}>
-                                {basicForCalc > 0 ? `LKR ${computed.toLocaleString("en-LK", { minimumFractionDigits: 2 })}` : "—"}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Other deductions */}
-                      {nonStatutoryDeds.length > 0 && (
-                        <>
-                          <div className="px-4 py-1.5 bg-muted/20 border-y border-red-100">
-                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Other</span>
-                          </div>
-                          <div className="divide-y divide-red-50">
-                            {nonStatutoryDeds.map((d: any, i: number) => (
-                              <div key={i} className="flex items-center gap-3 px-4 py-2">
-                                <span className="text-[10px] text-muted-foreground w-4 shrink-0">{i + 1}</span>
-                                <span className="text-xs flex-1">{d.component || "—"}</span>
-                                <span className={cn("text-xs font-mono font-semibold", Number(d.amount) > 0 ? "text-red-700" : "text-muted-foreground")}>
-                                  {Number(d.amount) > 0 ? `LKR ${Number(d.amount).toLocaleString("en-LK", { minimumFractionDigits: 2 })}` : "—"}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </>
-                      )}
-
-                      <div className="flex items-center justify-between px-4 py-2.5 bg-red-50/60 border-t border-red-200">
-                        <span className="text-xs font-bold text-red-900">Total Deductions</span>
-                        <span className="text-sm font-bold font-mono text-red-700">LKR {totalDeductions.toLocaleString("en-LK", { minimumFractionDigits: 2 })}</span>
-                      </div>
+                    ))}
+                    {empEarnings.length === 0 && (
+                      <div className="px-3 py-2 text-[10px] text-muted-foreground italic">No additional earnings. Click Add to include allowances.</div>
+                    )}
+                    {/* Total */}
+                    <div className="flex items-center justify-between px-3 py-2 bg-green-50/60 border-t border-green-200">
+                      <span className="text-xs font-bold text-green-900">Total Earnings</span>
+                      <span className="text-sm font-bold font-mono text-green-700">LKR {fmt(totalEarnings)}</span>
                     </div>
+                  </div>
+                </div>
 
-                    {/* Net Pay */}
-                    {basicForCalc > 0 && (
-                      <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-bold text-foreground">Estimated Net Pay</p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">Gross – EPF Employee deduction – other deductions</p>
-                        </div>
-                        <span className="text-xl font-bold font-mono text-primary">LKR {netSalary.toLocaleString("en-LK", { minimumFractionDigits: 2 })}</span>
+                {/* ── Deductions ── */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-bold text-red-800">Deductions</span>
+                    <div className="flex-1 border-t border-red-200" />
+                    <button onClick={() => setEmpCustomDeds(p => [...p, newRow()])} disabled={!emp?.id}
+                      className="flex items-center gap-1 text-[10px] font-semibold text-red-700 hover:text-red-900 disabled:opacity-40">
+                      <Plus className="w-3 h-3" /> Add
+                    </button>
+                  </div>
+                  <div className="rounded-xl border border-red-200 overflow-hidden">
+                    {/* Statutory section header */}
+                    <div className="px-3 py-1 bg-muted/20 border-b border-red-100">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Statutory (auto-calculated)</span>
+                    </div>
+                    {[
+                      { label: "EPF – Employee", pct: 8, val: epfEe },
+                      { label: "EPF – Employer", pct: 12, val: epfEr },
+                      { label: "ETF",             pct: 3,  val: etf },
+                    ].map((d, i) => (
+                      <div key={d.label} className="flex items-center gap-3 px-3 py-2 border-b border-red-50">
+                        <span className="text-[10px] text-muted-foreground w-4 shrink-0">{i + 1}</span>
+                        <span className="text-xs flex-1">{d.label}</span>
+                        <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded-full shrink-0">{d.pct}%</span>
+                        <span className={cn("text-xs font-mono font-semibold w-28 text-right", basic > 0 ? "text-red-700" : "text-muted-foreground")}>
+                          {basic > 0 ? `LKR ${fmt(d.val)}` : "—"}
+                        </span>
                       </div>
+                    ))}
+                    {/* Custom deductions */}
+                    {empCustomDeds.length > 0 && (
+                      <div className="px-3 py-1 bg-muted/20 border-b border-red-100">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Other Deductions</span>
+                      </div>
+                    )}
+                    {empCustomDeds.map((row, i) => (
+                      <div key={row.id} className="flex items-center gap-2 px-3 py-1.5 border-b border-red-50 last:border-0">
+                        <span className="text-[10px] text-muted-foreground w-4 shrink-0">{i + 4}</span>
+                        <input className={cn(INP, "flex-1 h-7")} placeholder="e.g. Loan Installment"
+                          value={row.component} onChange={e => setEmpCustomDeds(p => p.map(r => r.id === row.id ? { ...r, component: e.target.value } : r))} />
+                        <span className="text-xs text-muted-foreground shrink-0">LKR</span>
+                        <input type="number" min="0" className={cn(INP, "w-28 h-7 text-right")} placeholder="0"
+                          value={row.amount || ""} onChange={e => setEmpCustomDeds(p => p.map(r => r.id === row.id ? { ...r, amount: parseFloat(e.target.value) || 0 } : r))} />
+                        <button onClick={() => setEmpCustomDeds(p => p.filter(r => r.id !== row.id))}
+                          className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    {/* Total */}
+                    <div className="flex items-center justify-between px-3 py-2 bg-red-50/60 border-t border-red-200">
+                      <span className="text-xs font-bold text-red-900">Total Deductions</span>
+                      <span className="text-sm font-bold font-mono text-red-700">LKR {fmt(totalDeductions)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Net Pay ── */}
+                {basic > 0 && (
+                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-foreground">Estimated Net Pay</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Gross earnings – EPF(EE) – other deductions</p>
+                    </div>
+                    <span className="text-xl font-bold font-mono text-primary">LKR {fmt(netPay)}</span>
+                  </div>
+                )}
+
+                {/* ── Save button ── */}
+                {emp?.id && (
+                  <div className="flex items-center gap-2">
+                    <button onClick={saveAssignment} disabled={assignSaving}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-white hover:bg-primary/90 transition-all disabled:opacity-60">
+                      {assignSaving ? <RefreshCw className="w-3 h-3 animate-spin" /> : assignSuccess ? <Check className="w-3 h-3" /> : <Save className="w-3 h-3" />}
+                      {assignSuccess ? "Saved!" : "Save Salary Structure"}
+                    </button>
+                    {currentAssignment && (
+                      <button onClick={removeAssignment} disabled={assignSaving}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50 border border-red-200 transition-colors">
+                        <Trash2 className="w-3 h-3" /> Clear
+                      </button>
                     )}
                   </div>
                 )}
@@ -1315,10 +1263,9 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                     <div className="flex-1 border-t border-border" />
                   </div>
                   <textarea
-                    className="w-full min-h-[80px] resize-y rounded-lg border border-border bg-background px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary transition-colors placeholder:text-muted-foreground/50"
+                    className="w-full min-h-[70px] resize-y rounded-lg border border-border bg-background px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary transition-colors placeholder:text-muted-foreground/50"
                     placeholder="e.g. Late deduction after 8:15 am / OT after 5:30pm"
-                    value={form.remarks}
-                    onChange={e => set("remarks", e.target.value)}
+                    value={form.remarks} onChange={e => set("remarks", e.target.value)}
                   />
                 </div>
 
