@@ -1715,7 +1715,7 @@ export default function Employees() {
                 <table className="w-full text-xs">
                   <thead className="bg-muted/50 sticky top-0">
                     <tr>
-                      {["Emp ID","Bio ID","Name","Department","Branch","NIC / Passport","Status","Actions"].map(h => (
+                      {["Emp ID","Bio ID","Name","Department","Branch","Status","Actions"].map(h => (
                         <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -1746,10 +1746,7 @@ export default function Employees() {
                         <td className="px-3 py-2.5 text-muted-foreground">
                           <div className="flex items-center gap-1"><MapPin className="w-3 h-3 shrink-0" /><span className="truncate max-w-[120px]">{emp.branchName}</span></div>
                         </td>
-                        <td className="px-3 py-2.5 font-mono text-muted-foreground text-xs">
-                          <div>{emp.nicNumber || "—"}</div>
-                          {emp.panNumber && <div className="text-primary">{emp.panNumber}</div>}
-                        </td>
+
                         <td className="px-3 py-2.5">
                           <span className={cn("px-2 py-0.5 rounded text-xs font-medium", STATUS_STYLE[emp.status] || STATUS_STYLE.active)}>
                             {emp.status === "on_leave" ? "On Leave" : emp.status?.[0]?.toUpperCase() + emp.status?.slice(1) || "Active"}
