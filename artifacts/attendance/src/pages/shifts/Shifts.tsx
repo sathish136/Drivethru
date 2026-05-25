@@ -139,15 +139,9 @@ export default function Shifts() {
               <Input type="time" required value={form.endTime1} onChange={e => field("endTime1", e.target.value)} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Grace Period (minutes)</Label>
-              <Input type="number" min={0} value={form.graceMinutes} onChange={e => field("graceMinutes", Number(e.target.value))} />
-            </div>
-            <div>
-              <Label>Overtime Threshold (minutes)</Label>
-              <Input type="number" min={0} value={form.overtimeThreshold} onChange={e => field("overtimeThreshold", Number(e.target.value))} />
-            </div>
+          <div>
+            <Label>Grace Period (minutes)</Label>
+            <Input type="number" min={0} value={form.graceMinutes} onChange={e => field("graceMinutes", Number(e.target.value))} />
           </div>
           <div className="pt-4 flex justify-end gap-3 border-t border-border">
             <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
@@ -180,15 +174,9 @@ export default function Shifts() {
               <Input type="time" required value={form.endTime1} onChange={e => field("endTime1", e.target.value)} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Grace Period (minutes)</Label>
-              <Input type="number" min={0} value={form.graceMinutes} onChange={e => field("graceMinutes", Number(e.target.value))} />
-            </div>
-            <div>
-              <Label>Overtime Threshold (minutes)</Label>
-              <Input type="number" min={0} value={form.overtimeThreshold} onChange={e => field("overtimeThreshold", Number(e.target.value))} />
-            </div>
+          <div>
+            <Label>Grace Period (minutes)</Label>
+            <Input type="number" min={0} value={form.graceMinutes} onChange={e => field("graceMinutes", Number(e.target.value))} />
           </div>
           <div className="pt-4 flex justify-end gap-3 border-t border-border">
             <Button type="button" variant="outline" onClick={() => setEditShift(null)}>Cancel</Button>
