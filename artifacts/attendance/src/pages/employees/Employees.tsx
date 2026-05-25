@@ -183,7 +183,9 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
   const [tab, setTab] = useState<"personal"|"professional"|"documents"|"payroll">("personal");
   const { data: deptData } = useGet(["departments"], "/departments");
   const { data: weekoffData } = useGet(["weekoff-schedules"], "/weekoffs");
+  const { data: shiftsData } = useGet(["shifts-list"], "/shifts");
   const allWeekoffs: any[] = Array.isArray(weekoffData) ? weekoffData : [];
+  const allShifts: any[] = Array.isArray(shiftsData) ? shiftsData.filter((s: any) => s.isActive) : [];
   const deptOptions: string[] = Array.isArray(deptData) ? deptData.filter((d: any) => d.isActive).map((d: any) => d.name) : [];
   const [form, setForm] = useState(emp ? {
     ...EMPTY_EMP, ...emp,
@@ -582,6 +584,25 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                     </Select>
                   </div>
                   <div>
+                    <Label className="text-xs font-semibold mb-1.5 block">Shift Assignment</Label>
+                    <Select value={form.shiftId} onChange={e => set("shiftId", e.target.value)}>
+                      <option value="">— No Shift —</option>
+                      {allShifts.map((s: any) => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.startTime1}–{s.endTime1})</option>
+                      ))}
+                    </Select>
+                    {form.shiftId && (() => {
+                      const sh = allShifts.find((s: any) => String(s.id) === String(form.shiftId));
+                      if (!sh) return null;
+                      return (
+                        <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {sh.type === "split" ? "Split" : "Normal"} shift · {sh.startTime1}–{sh.endTime1} · {sh.graceMinutes}min grace
+                        </p>
+                      );
+                    })()}
+                  </div>
+                  <div>
                     <Label className="text-xs font-semibold mb-1.5 block">Week Off Schedule</Label>
                     <Select value={form.weekoffScheduleId} onChange={e => set("weekoffScheduleId", e.target.value)}>
                       <option value="">— No Schedule —</option>
@@ -927,14 +948,61 @@ type ShiftRow = {
 function ShiftDetailsTab() {
   const qc = useQueryClient();
   const { data: shiftsRaw, isLoading } = useGet(["shifts-detail"], "/shifts");
+  const { data: empsRaw, isLoading: empsLoading } = useGet(["employees-for-shift"], "/employees?limit=500");
   const shifts: ShiftRow[] = Array.isArray(shiftsRaw) ? shiftsRaw.filter((s: any) => s.isActive) : [];
+  const allEmps: any[] = Array.isArray(empsRaw?.employees) ? empsRaw.employees : (Array.isArray(empsRaw) ? empsRaw : []);
 
-  // rows tracks local edits: { [id]: partial }
+  // Group employees by shiftId
+  const empsByShift = useMemo(() => {
+    const map: Record<number, any[]> = {};
+    for (const e of allEmps) {
+      if (e.shiftId) {
+        if (!map[e.shiftId]) map[e.shiftId] = [];
+        map[e.shiftId].push(e);
+      }
+    }
+    return map;
+  }, [allEmps]);
+
   const [rows, setRows] = useState<Record<number, Partial<ShiftRow>>>({});
-  // which row is being edited
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState<number | null>(null);
   const [savedId, setSavedId] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [manageShift, setManageShift] = useState<ShiftRow | null>(null);
+  const [manageSaving, setManageSaving] = useState(false);
+  const [manageSearch, setManageSearch] = useState("");
+  // local set of employee ids selected for the managed shift
+  const [manageSelected, setManageSelected] = useState<Set<number>>(new Set());
+
+  function openManage(s: ShiftRow) {
+    setManageShift(s);
+    setManageSearch("");
+    setManageSelected(new Set((empsByShift[s.id] || []).map((e: any) => e.id)));
+  }
+
+  async function saveManage() {
+    if (!manageShift) return;
+    setManageSaving(true);
+    const currentIds = new Set((empsByShift[manageShift.id] || []).map((e: any) => e.id));
+    const toAssign = [...manageSelected].filter(id => !currentIds.has(id));
+    const toUnassign = [...currentIds].filter(id => !manageSelected.has(id));
+    const all = [
+      ...toAssign.map(id => ({ id, shiftId: manageShift.id })),
+      ...toUnassign.map(id => ({ id, shiftId: null })),
+    ];
+    await Promise.all(all.map(({ id, shiftId }) =>
+      fetch(apiUrl(`/employees/${id}`), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shiftId }),
+      })
+    ));
+    setManageSaving(false);
+    setManageShift(null);
+    qc.invalidateQueries({ queryKey: ["employees-for-shift"] });
+    qc.invalidateQueries({ queryKey: ["employees"] });
+  }
 
   function getRow(s: ShiftRow): ShiftRow {
     return { ...s, ...(rows[s.id] ?? {}) };
@@ -989,8 +1057,17 @@ function ShiftDetailsTab() {
   const TH = "px-3 py-2.5 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap";
   const TD = "px-3 py-2 align-middle";
 
+  const filteredManageEmps = useMemo(() => {
+    if (!manageShift) return [];
+    const q = manageSearch.toLowerCase();
+    return allEmps.filter((e: any) =>
+      e.status === "active" &&
+      (!q || empDisplayName(e).toLowerCase().includes(q) || (e.employeeId || "").toLowerCase().includes(q))
+    );
+  }, [allEmps, manageShift, manageSearch]);
+
   return (
-    <div>
+    <div className="space-y-4">
       <Card className="overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/20">
           <div className="flex items-center gap-2">
@@ -1018,6 +1095,7 @@ function ShiftDetailsTab() {
                   <th className={TH}>Late Threshold (min)</th>
                   <th className={TH}>OT Eligible After (min)</th>
                   <th className={TH}>Flexible Hrs</th>
+                  <th className={TH}>Linked Employees</th>
                   <th className={TH + " text-right"}>Actions</th>
                 </tr>
               </thead>
@@ -1027,12 +1105,17 @@ function ShiftDetailsTab() {
                   const isEditing = editingId === s.id;
                   const isSaving = saving === s.id;
                   const justSaved = savedId === s.id;
+                  const linked = empsByShift[s.id] || [];
+                  const isExpanded = expandedId === s.id;
                   return (
+                    <>
                     <tr
                       key={s.id}
                       className={cn(
                         "transition-colors",
-                        isEditing ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-muted/40 cursor-pointer"
+                        isEditing ? "bg-primary/5 border-l-2 border-l-primary" :
+                        isExpanded ? "bg-muted/30" :
+                        "hover:bg-muted/40 cursor-pointer"
                       )}
                       onClick={() => { if (!isEditing) setEditingId(s.id); }}
                     >
@@ -1164,6 +1247,25 @@ function ShiftDetailsTab() {
                         )}
                       </td>
 
+                      {/* Linked Employees */}
+                      <td className={TD} onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => setExpandedId(isExpanded ? null : s.id)}
+                            className={cn(
+                              "flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold transition-colors",
+                              linked.length > 0
+                                ? "bg-primary/10 text-primary hover:bg-primary/20"
+                                : "bg-muted text-muted-foreground hover:bg-muted/80"
+                            )}
+                          >
+                            <Users className="w-3 h-3" />
+                            {empsLoading ? "…" : linked.length}
+                            {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                          </button>
+                        </div>
+                      </td>
+
                       {/* Actions */}
                       <td className={TD + " text-right"} onClick={e => e.stopPropagation()}>
                         {isEditing ? (
@@ -1188,15 +1290,73 @@ function ShiftDetailsTab() {
                             <Check className="w-3 h-3" /> Saved
                           </span>
                         ) : (
-                          <button
-                            onClick={() => setEditingId(s.id)}
-                            className="flex items-center gap-1 px-2 py-1 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted ml-auto"
-                          >
-                            <Edit2 className="w-3 h-3" /> Edit
-                          </button>
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => openManage(s)}
+                              className="flex items-center gap-1 px-2 py-1 rounded text-xs text-primary hover:bg-primary/10 font-medium"
+                            >
+                              <UserCheck className="w-3 h-3" /> Assign
+                            </button>
+                            <button
+                              onClick={() => setEditingId(s.id)}
+                              className="flex items-center gap-1 px-2 py-1 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted"
+                            >
+                              <Edit2 className="w-3 h-3" /> Edit
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
+
+                    {/* Expanded employee list */}
+                    {isExpanded && (
+                      <tr key={`${s.id}-expanded`} className="bg-muted/10">
+                        <td colSpan={10} className="px-4 py-3">
+                          {linked.length === 0 ? (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+                              <Users className="w-3.5 h-3.5" />
+                              No employees linked to this shift.
+                              <button
+                                onClick={() => openManage(s)}
+                                className="text-primary underline underline-offset-2 hover:no-underline"
+                              >
+                                Assign employees
+                              </button>
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                                  Employees on {s.name} ({linked.length})
+                                </span>
+                                <button
+                                  onClick={() => openManage(s)}
+                                  className="flex items-center gap-1 px-2 py-1 rounded text-xs text-primary hover:bg-primary/10 font-medium"
+                                >
+                                  <UserCheck className="w-3 h-3" /> Manage
+                                </button>
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {linked.map((e: any) => (
+                                  <div key={e.id} className="flex items-center gap-1.5 bg-background border border-border rounded-lg px-2 py-1 text-xs">
+                                    <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                                      <span className="text-[9px] font-bold text-primary">
+                                        {empDisplayName(e).charAt(0).toUpperCase()}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="font-semibold text-foreground">{empDisplayName(e)}</span>
+                                      <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{e.employeeId}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                    </>
                   );
                 })}
               </tbody>
@@ -1207,6 +1367,127 @@ function ShiftDetailsTab() {
       <p className="text-[11px] text-muted-foreground mt-2 px-1">
         Click any row or the Edit button to edit inline. Working hours are calculated automatically from start/end times.
       </p>
+
+      {/* Manage Employees Modal */}
+      {manageShift && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setManageShift(null)} />
+          <div className="relative bg-background border border-border rounded-xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <UserCheck className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <p className="font-bold text-sm">Assign Employees</p>
+                  <p className="text-[11px] text-muted-foreground">{manageShift.name} · {manageShift.startTime1}–{manageShift.endTime1}</p>
+                </div>
+              </div>
+              <button onClick={() => setManageShift(null)} className="p-1.5 hover:bg-muted rounded-lg transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Search */}
+            <div className="px-4 pt-3 pb-2 shrink-0">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <input
+                  className="w-full pl-8 pr-3 h-8 text-xs rounded-lg border border-border bg-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  placeholder="Search by name or employee ID…"
+                  value={manageSearch}
+                  onChange={e => setManageSearch(e.target.value)}
+                />
+              </div>
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-[11px] text-muted-foreground">{manageSelected.size} selected</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setManageSelected(new Set(filteredManageEmps.map((e: any) => e.id)))}
+                    className="text-[11px] text-primary hover:underline"
+                  >Select all shown</button>
+                  <span className="text-muted-foreground text-[11px]">·</span>
+                  <button
+                    onClick={() => setManageSelected(new Set())}
+                    className="text-[11px] text-muted-foreground hover:text-foreground hover:underline"
+                  >Clear all</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Employee list */}
+            <div className="flex-1 overflow-y-auto px-4 pb-2 space-y-1">
+              {filteredManageEmps.length === 0 ? (
+                <div className="text-center py-8 text-xs text-muted-foreground">No active employees found.</div>
+              ) : filteredManageEmps.map((e: any) => {
+                const checked = manageSelected.has(e.id);
+                const isCurrentShift = e.shiftId === manageShift.id;
+                const otherShift = !isCurrentShift && e.shiftId
+                  ? shifts.find(s => s.id === e.shiftId)
+                  : null;
+                return (
+                  <label
+                    key={e.id}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors",
+                      checked ? "bg-primary/5 border border-primary/20" : "hover:bg-muted/50 border border-transparent"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        setManageSelected(prev => {
+                          const next = new Set(prev);
+                          if (next.has(e.id)) next.delete(e.id); else next.add(e.id);
+                          return next;
+                        });
+                      }}
+                      className="w-3.5 h-3.5 accent-primary shrink-0"
+                    />
+                    <div className="w-7 h-7 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                      <span className="text-[10px] font-bold text-primary">{empDisplayName(e).charAt(0).toUpperCase()}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-xs text-foreground truncate">{empDisplayName(e)}</span>
+                        <span className="text-[10px] font-mono text-muted-foreground shrink-0">{e.employeeId}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[10px] text-muted-foreground truncate">{e.department || "—"}</span>
+                        {otherShift && (
+                          <span className="text-[10px] px-1 py-0 rounded bg-amber-100 text-amber-700 shrink-0">
+                            Currently: {otherShift.name}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-border shrink-0">
+              <button
+                onClick={() => setManageShift(null)}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveManage}
+                disabled={manageSaving}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-60 transition-colors"
+              >
+                <Save className="w-3 h-3" />
+                {manageSaving ? "Saving…" : "Save Assignments"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
