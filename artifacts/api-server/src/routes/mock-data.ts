@@ -125,14 +125,14 @@ const SL_SHIFTS = [
 ];
 
 const SL_DEPARTMENTS = [
-  { name: "Operations & Delivery", code: "OPS", description: "Mail processing, sorting, and delivery", isActive: true },
-  { name: "Finance & Accounts", code: "FIN", description: "Budgeting, payroll, and financial reporting", isActive: true },
-  { name: "Human Resources", code: "HR", description: "Recruitment, training, and employee welfare", isActive: true },
-  { name: "Information Technology", code: "IT", description: "Systems, networks, and digital services", isActive: true },
-  { name: "Postal Savings Bank", code: "PSB", description: "Savings accounts, remittances, and banking services", isActive: true },
-  { name: "Customer Service", code: "CS", description: "Public counter, complaints, and inquiries", isActive: true },
-  { name: "Administration", code: "ADM", description: "General administration and office management", isActive: true },
-  { name: "Logistics & Transport", code: "LOG", description: "Vehicle management and route planning", isActive: true },
+  { name: "Security",      code: "SEC", description: "", isActive: true },
+  { name: "Front Office",  code: "FO",  description: "", isActive: true },
+  { name: "Admin",         code: "ADM", description: "", isActive: true },
+  { name: "Kitchen",       code: "KIT", description: "", isActive: true },
+  { name: "House Keeping", code: "HK",  description: "", isActive: true },
+  { name: "Photography",   code: "PHO", description: "", isActive: true },
+  { name: "Surf",          code: "SRF", description: "", isActive: true },
+  { name: "Maintenance",   code: "MNT", description: "", isActive: true },
 ];
 
 

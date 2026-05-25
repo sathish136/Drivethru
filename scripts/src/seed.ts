@@ -166,7 +166,7 @@ async function seed() {
 
   const firstNames = ["Priya", "Nuwan", "Kasun", "Dilshan", "Tharindu", "Chamara", "Sachith", "Ruwani", "Malsha", "Lasith", "Amaya", "Dineth", "Hiruni", "Supun", "Nadeesha", "Chathura", "Sewwandi", "Asitha", "Thilanka", "Kanchana"];
   const lastNames  = ["Fernando", "Silva", "Perera", "Jayawardena", "Bandara", "Wijesinghe", "Herath", "Gunawardena", "Rathnayake", "Wickramasinghe", "Kumara", "Dissanayake", "Senanayake", "Karunaratne", "Amarasinghe"];
-  const departments  = ["Operations", "Counter Services", "Delivery", "Finance", "Administration", "IT", "Security"];
+  const departments  = ["Security", "Front Office", "Admin", "Kitchen", "House Keeping", "Photography", "Surf", "Maintenance"];
 
   // Build employee list — IDs use the regional key code as prefix, unique per region
   // Track per-region sequence numbers
