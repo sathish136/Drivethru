@@ -782,7 +782,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 }
 
 // ── Departments Tab ────────────────────────────────────────────────────────────
-function DepartmentsTab() {
+function DepartmentsTab({ onFilterByDept }: { onFilterByDept: (dept: string) => void }) {
   const qc = useQueryClient();
   const { data: depts, isLoading } = useGet(["departments"], "/departments");
   const { data: emps } = useGet(["employees-all"], "/employees?limit=9999&page=1");
@@ -855,13 +855,16 @@ function DepartmentsTab() {
                     <td className="px-3 py-2.5 font-medium">{d.name}</td>
                     <td className="px-3 py-2.5 text-muted-foreground">{d.description || "—"}</td>
                     <td className="px-3 py-2.5">
-                      <span className={cn(
-                        "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold",
-                        count > 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                      )}>
+                      <button
+                        onClick={() => count > 0 && onFilterByDept(d.name)}
+                        className={cn(
+                          "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold transition-colors",
+                          count > 0 ? "bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer" : "bg-muted text-muted-foreground cursor-default"
+                        )}
+                      >
                         <Users className="w-3 h-3" />
                         {count}
-                      </span>
+                      </button>
                     </td>
                     <td className="px-3 py-2.5">
                       <span className={cn("px-2 py-0.5 rounded text-xs", d.isActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500")}>
@@ -1516,7 +1519,7 @@ export default function Employees() {
         </>
       )}
 
-      {activeTab === "Departments" && <DepartmentsTab />}
+      {activeTab === "Departments" && <DepartmentsTab onFilterByDept={dept => { setFilterDept(dept); setActiveTab("Employee List"); }} />}
       {activeTab === "Designations" && <DesignationsTab />}
       {activeTab === "Payroll" && <PayrollTab />}
 
