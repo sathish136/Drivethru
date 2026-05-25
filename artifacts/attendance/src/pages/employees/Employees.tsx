@@ -180,7 +180,7 @@ const EMPTY_EMP = {
 
 
 function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branches: any[]; onClose: () => void; onSaved: () => void }) {
-  const [tab, setTab] = useState<"personal"|"professional"|"documents"|"payroll">("personal");
+  const [tab, setTab] = useState<"overview"|"joining"|"contacts"|"personal"|"documents"|"payroll">("overview");
   const { data: deptData } = useGet(["departments"], "/departments");
   const { data: weekoffData } = useGet(["weekoff-schedules"], "/weekoffs");
   const { data: shiftsData } = useGet(["shifts-list"], "/shifts");
@@ -254,7 +254,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
   function handleSave() {
     setEmpIdError("");
     if (!form.department) {
-      setTab("professional");
+      setTab("joining");
       alert("Please select a Department before saving.");
       return;
     }
@@ -269,7 +269,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
     const onError = (data: any) => {
       if (data?.code === "INVALID_EMPLOYEE_ID") {
         setEmpIdError(data.message || "Invalid Employee ID");
-        setTab("professional");
+        setTab("overview");
       }
     };
     if (emp?.id) {
@@ -286,431 +286,586 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
   const isPending = createEmp.isPending || updateEmp.isPending;
   const isSaved = !!emp?.id;
 
+  const displayName = form.firstName || form.lastName
+    ? `${form.firstName} ${form.lastName}`.trim().toUpperCase()
+    : (emp ? empDisplayName(emp).toUpperCase() : "NEW EMPLOYEE");
+
   const initials = form.firstName && form.lastName
     ? `${form.firstName[0]}${form.lastName[0]}`.toUpperCase()
     : form.firstName?.[0]?.toUpperCase() || "E";
 
-  const DRAWER_TABS = [
-    { key: "personal",      label: "Personal",      icon: UserCircle       },
-    { key: "professional",  label: "Employment",    icon: Briefcase        },
-    { key: "payroll",       label: "Payroll",       icon: BadgeIndianRupee },
-    { key: "documents",     label: "Documents",     icon: FileText         },
+  const PROFILE_TABS = [
+    { key: "overview",   label: "Overview"              },
+    { key: "joining",    label: "Joining"               },
+    { key: "contacts",   label: "Address & Contacts"    },
+    { key: "personal",   label: "Personal"              },
+    { key: "documents",  label: "Documents"             },
+    { key: "payroll",    label: "Payroll"               },
   ] as const;
-  const tabKeys = DRAWER_TABS.map(t => t.key);
-  const tabIdx = tabKeys.indexOf(tab);
-  const prevTab = tabIdx > 0 ? tabKeys[tabIdx - 1] : null;
-  const nextTab = tabIdx < tabKeys.length - 1 ? tabKeys[tabIdx + 1] : null;
+
+  const INP = "w-full rounded border border-border bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary transition-colors text-foreground placeholder:text-muted-foreground/50";
+  const SEL = `${INP} appearance-none`;
+  const LBL = "block text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide";
+
+  function FLabel({ label, required }: { label: string; required?: boolean }) {
+    return <label className={LBL}>{label}{required && <span className="text-red-500 ml-0.5">*</span>}</label>;
+  }
+
+  const weekoffSched = allWeekoffs.find((w: any) => String(w.id) === String(form.weekoffScheduleId));
+  const DAY_S = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+  const selectedShift = allShifts.find((s: any) => String(s.id) === String(form.shiftId));
+  const branchObj = branches.find((b: any) => b.id === Number(form.branchId));
+  const docList = [
+    { label: "NIC (National Identity Card)", fieldName: "aadharDoc", url: emp?.aadharDocUrl },
+    { label: "Passport Copy",                fieldName: "panDoc",     url: emp?.panDocUrl     },
+    { label: "Certificates",                 fieldName: "certificatesDoc", url: emp?.certificatesDocUrl },
+    { label: "Resume / CV",                  fieldName: "resumeDoc",  url: emp?.resumeDocUrl  },
+  ];
 
   return (
-    <div className="flex flex-col overflow-hidden" style={{height:"calc(100vh - 56px)"}}>  
+    <div className="flex overflow-hidden bg-background" style={{height:"calc(100vh - 56px)"}}>
 
-      {/* Page Header */}
-      <div className="bg-background border-b border-border shrink-0">
-        <div className="px-6 pt-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <button onClick={onClose} className="p-1.5 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-foreground">
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden">
-                {photoPreview
-                  ? <img src={photoPreview} alt="avatar" className="w-full h-full object-cover" />
-                  : <span className="text-sm font-bold text-primary">{initials}</span>
-                }
-              </div>
-              <div>
-                <h2 className="font-bold text-sm leading-tight">{emp ? "Edit Employee" : "New Employee"}</h2>
-                {emp
-                  ? <p className="text-xs text-muted-foreground">{emp.employeeId} · {empDisplayName(emp)}</p>
-                  : <p className="text-xs text-muted-foreground">Fill in the details below</p>
-                }
-              </div>
+      {/* ── Left Sidebar ── */}
+      <div className="w-56 shrink-0 border-r border-border flex flex-col bg-muted/10 overflow-y-auto">
+
+        {/* Photo */}
+        <div className="flex flex-col items-center pt-6 pb-4 px-4 border-b border-border">
+          <div className="relative group mb-3">
+            <div className="w-28 h-28 rounded-xl border-2 border-border bg-muted overflow-hidden flex items-center justify-center shadow-sm">
+              {photoPreview
+                ? <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
+                : <span className="text-3xl font-bold text-muted-foreground/40">{initials}</span>
+              }
             </div>
-            <button onClick={onClose} className="p-1.5 hover:bg-muted rounded-lg transition-colors">
-              <X className="w-4 h-4" />
+            <button type="button"
+              disabled={!emp?.id || photoUploading}
+              onClick={() => photoRef.current?.click()}
+              className={cn(
+                "absolute bottom-1 right-1 w-7 h-7 rounded-full border-2 border-background flex items-center justify-center shadow transition-all",
+                emp?.id ? "bg-primary text-white hover:bg-primary/90 cursor-pointer" : "bg-muted text-muted-foreground cursor-not-allowed"
+              )}>
+              {photoUploading
+                ? <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                : <Camera className="w-3 h-3" />
+              }
             </button>
+            <input ref={photoRef} type="file" className="hidden" accept="image/jpeg,image/png,image/webp" onChange={handlePhotoUpload} />
           </div>
 
-          {/* Underline Tab Bar */}
-          <div className="flex">
-            {DRAWER_TABS.map(({ key, label, icon: Icon }) => (
-              <button key={key} onClick={() => setTab(key as any)}
-                className={cn(
-                  "flex items-center gap-1.5 px-5 py-2.5 text-xs font-medium transition-all duration-150 border-b-2 whitespace-nowrap",
-                  tab === key
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
-                )}>
-                <Icon className="w-3.5 h-3.5" />
-                {label}
-              </button>
-            ))}
-          </div>
+          {/* Name + Status */}
+          <p className="font-bold text-sm text-foreground text-center leading-tight">{displayName}</p>
+          {emp && (
+            <span className={cn("mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold", STATUS_STYLE[emp.status] || STATUS_STYLE.active)}>
+              {emp.status === "on_leave" ? "On Leave" : (emp.status?.[0]?.toUpperCase() + emp.status?.slice(1)) || "Active"}
+            </span>
+          )}
+          {emp && (
+            <p className="mt-1 text-[10px] text-muted-foreground font-mono">{emp.employeeId}</p>
+          )}
         </div>
-      </div>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="px-6 py-5 space-y-4">
-          {tab === "personal" && (
+        {/* Meta sections */}
+        <div className="flex-1 px-3 py-3 space-y-4 text-xs">
+
+          {/* Employment info pills */}
+          {emp && (
+            <div className="space-y-1.5">
+              {emp.department && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Briefcase className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{emp.department}</span>
+                </div>
+              )}
+              {branchObj && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <MapPin className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{branchObj.name}</span>
+                </div>
+              )}
+              {selectedShift && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Clock className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{selectedShift.name}</span>
+                </div>
+              )}
+              {emp.phone && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Phone className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{emp.phone}</span>
+                </div>
+              )}
+              {emp.email && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Mail className="w-3 h-3 shrink-0" />
+                  <span className="truncate text-[10px]">{emp.email}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Divider */}
+          {emp && <div className="border-t border-border" />}
+
+          {/* Documents status */}
+          <div>
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-1">
+              <FileText className="w-3 h-3" /> Documents
+            </p>
+            <div className="space-y-1">
+              {docList.map(d => (
+                <div key={d.label} className="flex items-center gap-1.5 text-[10px]">
+                  {d.url
+                    ? <CheckCircle className="w-3 h-3 text-green-500 shrink-0" />
+                    : <CircleDashed className="w-3 h-3 text-muted-foreground/50 shrink-0" />}
+                  <span className={d.url ? "text-foreground" : "text-muted-foreground/70"}>{d.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Payroll summary */}
+          {(form.basicSalary || form.epfNumber) && (
             <>
-              {/* Photo Upload */}
-              <div className="flex flex-col items-center gap-2 py-3">
-                <div className="relative group">
-                  <div className="w-20 h-20 rounded-full border-2 border-border bg-muted/40 overflow-hidden flex items-center justify-center shadow-sm">
-                    {photoPreview
-                      ? <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
-                      : <UserCircle className="w-10 h-10 text-muted-foreground/50" />
-                    }
-                  </div>
-                  <button type="button"
-                    disabled={!emp?.id || photoUploading}
-                    onClick={() => photoRef.current?.click()}
-                    className={cn(
-                      "absolute bottom-0 right-0 w-7 h-7 rounded-full border-2 border-background flex items-center justify-center shadow transition-all",
-                      emp?.id
-                        ? "bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
-                        : "bg-muted text-muted-foreground cursor-not-allowed"
-                    )}>
-                    {photoUploading
-                      ? <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                      : <Camera className="w-3.5 h-3.5" />
-                    }
-                  </button>
-                  <input ref={photoRef} type="file" className="hidden" accept="image/jpeg,image/png,image/webp" onChange={handlePhotoUpload} />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {emp?.id
-                    ? (photoPreview ? "Click camera to change photo" : "Click camera icon to upload photo")
-                    : "Save employee first to upload photo"
-                  }
+              <div className="border-t border-border" />
+              <div>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-1">
+                  <BadgeIndianRupee className="w-3 h-3" /> Payroll
                 </p>
-              </div>
-
-              {/* Basic Info Section */}
-              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
-                  <UserCircle className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Basic Information</span>
-                </div>
-                <div className="grid grid-cols-2 gap-4 p-4">
-                  <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">First Name <span className="text-red-500">*</span></Label>
-                    <div className="relative">
-                      <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <Input className="pl-8" placeholder="e.g. Rahul" value={form.firstName} onChange={e => set("firstName", e.target.value)} />
+                <div className="space-y-1 text-[10px]">
+                  {form.basicSalary && (
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Basic</span>
+                      <span className="font-mono font-semibold text-foreground">LKR {Number(form.basicSalary).toLocaleString()}</span>
                     </div>
-                  </div>
-                  <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">Last Name</Label>
-                    <div className="relative">
-                      <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <Input className="pl-8" placeholder="e.g. Sharma" value={form.lastName} onChange={e => set("lastName", e.target.value)} />
+                  )}
+                  {form.epfNumber && (
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>EPF</span><span className="font-mono">{form.epfNumber}</span>
                     </div>
-                  </div>
-                  <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">Gender</Label>
-                    <Select value={form.gender} onChange={e => set("gender", e.target.value)}>
-                      <option value="male">Male</option>
-                      <option value="female">Female</option>
-                      <option value="other">Other</option>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">Date of Birth</Label>
-                    <div className="relative">
-                      <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                      <Input type="date" className="pl-8" value={form.dateOfBirth} onChange={e => set("dateOfBirth", e.target.value)} />
+                  )}
+                  {form.etfNumber && (
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>ETF</span><span className="font-mono">{form.etfNumber}</span>
                     </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Contact Section */}
-              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
-                  <Phone className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Contact Details</span>
-                </div>
-                <div className="grid grid-cols-2 gap-4 p-4">
-                  <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">Phone <span className="text-red-500">*</span></Label>
-                    <div className="relative">
-                      <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <Input className="pl-8" placeholder="9XXXXXXXXX" value={form.phone} onChange={e => set("phone", e.target.value)} />
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">Email <span className="text-red-500">*</span></Label>
-                    <div className="relative">
-                      <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <Input type="email" className="pl-8" placeholder="name@company.com" value={form.email} onChange={e => set("email", e.target.value)} />
-                    </div>
-                  </div>
-                  <div className="col-span-2">
-                    <Label className="text-xs font-semibold mb-1.5 block">Address</Label>
-                    <div className="relative">
-                      <Home className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <Input className="pl-8" placeholder="House No., Street, City, State, PIN" value={form.address} onChange={e => set("address", e.target.value)} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Identity Section */}
-              <div className="rounded-xl border border-primary/20 bg-primary/5 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2.5 bg-primary/10 border-b border-primary/20">
-                  <Shield className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-[11px] font-bold text-primary uppercase tracking-widest">Government Identity</span>
-                </div>
-                <div className="grid grid-cols-2 gap-4 p-4">
-                  <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">
-                      NIC Number
-                      <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">(National Identity Card)</span>
-                    </Label>
-                    <div className="relative">
-                      <IdCard className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <Input className="pl-8 font-mono tracking-wider" placeholder="e.g. 199012345678" value={form.nicNumber} onChange={e => set("nicNumber", e.target.value)} maxLength={12} />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">Sri Lankan National Identity Card number (9 or 12 digits).</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">
-                      Passport No.
-                      <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">(If applicable)</span>
-                    </Label>
-                    <div className="relative">
-                      <CreditCard className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <Input className="pl-8 font-mono tracking-wider uppercase" placeholder="e.g. N1234567" value={form.panNumber} onChange={e => set("panNumber", e.target.value.toUpperCase())} maxLength={15} />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">Optional — for non-citizen or foreign staff only.</p>
-                  </div>
+                  )}
                 </div>
               </div>
             </>
           )}
+        </div>
+      </div>
 
-          {tab === "professional" && (
-            <div className="space-y-5">
-              {/* Employment Info */}
-              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
-                  <Briefcase className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Employment Information</span>
+      {/* ── Right Content ── */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+
+        {/* Top bar */}
+        <div className="shrink-0 border-b border-border bg-background px-5 py-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <button onClick={onClose} className="hover:text-foreground transition-colors flex items-center gap-1">
+              <ChevronLeft className="w-3.5 h-3.5" /> Employee
+            </button>
+            <span className="text-border">›</span>
+            <span className="text-foreground font-medium">{emp ? emp.employeeId : "New Employee"}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="px-3 py-1.5 text-xs border border-border rounded-lg hover:bg-muted transition-colors">
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isPending}
+              className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-60 transition-colors"
+            >
+              <Save className="w-3.5 h-3.5" />
+              {isPending ? "Saving…" : emp ? "Save" : "Create Employee"}
+            </button>
+          </div>
+        </div>
+
+        {/* Tab bar */}
+        <div className="shrink-0 border-b border-border bg-background px-5 flex gap-0">
+          {PROFILE_TABS.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key as any)}
+              className={cn(
+                "px-4 py-3 text-xs font-medium border-b-2 transition-all whitespace-nowrap",
+                tab === key
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab content */}
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+
+          {/* ── OVERVIEW TAB ── */}
+          {tab === "overview" && (
+            <div className="space-y-6">
+              {/* Error banner */}
+              {empIdError && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />{empIdError}
                 </div>
-                <div className="grid grid-cols-2 gap-4 p-4">
-                  <div className="col-span-2">
-                    <Label className="text-xs font-semibold mb-1.5 block">
-                      Employee ID <span className="text-red-500">*</span>
-                      {regionalInfo && !emp && (
-                        <span className="ml-2 inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                          <Building2 className="w-2.5 h-2.5" />
-                          {regionalInfo.regionalName} Regional · prefix: <span className="font-mono font-bold">{regionalInfo.prefix}</span>
-                        </span>
-                      )}
-                    </Label>
-                    <div className="relative">
-                      <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <Input
-                        className={cn("pl-8 font-mono uppercase", empIdError ? "border-red-400 focus:border-red-500" : "")}
-                        placeholder={regionalInfo ? `${regionalInfo.prefix}001` : "EMP-0001"}
-                        value={form.employeeId}
-                        onChange={e => { set("employeeId", e.target.value.toUpperCase()); setEmpIdError(""); }}
-                        disabled={!!emp}
-                      />
-                    </div>
-                    {empIdError ? (
-                      <p className="text-xs text-red-500 flex items-start gap-1 mt-1.5">
-                        <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />{empIdError}
-                      </p>
-                    ) : regionalInfo && !emp ? (
-                      <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
-                        Suggested next ID: <span className="font-mono font-semibold text-foreground">{regionalInfo.nextId}</span>
-                        — must be unique across all {regionalInfo.regionalName} branches
-                      </p>
-                    ) : null}
+              )}
+
+              {/* Main fields grid */}
+              <div>
+                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                  <div>
+                    <FLabel label="Employee ID" required />
+                    <input
+                      className={cn(INP, "font-mono uppercase", empIdError ? "border-red-400" : "")}
+                      placeholder={regionalInfo ? `${regionalInfo.prefix}001` : "EMP-0001"}
+                      value={form.employeeId}
+                      onChange={e => { set("employeeId", e.target.value.toUpperCase()); setEmpIdError(""); }}
+                      disabled={!!emp}
+                    />
+                    {regionalInfo && !emp && (
+                      <p className="text-[10px] text-primary mt-0.5">Prefix: {regionalInfo.prefix}</p>
+                    )}
                   </div>
                   <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">Status</Label>
-                    <Select value={form.status} onChange={e => set("status", e.target.value)}>
-                      <option value="active">✅ Active</option>
-                      <option value="on_leave">🟡 On Leave</option>
-                      <option value="resigned">🟠 Resigned</option>
-                      <option value="terminated">🔴 Terminated</option>
-                    </Select>
+                    <FLabel label="Gender" />
+                    <select className={SEL} value={form.gender} onChange={e => set("gender", e.target.value)}>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                    </select>
                   </div>
                   <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">Employee Type</Label>
-                    <Select value={form.employeeType} onChange={e => set("employeeType", e.target.value)}>
+                    <FLabel label="Date of Joining" required />
+                    <input type="date" className={INP} value={form.joiningDate} onChange={e => set("joiningDate", e.target.value)} />
+                  </div>
+
+                  <div>
+                    <FLabel label="First Name" required />
+                    <input className={INP} placeholder="First name" value={form.firstName} onChange={e => set("firstName", e.target.value)} />
+                  </div>
+                  <div>
+                    <FLabel label="Date of Birth" />
+                    <input type="date" className={INP} value={form.dateOfBirth} onChange={e => set("dateOfBirth", e.target.value)} />
+                  </div>
+                  <div>
+                    <FLabel label="Biometric ID" />
+                    <input className={INP} placeholder="e.g. 101" value={form.biometricId} onChange={e => set("biometricId", e.target.value)} />
+                  </div>
+
+                  <div>
+                    <FLabel label="Last Name" />
+                    <input className={INP} placeholder="Last name" value={form.lastName} onChange={e => set("lastName", e.target.value)} />
+                  </div>
+                  <div>
+                    <FLabel label="Status" />
+                    <select className={SEL} value={form.status} onChange={e => set("status", e.target.value)}>
+                      <option value="active">Active</option>
+                      <option value="on_leave">On Leave</option>
+                      <option value="resigned">Resigned</option>
+                      <option value="terminated">Terminated</option>
+                    </select>
+                  </div>
+                  <div>
+                    <FLabel label="Type of Employment" />
+                    <select className={SEL} value={form.employeeType} onChange={e => set("employeeType", e.target.value)}>
                       <option value="permanent">Permanent</option>
                       <option value="contract">Contract</option>
                       <option value="casual">Casual</option>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">Joining Date <span className="text-red-500">*</span></Label>
-                    <div className="relative">
-                      <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                      <Input type="date" className="pl-8" value={form.joiningDate} onChange={e => set("joiningDate", e.target.value)} />
-                    </div>
+                    </select>
                   </div>
                 </div>
               </div>
 
-              {/* Role & Placement */}
-              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
-                  <Building2 className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Role & Placement</span>
+              {/* Company Details divider */}
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xs font-bold text-foreground">Company Details</span>
+                  <div className="flex-1 border-t border-border" />
                 </div>
-                <div className="grid grid-cols-2 gap-4 p-4">
+                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
                   <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">Department <span className="text-red-500">*</span></Label>
-                    <Select value={form.department} onChange={e => set("department", e.target.value)}>
-                      <option value="">— Select Department —</option>
+                    <FLabel label="Department" required />
+                    <select className={SEL} value={form.department} onChange={e => set("department", e.target.value)}>
+                      <option value="">— Select —</option>
                       {(deptOptions.length > 0 ? deptOptions : DEPT_LIST).map(d => (
                         <option key={d} value={d}>{d}</option>
                       ))}
-                    </Select>
-                    {deptOptions.length === 0 && (
-                      <p className="text-[10px] text-amber-600 mt-1">No departments found. Add them in the Departments tab first.</p>
-                    )}
+                    </select>
                   </div>
                   <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">Branch <span className="text-red-500">*</span></Label>
-                    <Select value={form.branchId} onChange={e => set("branchId", Number(e.target.value))}>
+                    <FLabel label="Branch" required />
+                    <select className={SEL} value={form.branchId} onChange={e => set("branchId", Number(e.target.value))}>
                       {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                    </Select>
+                    </select>
                   </div>
                   <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">Shift Assignment</Label>
-                    <Select value={form.shiftId} onChange={e => set("shiftId", e.target.value)}>
+                    <FLabel label="Shift" />
+                    <select className={SEL} value={form.shiftId} onChange={e => set("shiftId", e.target.value)}>
                       <option value="">— No Shift —</option>
                       {allShifts.map((s: any) => (
-                        <option key={s.id} value={s.id}>{s.name} ({s.startTime1}–{s.endTime1})</option>
+                        <option key={s.id} value={s.id}>{s.name}</option>
                       ))}
-                    </Select>
-                    {form.shiftId && (() => {
-                      const sh = allShifts.find((s: any) => String(s.id) === String(form.shiftId));
-                      if (!sh) return null;
-                      return (
-                        <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {sh.type === "split" ? "Split" : "Normal"} shift · {sh.startTime1}–{sh.endTime1} · {sh.graceMinutes}min grace
-                        </p>
-                      );
-                    })()}
-                  </div>
-                  <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">Week Off Schedule</Label>
-                    <Select value={form.weekoffScheduleId} onChange={e => set("weekoffScheduleId", e.target.value)}>
-                      <option value="">— No Schedule —</option>
-                      {allWeekoffs.map((w: any) => (
-                        <option key={w.id} value={w.id}>{w.name}</option>
-                      ))}
-                    </Select>
-                    {form.weekoffScheduleId && (() => {
-                      const sched = allWeekoffs.find((w: any) => String(w.id) === String(form.weekoffScheduleId));
-                      const DAY_S = ["Su","Mo","Tu","We","Th","Fr","Sa"];
-                      if (!sched) return null;
-                      return (
-                        <div className="flex gap-1 mt-1.5 flex-wrap">
-                          {DAY_S.map((d, i) => {
-                            const isOff  = sched.offDays?.includes(i);
-                            const isHalf = sched.halfDays?.includes(i);
-                            return (
-                              <span key={i} className={cn(
-                                "text-[10px] font-bold px-1.5 py-0.5 rounded",
-                                isOff  ? "bg-red-100 text-red-700" :
-                                isHalf ? "bg-amber-100 text-amber-700" :
-                                "bg-green-50 text-green-700"
-                              )}>{d}</span>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                  <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">Biometric Device ID</Label>
-                    <div className="relative">
-                      <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <Input className="pl-8" placeholder="e.g. 101" value={form.biometricId} onChange={e => set("biometricId", e.target.value)} />
-                    </div>
+                    </select>
                   </div>
                 </div>
               </div>
             </div>
           )}
 
+          {/* ── JOINING TAB ── */}
+          {tab === "joining" && (
+            <div className="space-y-6">
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xs font-bold text-foreground">Employment Information</span>
+                  <div className="flex-1 border-t border-border" />
+                </div>
+                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                  <div>
+                    <FLabel label="Date of Joining" required />
+                    <input type="date" className={INP} value={form.joiningDate} onChange={e => set("joiningDate", e.target.value)} />
+                  </div>
+                  <div>
+                    <FLabel label="Status" />
+                    <select className={SEL} value={form.status} onChange={e => set("status", e.target.value)}>
+                      <option value="active">Active</option>
+                      <option value="on_leave">On Leave</option>
+                      <option value="resigned">Resigned</option>
+                      <option value="terminated">Terminated</option>
+                    </select>
+                  </div>
+                  <div>
+                    <FLabel label="Employee Type" />
+                    <select className={SEL} value={form.employeeType} onChange={e => set("employeeType", e.target.value)}>
+                      <option value="permanent">Permanent</option>
+                      <option value="contract">Contract</option>
+                      <option value="casual">Casual</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xs font-bold text-foreground">Placement</span>
+                  <div className="flex-1 border-t border-border" />
+                </div>
+                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                  <div>
+                    <FLabel label="Department" required />
+                    <select className={SEL} value={form.department} onChange={e => set("department", e.target.value)}>
+                      <option value="">— Select —</option>
+                      {(deptOptions.length > 0 ? deptOptions : DEPT_LIST).map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <FLabel label="Branch" required />
+                    <select className={SEL} value={form.branchId} onChange={e => set("branchId", Number(e.target.value))}>
+                      {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <FLabel label="Shift Assignment" />
+                    <select className={SEL} value={form.shiftId} onChange={e => set("shiftId", e.target.value)}>
+                      <option value="">— No Shift —</option>
+                      {allShifts.map((s: any) => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.startTime1}–{s.endTime1})</option>
+                      ))}
+                    </select>
+                    {selectedShift && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {selectedShift.type === "split" ? "Split" : "Normal"} · {selectedShift.startTime1}–{selectedShift.endTime1} · {selectedShift.graceMinutes}min grace
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <FLabel label="Week Off Schedule" />
+                    <select className={SEL} value={form.weekoffScheduleId} onChange={e => set("weekoffScheduleId", e.target.value)}>
+                      <option value="">— No Schedule —</option>
+                      {allWeekoffs.map((w: any) => (
+                        <option key={w.id} value={w.id}>{w.name}</option>
+                      ))}
+                    </select>
+                    {weekoffSched && (
+                      <div className="flex gap-1 mt-1.5 flex-wrap">
+                        {DAY_S.map((d, i) => (
+                          <span key={i} className={cn(
+                            "text-[10px] font-bold px-1 py-0.5 rounded",
+                            weekoffSched.offDays?.includes(i) ? "bg-red-100 text-red-700" :
+                            weekoffSched.halfDays?.includes(i) ? "bg-amber-100 text-amber-700" :
+                            "bg-green-50 text-green-700"
+                          )}>{d}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <FLabel label="Biometric Device ID" />
+                    <input className={INP} placeholder="e.g. 101" value={form.biometricId} onChange={e => set("biometricId", e.target.value)} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── ADDRESS & CONTACTS TAB ── */}
+          {tab === "contacts" && (
+            <div className="space-y-6">
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xs font-bold text-foreground">Contact Details</span>
+                  <div className="flex-1 border-t border-border" />
+                </div>
+                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                  <div>
+                    <FLabel label="Phone" />
+                    <input className={INP} placeholder="+94 XX XXX XXXX" value={form.phone} onChange={e => set("phone", e.target.value)} />
+                  </div>
+                  <div>
+                    <FLabel label="Email" />
+                    <input type="email" className={INP} placeholder="name@example.com" value={form.email} onChange={e => set("email", e.target.value)} />
+                  </div>
+                  <div className="col-span-3">
+                    <FLabel label="Address" />
+                    <input className={INP} placeholder="House No., Street, City, State, Postal Code" value={form.address} onChange={e => set("address", e.target.value)} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── PERSONAL TAB ── */}
+          {tab === "personal" && (
+            <div className="space-y-6">
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xs font-bold text-foreground">Personal Details</span>
+                  <div className="flex-1 border-t border-border" />
+                </div>
+                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                  <div>
+                    <FLabel label="First Name" required />
+                    <input className={INP} placeholder="First name" value={form.firstName} onChange={e => set("firstName", e.target.value)} />
+                  </div>
+                  <div>
+                    <FLabel label="Last Name" />
+                    <input className={INP} placeholder="Last name" value={form.lastName} onChange={e => set("lastName", e.target.value)} />
+                  </div>
+                  <div>
+                    <FLabel label="Gender" />
+                    <select className={SEL} value={form.gender} onChange={e => set("gender", e.target.value)}>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <FLabel label="Date of Birth" />
+                    <input type="date" className={INP} value={form.dateOfBirth} onChange={e => set("dateOfBirth", e.target.value)} />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xs font-bold text-foreground">Government Identity</span>
+                  <div className="flex-1 border-t border-border" />
+                </div>
+                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                  <div>
+                    <FLabel label="NIC Number" />
+                    <input className={cn(INP, "font-mono")} placeholder="e.g. 199012345678" value={form.nicNumber} onChange={e => set("nicNumber", e.target.value)} maxLength={12} />
+                    <p className="text-[10px] text-muted-foreground mt-0.5">National Identity Card (9 or 12 digits)</p>
+                  </div>
+                  <div>
+                    <FLabel label="Passport No." />
+                    <input className={cn(INP, "font-mono uppercase")} placeholder="e.g. N1234567" value={form.panNumber} onChange={e => set("panNumber", e.target.value.toUpperCase())} maxLength={15} />
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Optional — for non-citizen staff only</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── DOCUMENTS TAB ── */}
+          {tab === "documents" && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-bold text-foreground">Document Uploads</span>
+                <div className="flex-1 border-t border-border" />
+              </div>
+              {!isSaved ? (
+                <div className="rounded-xl border border-dashed border-border p-8 text-center">
+                  <FileText className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+                  <p className="text-sm font-medium text-muted-foreground">Save employee profile first</p>
+                  <p className="text-xs text-muted-foreground mt-1">Create the employee record before uploading documents.</p>
+                  <button onClick={handleSave} disabled={isPending}
+                    className="mt-4 px-4 py-1.5 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-60">
+                    {isPending ? "Saving..." : "Save Profile Now"}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground mb-3">Upload documents in PDF, JPG, PNG, or DOC format (max 10MB each).</p>
+                  {docList.map(d => (
+                    <DocUploadRow key={d.label} label={d.label} fieldName={d.fieldName} currentUrl={d.url} empId={emp?.id} onUploaded={onSaved} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── PAYROLL TAB ── */}
           {tab === "payroll" && (
-            <div className="space-y-5">
-              {/* Salary */}
-              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
-                  <BadgeIndianRupee className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Salary Details</span>
+            <div className="space-y-6">
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xs font-bold text-foreground">Salary Details</span>
+                  <div className="flex-1 border-t border-border" />
                 </div>
-                <div className="grid grid-cols-2 gap-4 p-4">
-                  <div className="col-span-2">
-                    <Label className="text-xs font-semibold mb-1.5 block">Basic Salary (LKR)</Label>
-                    <div className="relative">
-                      <BadgeIndianRupee className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <Input type="number" className="pl-8" placeholder="e.g. 45000" value={form.basicSalary} onChange={e => set("basicSalary", e.target.value)} />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">Monthly basic salary in Sri Lankan Rupees (LKR).</p>
+                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                  <div>
+                    <FLabel label="Basic Salary (LKR)" />
+                    <input type="number" className={INP} placeholder="e.g. 45000" value={form.basicSalary} onChange={e => set("basicSalary", e.target.value)} />
                   </div>
                 </div>
               </div>
 
-              {/* EPF / ETF */}
-              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
-                  <Shield className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Provident Fund Details</span>
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xs font-bold text-foreground">Provident Fund</span>
+                  <div className="flex-1 border-t border-border" />
                 </div>
-                <div className="grid grid-cols-2 gap-4 p-4">
+                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
                   <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">EPF Number</Label>
-                    <div className="relative">
-                      <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <Input className="pl-8 font-mono" placeholder="Employees' Provident Fund No." value={form.epfNumber} onChange={e => set("epfNumber", e.target.value)} />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">EPF — Employees' Provident Fund number.</p>
+                    <FLabel label="EPF Number" />
+                    <input className={cn(INP, "font-mono")} placeholder="Employees' Provident Fund No." value={form.epfNumber} onChange={e => set("epfNumber", e.target.value)} />
                   </div>
                   <div>
-                    <Label className="text-xs font-semibold mb-1.5 block">ETF Number</Label>
-                    <div className="relative">
-                      <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <Input className="pl-8 font-mono" placeholder="Employees' Trust Fund No." value={form.etfNumber} onChange={e => set("etfNumber", e.target.value)} />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">ETF — Employees' Trust Fund number.</p>
+                    <FLabel label="ETF Number" />
+                    <input className={cn(INP, "font-mono")} placeholder="Employees' Trust Fund No." value={form.etfNumber} onChange={e => set("etfNumber", e.target.value)} />
                   </div>
                 </div>
               </div>
 
-              {/* Remarks / Attendance Rules */}
-              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b border-border">
-                  <FileText className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Remarks / Attendance Rules</span>
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xs font-bold text-foreground">Remarks</span>
+                  <div className="flex-1 border-t border-border" />
                 </div>
-                <div className="p-4">
-                  <Label className="text-xs font-semibold mb-1.5 block">Remarks</Label>
-                  <textarea
-                    className="w-full min-h-[90px] resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all placeholder:text-muted-foreground/60"
-                    placeholder="e.g. Late deduction after 8:15 am / OT after 5:30pm"
-                    value={form.remarks}
-                    onChange={e => set("remarks", e.target.value)}
-                  />
-                  <p className="text-[10px] text-muted-foreground mt-1">
-                    Attendance and payroll rules specific to this employee (late deduction rules, OT thresholds, etc.)
-                  </p>
-                </div>
+                <textarea
+                  className="w-full min-h-[90px] resize-y rounded-lg border border-border bg-background px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary transition-colors placeholder:text-muted-foreground/50"
+                  placeholder="e.g. Late deduction after 8:15 am / OT after 5:30pm"
+                  value={form.remarks}
+                  onChange={e => set("remarks", e.target.value)}
+                />
               </div>
 
-              {/* Summary */}
               {(form.basicSalary || form.epfNumber || form.etfNumber) && (
                 <div className="rounded-xl border border-green-200 bg-green-50 p-4">
                   <p className="text-xs font-semibold text-green-800 mb-2">Payroll Summary</p>
@@ -724,78 +879,6 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
             </div>
           )}
 
-
-          {tab === "documents" && (
-            <div className="space-y-3">
-              {!isSaved ? (
-                <div className="rounded-lg border border-dashed border-border p-6 text-center">
-                  <FileText className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm font-medium text-muted-foreground">Save employee profile first</p>
-                  <p className="text-xs text-muted-foreground mt-1">Create the employee record before uploading documents.</p>
-                  <Button onClick={handleSave} disabled={isPending} className="mt-3 text-xs h-8">
-                    {isPending ? "Saving..." : "Save Profile Now"}
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <p className="text-xs text-muted-foreground">Upload documents in PDF, JPG, PNG, or DOC format (max 10MB each).</p>
-                  <DocUploadRow label="NIC (National Identity Card)" fieldName="aadharDoc" currentUrl={emp?.aadharDocUrl} empId={emp?.id} onUploaded={onSaved} />
-                  <DocUploadRow label="Passport Copy" fieldName="panDoc" currentUrl={emp?.panDocUrl} empId={emp?.id} onUploaded={onSaved} />
-                  <DocUploadRow label="Certificates" fieldName="certificatesDoc" currentUrl={emp?.certificatesDocUrl} empId={emp?.id} onUploaded={onSaved} />
-                  <DocUploadRow label="Resume / CV" fieldName="resumeDoc" currentUrl={emp?.resumeDocUrl} empId={emp?.id} onUploaded={onSaved} />
-                  <div className="rounded-lg bg-muted/50 p-3 mt-2">
-                    <p className="text-xs font-medium mb-1.5">Document Status</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { label: "NIC (National Identity Card)", url: emp?.aadharDocUrl },
-                        { label: "Passport Copy", url: emp?.panDocUrl },
-                        { label: "Certificates", url: emp?.certificatesDocUrl },
-                        { label: "Resume / CV", url: emp?.resumeDocUrl },
-                      ].map(doc => (
-                        <div key={doc.label} className="flex items-center gap-1.5 text-xs">
-                          {doc.url
-                            ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
-                            : <AlertCircle className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
-                          <span className={doc.url ? "text-foreground" : "text-muted-foreground"}>{doc.label}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Footer navigation */}
-      <div className="border-t border-border bg-background shrink-0">
-        <div className="px-6 py-3 flex items-center justify-between">
-          <Button
-            variant="outline"
-            className="text-xs h-8 px-3 gap-1.5"
-            onClick={() => prevTab ? setTab(prevTab as any) : onClose()}
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-            {prevTab ? DRAWER_TABS.find(t => t.key === prevTab)!.label : "Cancel"}
-          </Button>
-
-          {tab !== "documents" && (
-            <Button onClick={handleSave} disabled={isPending} className="text-xs h-8 px-4 gap-1.5">
-              <Save className="w-3.5 h-3.5" />
-              {isPending ? "Saving..." : emp ? "Save Changes" : "Create Employee"}
-            </Button>
-          )}
-          {tab === "documents" && <div />}
-
-          <Button
-            variant="outline"
-            className="text-xs h-8 px-3 gap-1.5"
-            onClick={() => nextTab ? setTab(nextTab as any) : onClose()}
-          >
-            {nextTab ? DRAWER_TABS.find(t => t.key === nextTab)!.label : "Close"}
-            <ChevronRight className="w-3.5 h-3.5" />
-          </Button>
         </div>
       </div>
     </div>
