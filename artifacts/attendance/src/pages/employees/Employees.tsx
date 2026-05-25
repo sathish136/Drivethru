@@ -73,30 +73,30 @@ function EmployeeMiniDashboard({ allEmployees, onFilter }: { allEmployees: any[]
   return (
     <div className="flex flex-wrap items-stretch gap-2">
       {/* Total */}
-      <div className="bg-card border border-border rounded-lg px-3 py-2 flex items-center gap-2.5 min-w-[110px]">
-        <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-          <Users className="w-3.5 h-3.5 text-primary" />
+      <div className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 flex items-center gap-3 min-w-[120px] shadow-sm">
+        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+          <Users className="w-4 h-4 text-primary" />
         </div>
         <div>
-          <p className="text-[10px] text-muted-foreground font-medium leading-none mb-0.5">Total</p>
-          <p className="text-lg font-bold text-foreground leading-none">{total}</p>
+          <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide leading-none mb-1">Total</p>
+          <p className="text-2xl font-extrabold text-slate-800 leading-none tabular-nums">{total}</p>
         </div>
       </div>
 
       {/* Divider */}
-      <div className="w-px bg-border self-stretch hidden md:block" />
+      <div className="w-px bg-slate-200 self-stretch hidden md:block" />
 
       {/* Status badges */}
       {STATUS_ITEMS.map(s => (
         <button key={s.label} onClick={() => onFilter(s.status)}
-          className="bg-card border border-border rounded-lg px-3 py-2 flex items-center gap-2 hover:border-primary/40 hover:bg-muted/40 transition-all group">
-          <div className={cn("w-2 h-2 rounded-full shrink-0", s.dot)} />
+          className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 flex items-center gap-3 hover:border-primary/50 hover:shadow-md transition-all group shadow-sm">
+          <div className={cn("w-2.5 h-2.5 rounded-full shrink-0 shadow-sm", s.dot)} />
           <div className="text-left">
-            <p className="text-[10px] text-muted-foreground leading-none mb-0.5 group-hover:text-foreground">{s.label}</p>
-            <p className="text-sm font-bold text-foreground leading-none">{s.val}</p>
+            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide leading-none mb-1 group-hover:text-slate-600">{s.label}</p>
+            <p className="text-xl font-extrabold text-slate-700 leading-none tabular-nums">{s.val}</p>
           </div>
-          <div className="w-10 h-1 bg-muted rounded-full overflow-hidden ml-1 hidden sm:block">
-            <div className={cn("h-full rounded-full", s.dot)} style={{ width: total ? `${(s.val / total) * 100}%` : "0%" }} />
+          <div className="w-12 h-1.5 bg-slate-100 rounded-full overflow-hidden ml-1 hidden sm:block">
+            <div className={cn("h-full rounded-full transition-all", s.dot)} style={{ width: total ? `${(s.val / total) * 100}%` : "0%" }} />
           </div>
         </button>
       ))}
@@ -2431,10 +2431,10 @@ export default function Employees() {
           {TABS.map(t => (
             <button key={t} onClick={() => setActiveTab(t)}
               className={cn(
-                "flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-200",
+                "flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-200",
                 activeTab === t
-                  ? "bg-background text-primary shadow-sm border border-border"
-                  : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                  ? "bg-white text-primary shadow-sm border border-slate-200"
+                  : "text-slate-500 hover:text-slate-700 hover:bg-white/60"
               )}>
               {t === "Employee List" && <Users className="w-3.5 h-3.5" />}
               {t === "Departments" && <Building2 className="w-3.5 h-3.5" />}
@@ -2444,7 +2444,7 @@ export default function Employees() {
               {t === "Employee List" && (
                 <span className={cn(
                   "ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold tabular-nums",
-                  activeTab === t ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                  activeTab === t ? "bg-primary/10 text-primary" : "bg-slate-200 text-slate-500"
                 )}>{allEmployees.length}</span>
               )}
             </button>
@@ -2466,35 +2466,35 @@ export default function Employees() {
 
       {activeTab === "Employee List" && (
         <>
-          <Card className="p-3 flex flex-wrap gap-2 items-center">
-            <div className="relative flex-1 min-w-[180px]">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-              <Input placeholder="Search name, ID, NIC, email..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-8 text-xs" />
+          <Card className="px-3 py-2.5 flex flex-wrap gap-2 items-center bg-white border border-slate-200 shadow-sm">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <Input placeholder="Search name, ID, NIC, email..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-8 text-xs border-slate-300 bg-slate-50 focus:bg-white placeholder:text-slate-400" />
             </div>
             <Select
               value={filterBranchId}
               onChange={e => setFilterBranchId(e.target.value)}
-              className="h-8 text-xs w-48"
+              className="h-8 text-xs w-48 border-slate-300 text-slate-600"
             >
               <option value="">All Locations</option>
               {branches.map((b: any) => (
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}
             </Select>
-            <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="h-8 text-xs w-32">
+            <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="h-8 text-xs w-32 border-slate-300 text-slate-600">
               <option value="">All Status</option>
               <option value="active">Active</option>
               <option value="on_leave">On Leave</option>
               <option value="resigned">Resigned</option>
               <option value="terminated">Terminated</option>
             </Select>
-            <Select value={filterDept} onChange={e => setFilterDept(e.target.value)} className="h-8 text-xs w-40">
+            <Select value={filterDept} onChange={e => setFilterDept(e.target.value)} className="h-8 text-xs w-40 border-slate-300 text-slate-600">
               <option value="">All Departments</option>
               {(allDeptNames.length > 0 ? allDeptNames : DEPT_LIST).map(d => (
                 <option key={d} value={d}>{d}</option>
               ))}
             </Select>
-            <Select value={filterType} onChange={e => setFilterType(e.target.value)} className="h-8 text-xs w-28">
+            <Select value={filterType} onChange={e => setFilterType(e.target.value)} className="h-8 text-xs w-28 border-slate-300 text-slate-600">
               <option value="">All Types</option>
               <option value="permanent">Permanent</option>
               <option value="contract">Contract</option>
@@ -2503,12 +2503,12 @@ export default function Employees() {
             {(search || filterStatus || filterDept || filterType || filterBranchId) && (
               <button
                 onClick={() => { setSearch(""); setFilterStatus(""); setFilterDept(""); setFilterType(""); setFilterBranchId(""); }}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-700"
               >
                 <X className="w-3.5 h-3.5" /> Clear
               </button>
             )}
-            <span className="ml-auto text-xs text-muted-foreground">{employees.length} employee{employees.length !== 1 ? "s" : ""}</span>
+            <span className="ml-auto text-xs font-semibold text-slate-500">{employees.length} employee{employees.length !== 1 ? "s" : ""}</span>
           </Card>
 
           <Card className="overflow-hidden">
@@ -2517,60 +2517,62 @@ export default function Employees() {
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
-                  <thead className="bg-muted/50 sticky top-0">
+                  <thead className="bg-slate-50 sticky top-0 border-b border-slate-200">
                     <tr>
                       {["Emp ID","Bio ID","Name","Department","Branch","Status","Actions"].map(h => (
-                        <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
+                        <th key={h} className="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
-                    {employees.map((emp: any) => (
-                      <tr key={emp.id} className="hover:bg-muted/30 transition-colors group">
-                        <td className="px-3 py-2.5 font-mono text-xs text-primary font-medium">{emp.employeeId}</td>
-                        <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{emp.biometricId || "—"}</td>
-                        <td className="px-3 py-2.5">
+                  <tbody className="divide-y divide-slate-100">
+                    {employees.map((emp: any) => {
+                      const initial = (emp.firstName?.[0] || emp.fullName?.[0] || "E").toUpperCase();
+                      const avatarColors = ["bg-violet-100 text-violet-700","bg-sky-100 text-sky-700","bg-amber-100 text-amber-700","bg-emerald-100 text-emerald-700","bg-rose-100 text-rose-700","bg-indigo-100 text-indigo-700"];
+                      const avatarColor = avatarColors[(emp.id || 0) % avatarColors.length];
+                      return (
+                      <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors group">
+                        <td className="px-4 py-3">
+                          <span className="font-mono text-xs font-semibold text-primary tracking-tight">{emp.employeeId}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="font-mono text-xs font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{emp.biometricId || "—"}</span>
+                        </td>
+                        <td className="px-4 py-3">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-full bg-muted/60 border border-border overflow-hidden shrink-0 flex items-center justify-center">
+                            <div className={cn("w-8 h-8 rounded-full overflow-hidden shrink-0 flex items-center justify-center font-bold text-xs", emp.photoUrl ? "" : avatarColor)}>
                               {emp.photoUrl
                                 ? <img src={emp.photoUrl} alt={empDisplayName(emp)} className="w-full h-full object-cover" />
-                                : <span className="text-[10px] font-bold text-muted-foreground">
-                                    {(emp.firstName?.[0] || emp.fullName?.[0] || "E").toUpperCase()}
-                                  </span>
+                                : initial
                               }
                             </div>
-                            <div>
-                              <div className="font-medium">{empDisplayName(emp)}</div>
-                            </div>
+                            <span className="font-semibold text-slate-800">{empDisplayName(emp)}</span>
                           </div>
                         </td>
-                        <td className="px-3 py-2.5">
-                          <div className="font-medium">{emp.department}</div>
+                        <td className="px-4 py-3 text-slate-600 font-medium">{emp.department}</td>
+                        <td className="px-4 py-3 text-slate-500">
+                          <div className="flex items-center gap-1"><MapPin className="w-3 h-3 shrink-0 text-slate-400" /><span className="truncate max-w-[130px]">{emp.branchName}</span></div>
                         </td>
-                        <td className="px-3 py-2.5 text-muted-foreground">
-                          <div className="flex items-center gap-1"><MapPin className="w-3 h-3 shrink-0" /><span className="truncate max-w-[120px]">{emp.branchName}</span></div>
-                        </td>
-
-                        <td className="px-3 py-2.5">
-                          <span className={cn("px-2 py-0.5 rounded text-xs font-medium", STATUS_STYLE[emp.status] || STATUS_STYLE.active)}>
+                        <td className="px-4 py-3">
+                          <span className={cn("px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide", STATUS_STYLE[emp.status] || STATUS_STYLE.active)}>
                             {emp.status === "on_leave" ? "On Leave" : emp.status?.[0]?.toUpperCase() + emp.status?.slice(1) || "Active"}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5">
+                        <td className="px-4 py-3">
                           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => { setDrawerEmp(emp); setDrawerOpen(true); }} className="p-1.5 hover:bg-muted rounded text-muted-foreground" title="Edit">
+                            <button onClick={() => { setDrawerEmp(emp); setDrawerOpen(true); }} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700" title="Edit">
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
                             <button onClick={() => { if(confirm(`Delete "${empDisplayName(emp)}"?`)) deleteEmp.mutate({ id: emp.id }, { onSuccess: () => refetch() }); }}
-                              className="p-1.5 hover:bg-red-100 text-red-500 rounded" title="Delete">
+                              className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-lg" title="Delete">
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                     {!employees.length && (
-                      <tr><td colSpan={8} className="text-center py-10 text-muted-foreground">No employees found.</td></tr>
+                      <tr><td colSpan={8} className="text-center py-12 text-slate-400 font-medium">No employees found.</td></tr>
                     )}
                   </tbody>
                 </table>
