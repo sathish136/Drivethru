@@ -489,6 +489,17 @@ function AttendanceReport() {
     ...(dDept ? { department: dDept } : {}),
   });
 
+  // Fetch all employees to read their assigned shift from Employee Management
+  const { data: empListData } = useListEmployees({ limit: 500 });
+  const empShiftMap = useMemo(() => {
+    const allEmps: any[] = empListData?.employees || [];
+    const map: Record<number, number | null> = {};
+    for (const e of allEmps) {
+      map[Number(e.id)] = e.shiftId ? Number(e.shiftId) : null;
+    }
+    return map;
+  }, [empListData]);
+
   function getRemarks(r: any): string {
     if (typeof r.remarks === "string" && r.remarks.trim()) return r.remarks;
     const shiftName = r.shiftName
@@ -503,15 +514,20 @@ function AttendanceReport() {
     return Array.from(set).sort() as string[];
   }, [data]);
 
-  const filtered = useMemo(() => (data?.records || []).filter((r: any) =>
-    (!department || r.department === department)
-    && (!shiftId || String(r.shiftId) === shiftId)
-    && (!empName || (r.employeeName || "").toLowerCase().includes(empName.toLowerCase()) || String(r.employeeId || "").toLowerCase().includes(empName.toLowerCase()))
-  ).sort((a: any, b: any) => {
+  const filtered = useMemo(() => (data?.records || []).filter((r: any) => {
+    // For shift filter: use the shift assigned to the employee in Employee Management
+    const empAssignedShiftId = empShiftMap[Number(r.employeeId)] ?? null;
+    const shiftMatch = !shiftId || String(empAssignedShiftId) === shiftId;
+    return (
+      (!department || r.department === department)
+      && shiftMatch
+      && (!empName || (r.employeeName || "").toLowerCase().includes(empName.toLowerCase()) || String(r.employeeId || "").toLowerCase().includes(empName.toLowerCase()))
+    );
+  }).sort((a: any, b: any) => {
     const dateCmp = (a.date || "").localeCompare(b.date || "");
     if (dateCmp !== 0) return dateCmp;
     return (a.employeeName || "").localeCompare(b.employeeName || "");
-  }), [data, department, shiftId, empName]);
+  }), [data, department, shiftId, empName, empShiftMap]);
 
   // Auto-detect night-shift view: true when ALL non-off/holiday rows in the
   // filtered set belong to employees on a night shift (assigned shift startTime ≥ 18:00).
