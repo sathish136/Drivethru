@@ -815,7 +815,7 @@ function AttendanceReport() {
     <div className="space-y-4">
       <SeasonBadge month={_attMonth} year={_attYear} />
       <FilterCard title="Attendance Report Filters" onExport={handleExport} onExportExcel={handleExportExcel}>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-1.5">
           <div><Label className="text-xs">Start Date</Label>
             <Input type="date" value={startDate} onChange={e=>{ if (e.target.value) setStartDate(e.target.value); }}/></div>
           <div><Label className="text-xs">End Date</Label>
