@@ -813,9 +813,9 @@ function AttendanceReport() {
       <FilterCard title="Attendance Report Filters" onExport={handleExport} onExportExcel={handleExportExcel}>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
           <div><Label className="text-xs">Start Date</Label>
-            <Input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/></div>
+            <Input type="date" value={startDate} onChange={e=>{ if (e.target.value) setStartDate(e.target.value); }}/></div>
           <div><Label className="text-xs">End Date</Label>
-            <Input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)}/></div>
+            <Input type="date" value={endDate} onChange={e=>{ if (e.target.value) setEndDate(e.target.value); }}/></div>
           <div><Label className="text-xs">Branch</Label>
             <Select value={branchId} onChange={e=>setBranchId(e.target.value)}>
               <option value="">All Branches</option>
@@ -1440,9 +1440,9 @@ function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { init
       <FilterCard title="Overtime Report Filters" onExport={handleExport} onExportExcel={handleExportExcel}>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           <div><Label className="text-xs">Start Date</Label>
-            <Input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/></div>
+            <Input type="date" value={startDate} onChange={e=>{ if (e.target.value) setStartDate(e.target.value); }}/></div>
           <div><Label className="text-xs">End Date</Label>
-            <Input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)}/></div>
+            <Input type="date" value={endDate} onChange={e=>{ if (e.target.value) setEndDate(e.target.value); }}/></div>
           <div><Label className="text-xs">Branch</Label>
             <Select value={branchId} onChange={e=>setBranchId(e.target.value)}>
               <option value="">All Branches</option>

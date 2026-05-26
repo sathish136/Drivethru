@@ -295,7 +295,12 @@ function getEffectiveStatus(
 
 router.get("/attendance", async (req, res) => {
   try {
-    const { startDate, endDate, branchId, employeeId, status, department } = req.query;
+    const { branchId, employeeId, status, department } = req.query;
+    // Sanitise date params: reject empty strings so the filter is never silently skipped.
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; })();
+    const startDate = typeof req.query.startDate === "string" && req.query.startDate ? req.query.startDate : undefined;
+    const endDate   = typeof req.query.endDate   === "string" && req.query.endDate   ? req.query.endDate   : todayStr;
     const all = await db.select({
       rec: attendanceRecords,
       empName: employees.fullName,
