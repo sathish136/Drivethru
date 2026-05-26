@@ -468,6 +468,7 @@ function AttendanceReport() {
   const [status, setStatus]         = useState("");
   const [department, setDepartment] = useState("");
   const [empName, setEmpName]       = useState("");
+  const [shiftId, setShiftId]       = useState("");
 
   const dStart   = useDebounce(startDate, 400);
   const dEnd     = useDebounce(endDate, 400);
@@ -502,12 +503,13 @@ function AttendanceReport() {
 
   const filtered = useMemo(() => (data?.records || []).filter((r: any) =>
     (!department || r.department === department)
+    && (!shiftId || String(r.shiftId) === shiftId)
     && (!empName || (r.employeeName || "").toLowerCase().includes(empName.toLowerCase()) || String(r.employeeId || "").toLowerCase().includes(empName.toLowerCase()))
   ).sort((a: any, b: any) => {
     const dateCmp = (a.date || "").localeCompare(b.date || "");
     if (dateCmp !== 0) return dateCmp;
     return (a.employeeName || "").localeCompare(b.employeeName || "");
-  }), [data, department, empName]);
+  }), [data, department, shiftId, empName]);
 
   // Auto-detect night-shift view: true when ALL non-off/holiday rows in the
   // filtered set belong to employees on a night shift (assigned shift startTime ≥ 18:00).
@@ -837,6 +839,11 @@ function AttendanceReport() {
             <Select value={department} onChange={e=>setDepartment(e.target.value)}>
               <option value="">All Departments</option>
               {departments.map(d=><option key={d} value={d}>{d}</option>)}
+            </Select></div>
+          <div><Label className="text-xs">Shift</Label>
+            <Select value={shiftId} onChange={e=>setShiftId(e.target.value)}>
+              <option value="">All Shifts</option>
+              {shiftOptions?.map((s:any)=><option key={s.id} value={s.id}>{s.name}</option>)}
             </Select></div>
           <div><Label className="text-xs">Employee Name</Label>
             <Input placeholder="Search name…" value={empName} onChange={e=>setEmpName(e.target.value)}/></div>
