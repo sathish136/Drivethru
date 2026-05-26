@@ -421,7 +421,7 @@ export default function PayslipPage() {
         <button
           onClick={() => window.print()}
           className="flex items-center gap-1.5 text-white text-sm font-semibold px-5 py-2 rounded-lg transition-all hover:opacity-90 shadow"
-          style={{ background: "linear-gradient(135deg,#3a9ec2,#2277a0)" }}
+          style={{ background: "linear-gradient(135deg,#2563eb,#1d4ed8)" }}
         >
           <Printer className="w-4 h-4" /> Print Payslip
         </button>
@@ -431,7 +431,7 @@ export default function PayslipPage() {
       <div className="max-w-[680px] mx-auto bg-white shadow-2xl rounded-2xl overflow-hidden">
 
         {/* Hero header */}
-        <div style={{ background: "linear-gradient(135deg,#0e2a3d 0%,#1a4a6e 60%,#3a9ec2 100%)", padding: "28px 32px 22px" }}>
+        <div style={{ background: "linear-gradient(135deg,#0f172a 0%,#1e3a8a 60%,#2563eb 100%)", padding: "28px 32px 22px" }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: "14px", padding: "8px", backdropFilter: "blur(4px)" }}>
@@ -456,16 +456,16 @@ export default function PayslipPage() {
         </div>
 
         {/* Employee info strip */}
-        <div style={{ background: "#f0f9ff", borderBottom: "1px solid #bae6fd", padding: "14px 32px" }}>
+        <div style={{ background: "#eff6ff", borderBottom: "1px solid #bfdbfe", padding: "14px 32px" }}>
           <div className="flex justify-between items-center">
             <div>
               <p style={{ fontSize: "10px", color: "#64748b", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "2px" }}>Employee Name</p>
-              <p style={{ fontSize: "14px", fontWeight: "700", color: "#0e2a3d" }}>{row.employee.fullName}</p>
+              <p style={{ fontSize: "14px", fontWeight: "700", color: "#1e3a8a" }}>{row.employee.fullName}</p>
               <p style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>{row.employee.designation} · {row.employee.department}</p>
             </div>
             <div style={{ textAlign: "right" }}>
               <p style={{ fontSize: "10px", color: "#64748b", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "2px" }}>EPF No.</p>
-              <p style={{ fontSize: "14px", fontWeight: "700", color: "#0e2a3d" }}>{epfNo}</p>
+              <p style={{ fontSize: "14px", fontWeight: "700", color: "#1e3a8a" }}>{epfNo}</p>
               <p style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>ID: {row.employee.employeeId}</p>
             </div>
           </div>
@@ -473,7 +473,7 @@ export default function PayslipPage() {
 
         {/* Payment details table */}
         <div style={{ padding: "20px 32px 0" }}>
-          <p style={{ fontSize: "10px", fontWeight: "700", color: "#3a9ec2", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "10px" }}>Payment Details</p>
+          <p style={{ fontSize: "10px", fontWeight: "700", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "10px" }}>Payment Details</p>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
             <thead>
               <tr style={{ background: "#f8fafc" }}>
@@ -486,12 +486,12 @@ export default function PayslipPage() {
                 <tr key={i} style={{
                   borderTop: r.borderTop ? "2px solid #e2e8f0" : undefined,
                   borderBottom: r.borderBottom ? "2px solid #e2e8f0" : undefined,
-                  background: r.bold && r.borderTop ? "#f0f9ff" : "transparent",
+                  background: r.bold && r.borderTop ? "#eff6ff" : "transparent",
                 }}>
-                  <td style={{ padding: r.label ? "6px 10px" : "4px 10px", paddingLeft: r.indent ? "28px" : "10px", fontStyle: r.italic ? "italic" : "normal", fontWeight: r.bold ? "700" : "400", color: r.bold ? "#0e2a3d" : r.indent ? "#64748b" : "#374151", fontSize: r.indent ? "11px" : "12px" }}>
+                  <td style={{ padding: r.label ? "6px 10px" : "4px 10px", paddingLeft: r.indent ? "28px" : "10px", fontStyle: r.italic ? "italic" : "normal", fontWeight: r.bold ? "700" : "400", color: r.bold ? "#1e3a8a" : r.indent ? "#64748b" : "#374151", fontSize: r.indent ? "11px" : "12px" }}>
                     {r.label}
                   </td>
-                  <td style={{ textAlign: "right", padding: "6px 10px", fontStyle: r.italic ? "italic" : "normal", fontWeight: r.bold ? "700" : "400", color: r.bold ? "#0e2a3d" : r.indent ? "#64748b" : "#374151", whiteSpace: "nowrap", fontSize: r.indent ? "11px" : "12px" }}>
+                  <td style={{ textAlign: "right", padding: "6px 10px", fontStyle: r.italic ? "italic" : "normal", fontWeight: r.bold ? "700" : "400", color: r.bold ? "#1e3a8a" : r.indent ? "#64748b" : "#374151", whiteSpace: "nowrap", fontSize: r.indent ? "11px" : "12px" }}>
                     {r.value}
                   </td>
                 </tr>
@@ -502,7 +502,7 @@ export default function PayslipPage() {
 
         {/* Attendance summary */}
         <div className="mx-8 mt-5 mb-1">
-          <p style={{ fontSize: "10px", fontWeight: "700", color: "#3a9ec2", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "8px" }}>Attendance Summary</p>
+          <p style={{ fontSize: "10px", fontWeight: "700", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "8px" }}>Attendance Summary</p>
           <div className="grid grid-cols-5 gap-2 text-center">
             {[
               { label: "Working", val: row.workingDays },
@@ -513,7 +513,7 @@ export default function PayslipPage() {
             ].map(s => (
               <div key={s.label} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "8px 4px" }}>
                 <p style={{ fontSize: "9px", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.04em" }}>{s.label}</p>
-                <p style={{ fontSize: "15px", fontWeight: "700", color: "#0e2a3d", marginTop: "2px" }}>{s.val}</p>
+                <p style={{ fontSize: "15px", fontWeight: "700", color: "#1e3a8a", marginTop: "2px" }}>{s.val}</p>
               </div>
             ))}
           </div>
@@ -522,12 +522,12 @@ export default function PayslipPage() {
         {/* ── Full Calculation Formula Section ── */}
         {formulaRows.length > 0 && (
           <div className="mx-8 mt-5 mb-1">
-            <p style={{ fontSize: "10px", fontWeight: "700", color: "#3a9ec2", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "8px" }}>
+            <p style={{ fontSize: "10px", fontWeight: "700", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "8px" }}>
               Calculation Formula (Backend Logic)
             </p>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10.5px" }}>
               <thead>
-                <tr style={{ background: "#1a4a6e" }}>
+                <tr style={{ background: "#1e3a8a" }}>
                   <th style={{ padding: "5px 8px", color: "#e0f2fe", fontWeight: "600", fontSize: "10px", textAlign: "left", width: "26%" }}>Component</th>
                   <th style={{ padding: "5px 8px", color: "#e0f2fe", fontWeight: "600", fontSize: "10px", textAlign: "left" }}>Formula Used</th>
                   <th style={{ padding: "5px 8px", color: "#e0f2fe", fontWeight: "600", fontSize: "10px", textAlign: "right", width: "22%" }}>Result</th>
@@ -535,14 +535,14 @@ export default function PayslipPage() {
               </thead>
               <tbody>
                 {formulaRows.map((fr, i) => (
-                  <tr key={i} style={{ background: fr.highlight ? "#f0f9ff" : "white", borderBottom: "1px solid #e2e8f0" }}>
+                  <tr key={i} style={{ background: fr.highlight ? "#eff6ff" : "white", borderBottom: "1px solid #e2e8f0" }}>
                     <td style={{ padding: "5px 8px", color: "#334155", fontWeight: "600" }}>{fr.label}</td>
                     <td style={{ padding: "5px 8px", color: "#64748b", fontStyle: "italic" }}>{fr.formula}</td>
                     <td style={{
                       padding: "5px 8px",
                       textAlign: "right",
                       fontWeight: "700",
-                      color: fr.deduction ? "#b45309" : "#0e2a3d",
+                      color: fr.deduction ? "#b45309" : "#1e3a8a",
                       whiteSpace: "nowrap",
                     }}>{fr.result}</td>
                   </tr>
@@ -551,15 +551,15 @@ export default function PayslipPage() {
             </table>
 
             {/* Gross & Net summary */}
-            <div style={{ marginTop: "10px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: "8px", padding: "10px 12px" }}>
-              <p style={{ fontSize: "10px", fontWeight: "700", color: "#0e2a3d", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            <div style={{ marginTop: "10px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "10px 12px" }}>
+              <p style={{ fontSize: "10px", fontWeight: "700", color: "#1e3a8a", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                 Salary Summary Formula
               </p>
               <p style={{ fontSize: "10px", color: "#475569", marginBottom: "3px" }}>
-                <span style={{ fontWeight: "600" }}>Gross Salary</span> = ({earnParts.join(" + ")}){dedParts.length > 0 ? ` − (${dedParts.join(" + ")})` : ""} = <span style={{ fontWeight: "700", color: "#0e2a3d" }}>Rs.{row.grossSalary.toLocaleString()}</span>
+                <span style={{ fontWeight: "600" }}>Gross Salary</span> = ({earnParts.join(" + ")}){dedParts.length > 0 ? ` − (${dedParts.join(" + ")})` : ""} = <span style={{ fontWeight: "700", color: "#1e3a8a" }}>Rs.{row.grossSalary.toLocaleString()}</span>
               </p>
               <p style={{ fontSize: "10px", color: "#475569" }}>
-                <span style={{ fontWeight: "600" }}>Net Salary</span> = Rs.{row.grossSalary.toLocaleString()} − EPF 8% Rs.{epf8.toLocaleString()}{apit > 0 ? ` − APIT Rs.${apit.toLocaleString()}` : ""}{otherDeds > 0 ? ` − Other Rs.${otherDeds.toLocaleString()}` : ""}{loans > 0 ? ` − Loans Rs.${loans.toLocaleString()}` : ""} = <span style={{ fontWeight: "700", color: "#0e7490" }}>Rs.{row.netSalary.toLocaleString()}</span>
+                <span style={{ fontWeight: "600" }}>Net Salary</span> = Rs.{row.grossSalary.toLocaleString()} − EPF 8% Rs.{epf8.toLocaleString()}{apit > 0 ? ` − APIT Rs.${apit.toLocaleString()}` : ""}{otherDeds > 0 ? ` − Other Rs.${otherDeds.toLocaleString()}` : ""}{loans > 0 ? ` − Loans Rs.${loans.toLocaleString()}` : ""} = <span style={{ fontWeight: "700", color: "#1e3a8a" }}>Rs.{row.netSalary.toLocaleString()}</span>
               </p>
             </div>
           </div>

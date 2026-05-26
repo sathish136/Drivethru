@@ -199,7 +199,7 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
             <button
               onClick={() => window.print()}
               className="flex items-center gap-1.5 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all hover:opacity-90"
-              style={{ background: "linear-gradient(135deg,#3a9ec2,#2277a0)" }}
+              style={{ background: "linear-gradient(135deg,#2563eb,#1d4ed8)" }}
             >
               <Printer className="w-3.5 h-3.5" /> Print
             </button>
@@ -213,7 +213,7 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
         <div>
 
           {/* ── Hero header with logo ── */}
-          <div style={{ background: "linear-gradient(135deg,#0e2a3d 0%,#1a4a6e 60%,#3a9ec2 100%)", padding: "28px 32px 22px" }}>
+          <div style={{ background: "linear-gradient(135deg,#0f172a 0%,#1e3a8a 60%,#2563eb 100%)", padding: "28px 32px 22px" }}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: "14px", padding: "8px", backdropFilter: "blur(4px)" }}>
@@ -445,7 +445,7 @@ function PayrollDetailModal({ row, onClose }: { row: PayrollRow; onClose: () => 
       >
 
         {/* ── Gradient header ── */}
-        <div style={{ background: "linear-gradient(135deg, #0e2a3d 0%, #1a4a6e 55%, #3a9ec2 100%)" }} className="shrink-0 px-6 py-5">
+        <div style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 55%, #2563eb 100%)" }} className="shrink-0 px-6 py-5">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-white/15 flex items-center justify-center text-white font-bold text-lg shadow-inner">
@@ -496,7 +496,7 @@ function PayrollDetailModal({ row, onClose }: { row: PayrollRow; onClose: () => 
               className={cn(
                 "text-[13px] font-medium px-4 py-3.5 border-b-2 transition-all whitespace-nowrap",
                 tab === t.id
-                  ? "border-[#3a9ec2] text-[#1a4a6e] font-semibold"
+                  ? "border-[#2563eb] text-[#1e3a8a] font-semibold"
                   : "border-transparent text-slate-500 hover:text-slate-800"
               )}
             >

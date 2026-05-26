@@ -38,26 +38,26 @@
 }
 
 :root {
-  /* Drivethru Blue Theme — #3a9ec2 -> HSL 200 55% 49% */
-  --background: 200 20% 98%;
-  --foreground: 210 20% 15%;
+  /* Dark Navy Blue Theme — #1e3a8a -> HSL 222 65% 33% */
+  --background: 0 0% 100%;
+  --foreground: 222 30% 14%;
   
-  --primary: 200 60% 48%;
+  --primary: 222 72% 35%;
   --primary-foreground: 0 0% 100%;
   
-  --muted: 200 10% 92%;
-  --muted-foreground: 210 15% 45%;
+  --muted: 220 10% 94%;
+  --muted-foreground: 220 10% 46%;
   
-  --border: 210 15% 90%;
-  --input: 210 15% 92%;
-  --ring: 200 60% 48%;
+  --border: 220 14% 90%;
+  --input: 220 10% 95%;
+  --ring: 222 72% 35%;
   
   --card: 0 0% 100%;
-  --card-foreground: 210 20% 15%;
+  --card-foreground: 222 30% 14%;
 
-  --sidebar: 210 35% 12%;
-  --sidebar-foreground: 210 20% 80%;
-  --sidebar-active: 200 60% 48%;
+  --sidebar: 222 58% 10%;
+  --sidebar-foreground: 220 20% 90%;
+  --sidebar-active: 222 72% 35%;
 }
 
 @layer base {

@@ -22,7 +22,7 @@ Green-themed professional HRMS application similar to OrangeHRMS.
 
 ## Theme
 
-Primary color: Green (#5db75c / HSL 119 41% 54%)
+Primary color: Dark Navy Blue (#1e3a8a / HSL 222 72% 35%)
 Small compact font (text-xs, text-sm)
 Dark sidebar, clean white content area
 
