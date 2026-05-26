@@ -853,11 +853,27 @@ function AttendanceReport() {
           <div className="overflow-x-auto">
             {isNightShiftView ? (
               /* ── Night-shift 4-punch table ── */
-              <table className="text-xs">
+              <table className="w-full table-fixed text-xs">
+                <colgroup>
+                  <col style={{width:"82px"}}/>
+                  <col style={{width:"82px"}}/>
+                  <col style={{width:"100px"}}/>
+                  <col style={{width:"160px"}}/>
+                  <col style={{width:"85px"}}/>
+                  <col style={{width:"110px"}}/>
+                  <col style={{width:"115px"}}/>
+                  <col style={{width:"55px"}}/>
+                  <col style={{width:"90px"}}/>
+                  <col style={{width:"55px"}}/>
+                  <col style={{width:"90px"}}/>
+                  <col style={{width:"130px"}}/>
+                  <col style={{width:"62px"}}/>
+                  <col/>
+                </colgroup>
                 <thead className="bg-indigo-900/90 text-white">
                   <tr>
                     {["Shift Date","Next Day","Emp ID","Employee","Department","Branch","Status"].map(h=>(
-                      <th key={h} className="px-3 py-2.5 text-left font-semibold whitespace-nowrap" rowSpan={2}>{h}</th>
+                      <th key={h} className="px-3 py-2.5 text-left font-semibold whitespace-nowrap overflow-hidden" rowSpan={2}>{h}</th>
                     ))}
                     <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-indigo-700/60" colSpan={2}>Punch 1–2 (Evening)</th>
                     <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-violet-700/60" colSpan={2}>Punch 3–4 (Morning)</th>
@@ -895,9 +911,9 @@ function AttendanceReport() {
                         {r.morningDate || "—"}
                       </td>
                       <td className="px-3 py-2 font-mono whitespace-nowrap text-muted-foreground">{r.employeeCode}</td>
-                      <td className="px-3 py-2 font-medium whitespace-nowrap">{r.employeeName}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.department||"—"}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.branchName}</td>
+                      <td className="px-3 py-2 font-medium truncate" title={r.employeeName}>{r.employeeName}</td>
+                      <td className="px-3 py-2 text-muted-foreground truncate">{r.department||"—"}</td>
+                      <td className="px-3 py-2 text-muted-foreground truncate">{r.branchName}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <span className={cn("px-2 py-0.5 rounded text-xs font-medium",STATUS_COLORS[r.status]||"bg-gray-100")}>
                           {fmtStatus(r.status)}
@@ -968,11 +984,27 @@ function AttendanceReport() {
               </table>
             ) : (
               /* ── Standard day-shift table ── */
-              <table className="text-xs">
+              <table className="w-full table-fixed text-xs">
+                <colgroup>
+                  <col style={{width:"82px"}}/>
+                  <col style={{width:"100px"}}/>
+                  <col style={{width:"160px"}}/>
+                  <col style={{width:"85px"}}/>
+                  <col style={{width:"110px"}}/>
+                  <col style={{width:"115px"}}/>
+                  <col style={{width:"52px"}}/>
+                  <col style={{width:"90px"}}/>
+                  <col style={{width:"80px"}}/>
+                  <col style={{width:"52px"}}/>
+                  <col style={{width:"90px"}}/>
+                  <col style={{width:"180px"}}/>
+                  <col style={{width:"62px"}}/>
+                  <col/>
+                </colgroup>
                 <thead className="bg-muted/50">
                   <tr>
                     {["Date","Emp ID","Employee","Department","Branch","Status"].map(h=>(
-                      <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap" rowSpan={2}>{h}</th>
+                      <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap overflow-hidden" rowSpan={2}>{h}</th>
                     ))}
                     <th className="px-3 py-2 text-center font-semibold text-blue-600 whitespace-nowrap bg-blue-50/50" colSpan={2}>1st Session</th>
                     <th className="px-3 py-2 text-center font-semibold text-purple-600 whitespace-nowrap bg-purple-50/50" rowSpan={2}>Lunch Break</th>
@@ -1002,9 +1034,9 @@ function AttendanceReport() {
                     <tr key={r.id} className="hover:bg-muted/30 transition-colors align-top">
                       <td className="px-3 py-2 font-mono whitespace-nowrap">{r.date}</td>
                       <td className="px-3 py-2 font-mono whitespace-nowrap text-muted-foreground">{r.employeeCode}</td>
-                      <td className="px-3 py-2 font-medium whitespace-nowrap">{r.employeeName}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.department||"—"}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.branchName}</td>
+                      <td className="px-3 py-2 font-medium truncate" title={r.employeeName}>{r.employeeName}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground truncate">{r.department||"—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground truncate">{r.branchName}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <div className="flex flex-col gap-0.5">
                           <span className={cn("px-2 py-0.5 rounded text-xs font-medium",STATUS_COLORS[r.status]||"bg-gray-100")}>
