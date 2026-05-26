@@ -383,8 +383,18 @@ export async function processAttRows(rows: AttRow[]) {
         ? logs.slice().sort((a, b) => nightNorm(a.time) - nightNorm(b.time))
         : logs.slice().sort((a, b) => a.time.localeCompare(b.time));
 
+      // For night shift employees, exclude "afternoon" punches (12:00–17:59).
+      // The valid night-shift window is: evening (≥ 18:00) OR overnight morning (< 12:00).
+      // Afternoon punches (e.g. 15:44) don't belong to this shift and would inflate totalHours.
+      const shiftFiltered = isNightShift
+        ? sorted.filter(l => {
+            const m = timeToMins(l.time);
+            return m >= 18 * 60 || m < 12 * 60;
+          })
+        : sorted;
+
       // Deduplicate punches within 2 minutes of each other (e.g. double-punch at shift end)
-      const deduped = sorted.filter((log, i, arr) => {
+      const deduped = shiftFiltered.filter((log, i, arr) => {
         if (i === 0) return true;
         const prevNorm = isNightShift ? nightNorm(arr[i - 1].time) : timeToMins(arr[i - 1].time);
         const curNorm  = isNightShift ? nightNorm(log.time)        : timeToMins(log.time);
