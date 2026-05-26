@@ -259,6 +259,28 @@ router.put("/employee/:employeeId", async (req, res) => {
   }
 });
 
+/* POST /salary-structures/strip-extra-earnings — remove all non-Basic earnings from every salary structure */
+router.post("/strip-extra-earnings", async (_req, res) => {
+  try {
+    const rows = await db.select().from(salaryStructures);
+    let updated = 0;
+    for (const row of rows) {
+      const earnings = JSON.parse(row.earnings) as any[];
+      const basicOnly = earnings.filter((e: any) => (e.component ?? "").toLowerCase() === "basic");
+      // If nothing changed, skip
+      if (basicOnly.length === earnings.length) continue;
+      await db.update(salaryStructures)
+        .set({ earnings: JSON.stringify(basicOnly), updatedAt: new Date() })
+        .where(eq(salaryStructures.id, row.id));
+      updated++;
+    }
+    res.json({ success: true, updated, total: rows.length });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Failed to strip extra earnings" });
+  }
+});
+
 /* DELETE /salary-structures/assignments/:employeeId */
 router.delete("/assignments/:employeeId", async (req, res) => {
   try {

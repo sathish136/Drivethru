@@ -53,11 +53,11 @@ interface PayrollConfig {
 }
 const DEFAULTS: PayrollConfig = {
   epfEmployeePercent: 8, epfEmployerPercent: 12, etfEmployerPercent: 3,
-  transportAllowance: 5000,
+  transportAllowance: 0,
   lunchIncentivePerDay: 125,
-  housingAllowanceLow: 3000, housingAllowanceMid: 7000, housingAllowanceHigh: 10000,
+  housingAllowanceLow: 0, housingAllowanceMid: 0, housingAllowanceHigh: 0,
   housingMidThreshold: 50000, housingHighThreshold: 80000,
-  otherAllowances: 1500,
+  otherAllowances: 0,
   overtimeMultiplier: 1.5,
   statutoryOtMultiplier: 2.0,
   poyaOtMultiplier: 1.5,
