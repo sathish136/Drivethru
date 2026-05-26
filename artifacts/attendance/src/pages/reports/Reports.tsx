@@ -460,8 +460,8 @@ export default function Reports() {
 ══════════════════════════════════════════════════════════ */
 function AttendanceReport() {
   const now = new Date();
-  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const [startDate, setStartDate]   = useState(prevMonth.toISOString().split("T")[0]);
+  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const [startDate, setStartDate]   = useState(firstOfMonth.toISOString().split("T")[0]);
   const [endDate, setEndDate]       = useState(now.toISOString().split("T")[0]);
   const [branchId, setBranchId]     = useState("");
   const [status, setStatus]         = useState("");
@@ -517,8 +517,8 @@ function AttendanceReport() {
   }, [filtered]);
 
   const HEADERS = isNightShiftView
-    ? ["Shift Date","Next Day","Emp ID","Employee","Department","Branch","Designation","Status","Punch 1 (In)","Punch 2 (Out)","Punch 3 (In)","Punch 4 (Out)","Total Hrs","OT Hrs","Remarks"]
-    : ["Date","Emp ID","Employee","Department","Branch","Designation","Status","1st In","1st Out","2nd In","2nd Out","Lunch Break","Total Hrs","Late","OT Hrs","Remarks"];
+    ? ["Shift Date","Next Day","Emp ID","Employee","Department","Branch","Status","Punch 1 (In)","Punch 2 (Out)","Punch 3 (In)","Punch 4 (Out)","Total Hrs","OT Hrs","Remarks"]
+    : ["Date","Emp ID","Employee","Department","Branch","Status","1st In","1st Out","2nd In","2nd Out","Lunch Break","Total Hrs","Late","OT Hrs","Remarks"];
   const NIGHT_WATCHER_POLICY_HEADERS = [
     "Date",
     "Day",
@@ -669,7 +669,7 @@ function AttendanceReport() {
         return `<tr>
           <td>${r.date}</td><td>${r.morningDate||"—"}</td>
           <td>${r.employeeCode}</td><td>${r.employeeName}</td>
-          <td>${r.department||""}</td><td>${r.branchName}</td><td>${r.designation||""}</td>
+          <td>${r.department||""}</td><td>${r.branchName}</td>
           <td>${statusLabel}</td>
           <td>${r.inTime1||"—"}</td><td>${r.outTime1||"—"}</td>
           <td>${r.inTime2||"—"}</td><td>${r.outTime2||"—"}</td>
@@ -697,7 +697,7 @@ function AttendanceReport() {
       })();
       return `<tr>
         <td>${r.date}</td><td>${r.employeeCode}</td><td>${r.employeeName}</td>
-        <td>${r.department||""}</td><td>${r.branchName}</td><td>${r.designation||""}</td>
+        <td>${r.department||""}</td><td>${r.branchName}</td>
         <td>${statusLabel}</td>
         <td>${r.inTime1||"—"}</td><td>${r.outTime1||"—"}</td>
         <td>${r.inTime2||"—"}</td><td>${r.outTime2||"—"}</td>
@@ -752,7 +752,7 @@ function AttendanceReport() {
       if (isNightShiftView) {
         return [
           `'${r.date}`, r.morningDate||"", r.employeeCode, r.employeeName, r.department||"", r.branchName,
-          r.designation||"", statusLabel,
+          statusLabel,
           r.inTime1||"", r.outTime1||"", r.inTime2||"", r.outTime2||"",
           r.totalHours!=null?fmtTotal(r.totalHours):"",
           r.overtimeHours>0?r.overtimeHours.toFixed(1):"",
@@ -777,7 +777,7 @@ function AttendanceReport() {
       })();
       return [
         r.date, r.employeeCode, r.employeeName, r.department||"", r.branchName,
-        r.designation||"", statusLabel,
+        statusLabel,
         r.inTime1||"", r.outTime1||"", r.inTime2||"", r.outTime2||"",
         lb>0?fmtHM(lb):"",
         r.totalHours!=null?fmtTotal(r.totalHours):"",
@@ -864,7 +864,7 @@ function AttendanceReport() {
               <table className="w-full text-xs">
                 <thead className="bg-indigo-900/90 text-white">
                   <tr>
-                    {["Shift Date","Next Day","Emp ID","Employee","Department","Branch","Designation","Status"].map(h=>(
+                    {["Shift Date","Next Day","Emp ID","Employee","Department","Branch","Status"].map(h=>(
                       <th key={h} className="px-3 py-2.5 text-left font-semibold whitespace-nowrap" rowSpan={2}>{h}</th>
                     ))}
                     <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-indigo-700/60" colSpan={2}>Punch 1–2 (Evening)</th>
@@ -906,7 +906,6 @@ function AttendanceReport() {
                       <td className="px-3 py-2 font-medium whitespace-nowrap">{r.employeeName}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.department||"—"}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.branchName}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.designation||"—"}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <span className={cn("px-2 py-0.5 rounded text-xs font-medium",STATUS_COLORS[r.status]||"bg-gray-100")}>
                           {fmtStatus(r.status)}
@@ -980,7 +979,7 @@ function AttendanceReport() {
               <table className="w-full text-xs">
                 <thead className="bg-muted/50">
                   <tr>
-                    {["Date","Emp ID","Employee","Department","Branch","Designation","Status"].map(h=>(
+                    {["Date","Emp ID","Employee","Department","Branch","Status"].map(h=>(
                       <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap" rowSpan={2}>{h}</th>
                     ))}
                     <th className="px-3 py-2 text-center font-semibold text-blue-600 whitespace-nowrap bg-blue-50/50" colSpan={2}>1st Session</th>
@@ -1014,7 +1013,6 @@ function AttendanceReport() {
                       <td className="px-3 py-2 font-medium whitespace-nowrap">{r.employeeName}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.department||"—"}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.branchName}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.designation||"—"}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <div className="flex flex-col gap-0.5">
                           <span className={cn("px-2 py-0.5 rounded text-xs font-medium",STATUS_COLORS[r.status]||"bg-gray-100")}>
