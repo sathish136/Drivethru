@@ -708,6 +708,7 @@ export type GetAttendanceReportParams = {
   branchId?: number;
   employeeId?: number;
   status?: string;
+  department?: string;
 };
 
 export type GetMonthlyReportParams = {

@@ -574,6 +574,10 @@ paths:
           in: query
           schema:
             type: string
+        - name: department
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: Attendance report

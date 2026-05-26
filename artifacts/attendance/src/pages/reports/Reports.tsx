@@ -478,10 +478,12 @@ function AttendanceReport() {
   const empOffDays = useEmployeeOffDays();
 
   const { data: branches } = useListBranches();
+  const dDept = useDebounce(department, 300);
   const { data, isLoading } = useGetAttendanceReport({
     startDate: dStart, endDate: dEnd,
     ...(dBranch ? { branchId: Number(dBranch) } : {}),
     ...(dStatus ? { status: dStatus } : {}),
+    ...(dDept ? { department: dDept } : {}),
   });
 
   function getRemarks(r: any): string {
@@ -971,11 +973,11 @@ function AttendanceReport() {
                           <span className="ml-0.5 text-[9px] text-orange-600 font-semibold">×{Number(r.holidayMultiplier).toFixed(1)}</span>
                         )}
                       </td>
-                      <td className="px-2 py-2 bg-indigo-50/10 max-w-[160px]">
+                      <td className="px-2 py-2 bg-indigo-50/10 max-w-[160px] overflow-hidden">
                         {(() => {
                           const rm = getRemarks(r);
                           return rm ? (
-                            <span className="text-[10px] leading-snug text-indigo-700 block" title={rm}>{rm}</span>
+                            <span className="text-[10px] leading-snug text-indigo-700 block break-words" title={rm}>{rm}</span>
                           ) : <span className="text-muted-foreground/40 text-[10px]">—</span>;
                         })()}
                       </td>

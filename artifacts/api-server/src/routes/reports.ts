@@ -295,7 +295,7 @@ function getEffectiveStatus(
 
 router.get("/attendance", async (req, res) => {
   try {
-    const { startDate, endDate, branchId, employeeId, status } = req.query;
+    const { startDate, endDate, branchId, employeeId, status, department } = req.query;
     const all = await db.select({
       rec: attendanceRecords,
       empName: employees.fullName,
@@ -507,6 +507,7 @@ router.get("/attendance", async (req, res) => {
     if (branchId) enriched = enriched.filter(r => r.rec.branchId === Number(branchId));
     if (employeeId) enriched = enriched.filter(r => r.rec.employeeId === Number(employeeId));
     if (status) enriched = enriched.filter(r => r.effectiveStatus === status);
+    if (department) enriched = enriched.filter(r => r.empDepartment === (department as string));
 
     const summary = { present: 0, absent: 0, late: 0, halfDay: 0, leave: 0, holiday: 0, offDay: 0, invalid: 0 };
     for (const r of enriched) {
