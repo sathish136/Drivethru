@@ -86,22 +86,45 @@ function mergeNightShiftRecords<T extends {
 
         if (morning) {
           skipKey.add(`${empId}:${nd}`);
-          // Merge: inTime1/outTime1 from the evening record, inTime2 from evening,
-          // outTime2 from the morning record. Recalculate totalHours from the
-          // actual session pairs so the full overnight span is reflected correctly.
-          const mergedOutTime2 = morning.rec.outTime2 ?? r.rec.outTime2;
-          const mergedInTime2 = r.rec.inTime2;
-          const wh1 = calcWorkHours(r.rec.inTime1, r.rec.outTime1);
+          // Merge overnight punches. Night-shift patterns:
+          //   A) 2 punches only: Eve=In1, Morning=In1 → map as In1/Out1 pair
+          //   B) 3 punches: Eve=In1+Out1, Morning=In1 → In1/Out1/In2/Out2
+          //   C) 4 punches: Eve=In1+Out1+In2, Morning=outTime1 → In1/Out1/In2/Out2
+          let mergedOutTime1 = r.rec.outTime1;
+          let mergedInTime2  = r.rec.inTime2;
+          let mergedOutTime2 = r.rec.outTime2;
+
+          if (!mergedOutTime1) {
+            // Pattern A: evening only has a check-in; morning's first punch is the checkout
+            mergedOutTime1 = morning.rec.inTime1 ?? morning.rec.outTime1 ?? null;
+            mergedInTime2  = null;
+            mergedOutTime2 = morning.rec.outTime2 ?? morning.rec.outTime1 ?? null;
+            // Avoid duplicate: if mergedOutTime1 same as mergedOutTime2, clear out2
+            if (mergedOutTime2 === mergedOutTime1) mergedOutTime2 = null;
+          } else if (!mergedInTime2 && !mergedOutTime2) {
+            // Pattern B: evening has In1/Out1 but no second session; morning fills it
+            mergedInTime2  = morning.rec.inTime1 ?? null;
+            mergedOutTime2 = morning.rec.outTime2 ?? morning.rec.outTime1 ?? null;
+          } else if (!mergedOutTime2) {
+            // Pattern C: evening has In1/Out1/In2 but no final checkout; morning fills it
+            mergedOutTime2 = morning.rec.outTime2 ?? morning.rec.outTime1 ?? morning.rec.inTime1 ?? null;
+          }
+
+          const wh1 = calcWorkHours(r.rec.inTime1, mergedOutTime1);
           const wh2 = calcWorkHours(mergedInTime2, mergedOutTime2);
           const combinedHours = Math.round((wh1 + wh2) * 100) / 100;
           result.push({
             ...r,
             rec: {
               ...r.rec,
-              totalHours: combinedHours,
+              outTime1: mergedOutTime1,
+              inTime2:  mergedInTime2,
               outTime2: mergedOutTime2,
+              totalHours: combinedHours,
               status: "present", // will be re-evaluated
             },
+            _nightShiftMerged: true,
+            _morningDate: nd,
           } as T);
           continue;
         }
@@ -529,6 +552,9 @@ router.get("/attendance", async (req, res) => {
           branchName: r.branchName || "",
           shiftName: empShift?.name ?? sr.shiftName ?? null,
           createdAt: r.rec.createdAt.toISOString(),
+          /* Overnight merge metadata */
+          isNightShiftMerged: (r as any)._nightShiftMerged ?? false,
+          morningDate: (r as any)._morningDate ?? null,
           /* Policy-driven values from the salary engine (single source of truth) */
           morningLateMinutes: sr.lateMinutes,
           lunchLateMinutes,
