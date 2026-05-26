@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   useListEmployees, useCreateEmployee, useUpdateEmployee, useDeleteEmployee,
-  useListBranches
+  useListBranches, useListShifts
 } from "@workspace/api-client-react";
 import { PageHeader, Card, Button, Input, Label, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -2415,10 +2415,23 @@ export default function Employees() {
   const [drawerEmp, setDrawerEmp] = useState<any | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  const qc = useQueryClient();
   const { data: branchRes } = useListBranches();
   const branches: any[] = branchRes || [];
   const { data: deptData } = useGet(["departments"], "/departments");
   const allDeptNames: string[] = Array.isArray(deptData) ? deptData.filter((d: any) => d.isActive).map((d: any) => d.name) : [];
+  const { data: shiftsRaw } = useListShifts();
+  const allShifts: any[] = Array.isArray(shiftsRaw) ? shiftsRaw : (shiftsRaw as any)?.shifts ?? [];
+
+  async function quickAssignShift(empId: number, newShiftId: string) {
+    await fetch(apiUrl(`/employees/${empId}`), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shiftId: newShiftId ? Number(newShiftId) : null }),
+    });
+    qc.invalidateQueries({ queryKey: ["employees"] });
+    refetch();
+  }
 
   const params: any = { limit: 500 };
   if (filterStatus) params.status = filterStatus;
@@ -2574,7 +2587,7 @@ export default function Employees() {
                 <table className="w-full text-xs">
                   <thead className="bg-slate-50 sticky top-0 border-b border-slate-200">
                     <tr>
-                      {["Emp ID","Bio ID","Name","Department","Branch","Status","Actions"].map(h => (
+                      {["Emp ID","Bio ID","Name","Department","Branch","Shift","Status","Actions"].map(h => (
                         <th key={h} className="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -2607,6 +2620,18 @@ export default function Employees() {
                         <td className="px-4 py-3 text-slate-500">
                           <div className="flex items-center gap-1"><MapPin className="w-3 h-3 shrink-0 text-slate-400" /><span className="truncate max-w-[130px]">{emp.branchName}</span></div>
                         </td>
+                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                          <select
+                            value={emp.shiftId || ""}
+                            onChange={e => quickAssignShift(emp.id, e.target.value)}
+                            className="text-[10px] border border-slate-200 rounded-md px-2 py-1 bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-primary min-w-[110px] cursor-pointer"
+                          >
+                            <option value="">— No Shift —</option>
+                            {allShifts.filter((s: any) => s.isActive !== false).map((s: any) => (
+                              <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                          </select>
+                        </td>
                         <td className="px-4 py-3">
                           <span className={cn("px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide", STATUS_STYLE[emp.status] || STATUS_STYLE.active)}>
                             {emp.status === "on_leave" ? "On Leave" : emp.status?.[0]?.toUpperCase() + emp.status?.slice(1) || "Active"}
@@ -2627,7 +2652,7 @@ export default function Employees() {
                       );
                     })}
                     {!employees.length && (
-                      <tr><td colSpan={8} className="text-center py-12 text-slate-400 font-medium">No employees found.</td></tr>
+                      <tr><td colSpan={9} className="text-center py-12 text-slate-400 font-medium">No employees found.</td></tr>
                     )}
                   </tbody>
                 </table>
