@@ -905,8 +905,13 @@ function AttendanceReport() {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {filtered.slice(0,300).map((r:any)=>{
+                    // Use rawPunches from API; fall back to the 4 stored fields if empty
+                    const sourcePunches: string[] =
+                      (r.rawPunches && r.rawPunches.length > 0)
+                        ? r.rawPunches
+                        : [r.inTime1, r.outTime1, r.inTime2, r.outTime2].filter(Boolean);
                     const punches: (string|null)[] = Array.from({length:12}, (_,i) =>
-                      r.rawPunches?.[i] ?? null
+                      sourcePunches[i] ?? null
                     );
                     const totalHrs = r.totalHours ?? 0;
                     const totalH = Math.floor(totalHrs), totalMin = Math.round((totalHrs - totalH) * 60);

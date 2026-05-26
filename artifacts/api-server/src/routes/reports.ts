@@ -591,17 +591,16 @@ router.get("/attendance", async (req, res) => {
         const isNightEmp = nightShiftEmployeeIds.has(empId);
         let rawPunches: string[] = [];
         if (isNightEmp) {
-          const shiftDate   = r.rec.date;
-          const morningDate = (r as any)._morningDate ?? null;
+          const shiftDate   = String(r.rec.date);
+          const morningDate = (r as any)._morningDate ? String((r as any)._morningDate) : null;
           const eveningPunches = bioPunchesByEmpDate.get(`${empId}:${shiftDate}`) ?? [];
           const morningPunches = morningDate ? bioPunchesByEmpDate.get(`${empId}:${morningDate}`) ?? [] : [];
-          if (eveningPunches.length > 0 || morningPunches.length > 0) {
-            rawPunches = [...eveningPunches, ...morningPunches].slice(0, 12);
-          } else {
-            // Fallback: stored attendance punch fields
-            rawPunches = ([r.rec.inTime1, r.rec.outTime1, r.rec.inTime2, r.rec.outTime2]
-              .filter(Boolean) as string[]);
-          }
+          // Always include the 4 stored punch fields as a baseline
+          const storedPunches = ([r.rec.inTime1, r.rec.outTime1, r.rec.inTime2, r.rec.outTime2]
+            .filter((t): t is string => typeof t === "string" && t.trim().length > 0));
+          // Prefer bio-log raw punches (more granular) over stored fields; fall back to stored
+          const bioPunches = [...eveningPunches, ...morningPunches];
+          rawPunches = (bioPunches.length > 0 ? bioPunches : storedPunches).slice(0, 12);
         }
 
         return {
