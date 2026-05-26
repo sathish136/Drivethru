@@ -407,7 +407,7 @@ function EmployeeConnectionsTab({ emp }: { emp: any }) {
 
 // ── Employee Profile Drawer ─────────────────────────────────────────────────────
 function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branches: any[]; onClose: () => void; onSaved: () => void }) {
-  const [tab, setTab] = useState<"overview"|"joining"|"contacts"|"personal"|"documents"|"payroll"|"connections">("overview");
+  const [tab, setTab] = useState<"overview"|"details"|"documents"|"payroll"|"connections">("overview");
   const { data: deptData } = useGet(["departments"], "/departments");
   const { data: weekoffData } = useGet(["weekoff-schedules"], "/weekoffs");
   const { data: shiftsData } = useGet(["shifts-list"], "/shifts");
@@ -415,7 +415,8 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
   const allShifts: any[] = Array.isArray(shiftsData) ? shiftsData.filter((s: any) => s.isActive) : [];
   const deptOptions: string[] = Array.isArray(deptData) ? deptData.filter((d: any) => d.isActive).map((d: any) => d.name) : [];
   const [form, setForm] = useState(emp ? {
-    ...EMPTY_EMP, ...emp,
+    ...EMPTY_EMP,
+    ...Object.fromEntries(Object.entries(emp).map(([k, v]) => [k, v === null ? "" : v])),
     firstName: emp.firstName || "",
     lastName: emp.lastName || (emp.fullName && !emp.firstName ? emp.fullName : ""),
     branchId: emp.branchId || "",
@@ -613,18 +614,16 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
     : form.firstName?.[0]?.toUpperCase() || "E";
 
   const PROFILE_TABS = [
-    { key: "overview",     label: "Overview"              },
-    { key: "joining",      label: "Joining"               },
-    { key: "contacts",     label: "Address & Contacts"    },
-    { key: "personal",     label: "Personal"              },
-    { key: "documents",    label: "Documents"             },
-    { key: "payroll",      label: "Payroll"               },
-    { key: "connections",  label: "Connections"           },
+    { key: "overview",     label: "Overview"    },
+    { key: "details",      label: "Details"     },
+    { key: "documents",    label: "Documents"   },
+    { key: "payroll",      label: "Payroll"     },
+    { key: "connections",  label: "Connections" },
   ] as const;
 
-  const INP = "w-full rounded border border-border bg-background px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary transition-colors text-foreground placeholder:text-muted-foreground/50";
+  const INP = "w-full rounded border border-border bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary transition-colors text-foreground placeholder:text-muted-foreground/50";
   const SEL = `${INP} appearance-none`;
-  const LBL = "block text-[10px] font-semibold text-muted-foreground mb-0.5 uppercase tracking-wide";
+  const LBL = "block text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide";
 
   function FLabel({ label, required }: { label: string; required?: boolean }) {
     return <label className={LBL}>{label}{required && <span className="text-red-500 ml-0.5">*</span>}</label>;
@@ -824,7 +823,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
           {/* ── OVERVIEW TAB ── */}
           {tab === "overview" && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               {/* Error banner */}
               {empIdError && (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
@@ -834,7 +833,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
               {/* Main fields grid */}
               <div>
-                <div className="grid grid-cols-3 gap-x-4 gap-y-3">
+                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
                   <div>
                     <FLabel label="Employee ID" required />
                     <input
@@ -892,11 +891,11 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
               {/* Company Details divider */}
               <div>
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-2 mb-4">
                   <span className="text-xs font-bold text-foreground">Company Details</span>
                   <div className="flex-1 border-t border-border" />
                 </div>
-                <div className="grid grid-cols-3 gap-x-4 gap-y-3">
+                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
                   <div>
                     <FLabel label="Department" required />
                     <select className={SEL} value={form.department} onChange={e => set("department", e.target.value)}>
@@ -927,27 +926,24 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
             </div>
           )}
 
-          {/* ── JOINING TAB ── */}
-          {tab === "joining" && (
-            <div className="space-y-4">
+          {/* ── DETAILS TAB (Joining + Contacts + Personal merged) ── */}
+          {tab === "details" && (
+            <div className="space-y-6">
+
+              {/* Joining */}
               <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xs font-bold text-foreground">Joining Details</span>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xs font-bold text-foreground">Joining</span>
                   <div className="flex-1 border-t border-border" />
                 </div>
-                <div className="grid grid-cols-3 gap-x-4 gap-y-3">
+                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
                   <div>
                     <FLabel label="Date of Joining" required />
                     <input type="date" className={INP} value={form.joiningDate} onChange={e => set("joiningDate", e.target.value)} />
                   </div>
                   <div>
                     <FLabel label="Biometric Device ID" />
-                    <input
-                      className={INP}
-                      placeholder="e.g. 50"
-                      value={form.biometricId}
-                      onChange={e => set("biometricId", e.target.value)}
-                    />
+                    <input className={INP} placeholder="e.g. 50" value={form.biometricId} onChange={e => set("biometricId", e.target.value)} />
                     {!emp && form.biometricId && (
                       <p className="text-[10px] text-primary mt-0.5">
                         Employee ID will be auto-set to <span className="font-mono font-semibold">{form.employeeId}</span>
@@ -977,18 +973,14 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                   </div>
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* ── ADDRESS & CONTACTS TAB ── */}
-          {tab === "contacts" && (
-            <div className="space-y-4">
+              {/* Contact */}
               <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xs font-bold text-foreground">Contact Details</span>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xs font-bold text-foreground">Contact</span>
                   <div className="flex-1 border-t border-border" />
                 </div>
-                <div className="grid grid-cols-3 gap-x-4 gap-y-3">
+                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
                   <div>
                     <FLabel label="Phone" />
                     <input className={INP} placeholder="+94 XX XXX XXXX" value={form.phone} onChange={e => set("phone", e.target.value)} />
@@ -1003,15 +995,11 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                   </div>
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* ── PERSONAL TAB ── */}
-          {tab === "personal" && (
-            <div className="space-y-6">
+              {/* Identity */}
               <div>
                 <div className="flex items-center gap-2 mb-4">
-                  <span className="text-xs font-bold text-foreground">Government Identity</span>
+                  <span className="text-xs font-bold text-foreground">Identity</span>
                   <div className="flex-1 border-t border-border" />
                 </div>
                 <div className="grid grid-cols-3 gap-x-6 gap-y-4">
@@ -1027,6 +1015,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                   </div>
                 </div>
               </div>
+
             </div>
           )}
 
