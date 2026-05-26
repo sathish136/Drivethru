@@ -500,6 +500,18 @@ function AttendanceReport() {
     return map;
   }, [empListData]);
 
+  // Map employeeId -> shift name (from Employee Management assigned shift)
+  const empShiftNameMap = useMemo(() => {
+    const map: Record<number, string> = {};
+    for (const [empId, sId] of Object.entries(empShiftMap)) {
+      if (sId != null) {
+        const found = shiftOptions.find((s: any) => s.id === sId);
+        if (found) map[Number(empId)] = found.name;
+      }
+    }
+    return map;
+  }, [empShiftMap, shiftOptions]);
+
   function getRemarks(r: any): string {
     if (typeof r.remarks === "string" && r.remarks.trim()) return r.remarks;
     const shiftName = r.shiftName
@@ -861,7 +873,7 @@ function AttendanceReport() {
           <div><Label className="text-xs">Shift</Label>
             <Select value={shiftId} onChange={e=>setShiftId(e.target.value)}>
               <option value="">All Shifts</option>
-              {shiftOptions?.map((s:any)=><option key={s.id} value={s.id}>{s.name}</option>)}
+              {shiftOptions?.filter((s:any)=>s.isActive!==false).map((s:any)=><option key={s.id} value={s.id}>{s.name}</option>)}
             </Select></div>
           <div><Label className="text-xs">Employee Name</Label>
             <Input placeholder="Search name…" value={empName} onChange={e=>setEmpName(e.target.value)}/></div>
@@ -962,7 +974,7 @@ function AttendanceReport() {
                       <td className="px-2 py-2 text-muted-foreground truncate text-[10px]">{r.department||"—"}</td>
                       <td className="px-2 py-2 text-muted-foreground truncate text-[10px]">{r.branchName}</td>
                       <td className="px-2 py-2">
-                        <div className="font-medium text-indigo-700 text-[10px] truncate">{r.shiftName||"—"}</div>
+                        <div className="font-medium text-indigo-700 text-[10px] truncate">{empShiftNameMap[Number(r.employeeId)]||"—"}</div>
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap">
                         <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium",STATUS_COLORS[r.status]||"bg-gray-100")}>
@@ -1066,7 +1078,7 @@ function AttendanceReport() {
                       <td className="px-3 py-2 whitespace-nowrap text-muted-foreground truncate">{r.department||"—"}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-muted-foreground truncate">{r.branchName}</td>
                       <td className="px-3 py-2">
-                        <div className="font-medium text-slate-700 text-[10px] truncate">{r.shiftName||"—"}</div>
+                        <div className="font-medium text-slate-700 text-[10px] truncate">{empShiftNameMap[Number(r.employeeId)]||"—"}</div>
                         {/* shiftTime hidden — re-enable later */}
                         {r.isNightShift && <span className="text-[10px] text-indigo-500 font-semibold">🌙</span>}
                       </td>
