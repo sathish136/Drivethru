@@ -9,7 +9,6 @@ import TodayAttendance from "@/pages/attendance/Today";
 import MonthlySheet from "@/pages/attendance/Monthly";
 import EmployeeList from "@/pages/employees/Employees";
 import Branches from "@/pages/branches/Branches";
-import Shifts from "@/pages/shifts/Shifts";
 import Reports from "@/pages/reports/Reports";
 import Biometric from "@/pages/biometric/Biometric";
 import Settings from "@/pages/settings/Settings";
@@ -95,7 +94,6 @@ function Router() {
       <Route path="/leave-balances"><ProtectedRoute component={LeaveBalances} /></Route>
       <Route path="/employees"><ProtectedRoute component={EmployeeList} /></Route>
       <Route path="/branches"><ProtectedRoute component={Branches} /></Route>
-      <Route path="/shifts"><ProtectedRoute component={Shifts} /></Route>
       <Route path="/reports"><ProtectedRoute component={Reports} /></Route>
       <Route path="/payroll/payslip/:id" component={PayslipPage} />
       <Route path="/payroll"><ProtectedRoute component={Payroll} /></Route>

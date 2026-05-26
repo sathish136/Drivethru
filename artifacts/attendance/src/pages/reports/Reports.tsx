@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useGetAttendanceReport, useGetMonthlyReport, useGetOvertimeReport, useListBranches, useListEmployees } from "@workspace/api-client-react";
+import { useGetAttendanceReport, useGetMonthlyReport, useGetOvertimeReport, useListBranches, useListEmployees, useListShifts } from "@workspace/api-client-react";
 import { PageHeader, Card, Input, Select, Label } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { Users, Clock, Calendar, Banknote, FileText, ChevronDown, X, Eye, Printer } from "lucide-react";
@@ -475,7 +475,9 @@ function AttendanceReport() {
   const dBranch  = useDebounce(branchId, 200);
   const dStatus  = useDebounce(status, 200);
 
-  const { rules: hrRules, shifts: shiftOptions } = useHrRules();
+  const { rules: hrRules } = useHrRules();
+  const { data: shiftsData } = useListShifts();
+  const shiftOptions: any[] = Array.isArray(shiftsData) ? shiftsData : (shiftsData as any)?.shifts ?? [];
   const empOffDays = useEmployeeOffDays();
 
   const { data: branches } = useListBranches();
@@ -1975,7 +1977,9 @@ function IndividualReport() {
   const [deptFilter, setDeptFilter] = useState("");
 
   const { data: empData, isLoading: empLoading } = useListEmployees({ limit: 1000 });
-  const { rules: hrRules, shifts: shiftOptions } = useHrRules();
+  const { rules: hrRules } = useHrRules();
+  const { data: shiftsData2 } = useListShifts();
+  const shiftOptions: any[] = Array.isArray(shiftsData2) ? shiftsData2 : (shiftsData2 as any)?.shifts ?? [];
   const empOffDays = useEmployeeOffDays();
 
   const [payrollCfg, setPayrollCfg] = useState<{ salaryScale: Record<string,number>; employeeOverrides: Record<string,number> } | null>(null);
