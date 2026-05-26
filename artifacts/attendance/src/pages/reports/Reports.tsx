@@ -516,8 +516,8 @@ function AttendanceReport() {
   }, [filtered]);
 
   const HEADERS = isNightShiftView
-    ? ["Shift Date","Next Day","Emp ID","Employee","Department","Branch","Status","Punch 1 (In)","Punch 2 (Out)","Punch 3 (In)","Punch 4 (Out)","Total Hrs","OT Hrs","Remarks"]
-    : ["Date","Emp ID","Employee","Department","Branch","Status","1st In","1st Out","2nd In","2nd Out","Lunch Break","Total Hrs","Late","OT Hrs","Remarks"];
+    ? ["Shift Date","Next Day","Emp ID","Employee","Department","Branch","Shift","Status","Punch 1 (In)","Punch 2 (Out)","Punch 3 (In)","Punch 4 (Out)","Total Hrs","OT Hrs","Remarks"]
+    : ["Date","Emp ID","Employee","Department","Branch","Shift","Status","1st In","1st Out","2nd In","2nd Out","Lunch Break","Total Hrs","Late","OT Hrs","Remarks"];
   const NIGHT_WATCHER_POLICY_HEADERS = [
     "Date",
     "Day",
@@ -669,6 +669,7 @@ function AttendanceReport() {
           <td>${r.date}</td><td>${r.morningDate||"—"}</td>
           <td>${r.employeeCode}</td><td>${r.employeeName}</td>
           <td>${r.department||""}</td><td>${r.branchName}</td>
+          <td>${r.shiftName||""}</td>
           <td>${statusLabel}</td>
           <td>${r.inTime1||"—"}</td><td>${r.outTime1||"—"}</td>
           <td>${r.inTime2||"—"}</td><td>${r.outTime2||"—"}</td>
@@ -697,6 +698,7 @@ function AttendanceReport() {
       return `<tr>
         <td>${r.date}</td><td>${r.employeeCode}</td><td>${r.employeeName}</td>
         <td>${r.department||""}</td><td>${r.branchName}</td>
+        <td>${r.shiftName||""}</td>
         <td>${statusLabel}</td>
         <td>${r.inTime1||"—"}</td><td>${r.outTime1||"—"}</td>
         <td>${r.inTime2||"—"}</td><td>${r.outTime2||"—"}</td>
@@ -751,15 +753,15 @@ function AttendanceReport() {
       if (isNightShiftView) {
         return [
           `'${r.date}`, r.morningDate||"", r.employeeCode, r.employeeName, r.department||"", r.branchName,
-          statusLabel,
+          r.shiftName||"", statusLabel,
           r.inTime1||"", r.outTime1||"", r.inTime2||"", r.outTime2||"",
           r.totalHours!=null?fmtTotal(r.totalHours):"",
           r.overtimeHours>0?r.overtimeHours.toFixed(1):"",
           getRemarks(r),
         ];
       }
-      const s1m = calcMins(r.inTime1, r.outTime1);
-      const s2m = calcMins(r.inTime2, r.outTime2);
+      const s1m = calcMins(r.inTime1, r.outTime1, r.isNightShift);
+      const s2m = calcMins(r.inTime2, r.outTime2, r.isNightShift);
       const lb = lunchBreakMins(r);
       const morningLate = r.morningLateMinutes || 0;
       const lunchLate = r.lunchLateMinutes || 0;
@@ -776,7 +778,7 @@ function AttendanceReport() {
       })();
       return [
         r.date, r.employeeCode, r.employeeName, r.department||"", r.branchName,
-        statusLabel,
+        r.shiftName||"", statusLabel,
         r.inTime1||"", r.outTime1||"", r.inTime2||"", r.outTime2||"",
         lb>0?fmtHM(lb):"",
         r.totalHours!=null?fmtTotal(r.totalHours):"",
@@ -859,21 +861,22 @@ function AttendanceReport() {
                   <col style={{width:"82px"}}/>
                   <col style={{width:"82px"}}/>
                   <col style={{width:"100px"}}/>
-                  <col style={{width:"160px"}}/>
-                  <col style={{width:"85px"}}/>
+                  <col style={{width:"155px"}}/>
+                  <col style={{width:"80px"}}/>
+                  <col style={{width:"105px"}}/>
+                  <col style={{width:"90px"}}/>
                   <col style={{width:"110px"}}/>
-                  <col style={{width:"115px"}}/>
-                  <col style={{width:"55px"}}/>
-                  <col style={{width:"90px"}}/>
-                  <col style={{width:"55px"}}/>
-                  <col style={{width:"90px"}}/>
-                  <col style={{width:"130px"}}/>
-                  <col style={{width:"62px"}}/>
+                  <col style={{width:"52px"}}/>
+                  <col style={{width:"85px"}}/>
+                  <col style={{width:"52px"}}/>
+                  <col style={{width:"85px"}}/>
+                  <col style={{width:"125px"}}/>
+                  <col style={{width:"60px"}}/>
                   <col/>
                 </colgroup>
                 <thead className="bg-indigo-900/90 text-white">
                   <tr>
-                    {["Shift Date","Next Day","Emp ID","Employee","Department","Branch","Status"].map(h=>(
+                    {["Shift Date","Next Day","Emp ID","Employee","Department","Branch","Shift","Status"].map(h=>(
                       <th key={h} className="px-3 py-2.5 text-left font-semibold whitespace-nowrap overflow-hidden" rowSpan={2}>{h}</th>
                     ))}
                     <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-indigo-700/60" colSpan={2}>Punch 1–2 (Evening)</th>
@@ -915,6 +918,10 @@ function AttendanceReport() {
                       <td className="px-3 py-2 font-medium truncate" title={r.employeeName}>{r.employeeName}</td>
                       <td className="px-3 py-2 text-muted-foreground truncate">{r.department||"—"}</td>
                       <td className="px-3 py-2 text-muted-foreground truncate">{r.branchName}</td>
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-indigo-700 text-[10px] truncate">{r.shiftName||"—"}</div>
+                        {r.shiftTime && <div className="text-[10px] text-muted-foreground">{r.shiftTime}</div>}
+                      </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <span className={cn("px-2 py-0.5 rounded text-xs font-medium",STATUS_COLORS[r.status]||"bg-gray-100")}>
                           {fmtStatus(r.status)}
@@ -989,22 +996,23 @@ function AttendanceReport() {
                 <colgroup>
                   <col style={{width:"82px"}}/>
                   <col style={{width:"100px"}}/>
-                  <col style={{width:"160px"}}/>
-                  <col style={{width:"85px"}}/>
-                  <col style={{width:"110px"}}/>
-                  <col style={{width:"115px"}}/>
-                  <col style={{width:"52px"}}/>
-                  <col style={{width:"90px"}}/>
+                  <col style={{width:"155px"}}/>
                   <col style={{width:"80px"}}/>
-                  <col style={{width:"52px"}}/>
+                  <col style={{width:"105px"}}/>
                   <col style={{width:"90px"}}/>
-                  <col style={{width:"180px"}}/>
-                  <col style={{width:"62px"}}/>
+                  <col style={{width:"110px"}}/>
+                  <col style={{width:"52px"}}/>
+                  <col style={{width:"85px"}}/>
+                  <col style={{width:"78px"}}/>
+                  <col style={{width:"52px"}}/>
+                  <col style={{width:"85px"}}/>
+                  <col style={{width:"175px"}}/>
+                  <col style={{width:"60px"}}/>
                   <col/>
                 </colgroup>
                 <thead className="bg-muted/50">
                   <tr>
-                    {["Date","Emp ID","Employee","Department","Branch","Status"].map(h=>(
+                    {["Date","Emp ID","Employee","Department","Branch","Shift","Status"].map(h=>(
                       <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap overflow-hidden" rowSpan={2}>{h}</th>
                     ))}
                     <th className="px-3 py-2 text-center font-semibold text-blue-600 whitespace-nowrap bg-blue-50/50" colSpan={2}>1st Session</th>
@@ -1023,8 +1031,8 @@ function AttendanceReport() {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {filtered.slice(0,300).map((r:any)=>{
-                    const s1m = calcMins(r.inTime1, r.outTime1);
-                    const s2m = calcMins(r.inTime2, r.outTime2);
+                    const s1m = calcMins(r.inTime1, r.outTime1, r.isNightShift);
+                    const s2m = calcMins(r.inTime2, r.outTime2, r.isNightShift);
                     const lb  = lunchBreakMins(r);
                     const totalMins = s1m + s2m;
                     const totalH = Math.floor(totalMins/60), totalMin = totalMins%60;
@@ -1038,6 +1046,11 @@ function AttendanceReport() {
                       <td className="px-3 py-2 font-medium truncate" title={r.employeeName}>{r.employeeName}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-muted-foreground truncate">{r.department||"—"}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-muted-foreground truncate">{r.branchName}</td>
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-slate-700 text-[10px] truncate">{r.shiftName||"—"}</div>
+                        {r.shiftTime && <div className="text-[10px] text-muted-foreground">{r.shiftTime}</div>}
+                        {r.isNightShift && <span className="text-[10px] text-indigo-500 font-semibold">🌙</span>}
+                      </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <div className="flex flex-col gap-0.5">
                           <span className={cn("px-2 py-0.5 rounded text-xs font-medium",STATUS_COLORS[r.status]||"bg-gray-100")}>
