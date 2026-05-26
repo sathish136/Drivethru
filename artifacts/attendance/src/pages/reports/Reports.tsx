@@ -460,9 +460,10 @@ export default function Reports() {
 ══════════════════════════════════════════════════════════ */
 function AttendanceReport() {
   const now = new Date();
-  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const [startDate, setStartDate]   = useState(firstOfMonth.toISOString().split("T")[0]);
-  const [endDate, setEndDate]       = useState(now.toISOString().split("T")[0]);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const toLocalDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const [startDate, setStartDate]   = useState(() => toLocalDate(new Date(now.getFullYear(), now.getMonth(), 1)));
+  const [endDate, setEndDate]       = useState(() => toLocalDate(now));
   const [branchId, setBranchId]     = useState("");
   const [status, setStatus]         = useState("");
   const [department, setDepartment] = useState("");
