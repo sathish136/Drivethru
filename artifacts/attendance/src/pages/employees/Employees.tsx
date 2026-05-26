@@ -2615,17 +2615,13 @@ export default function Employees() {
                         <td className="px-4 py-3 text-slate-500">
                           <div className="flex items-center gap-1"><MapPin className="w-3 h-3 shrink-0 text-slate-400" /><span className="truncate max-w-[130px]">{emp.branchName}</span></div>
                         </td>
-                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                          <select
-                            value={emp.shiftId || ""}
-                            onChange={e => quickAssignShift(emp.id, e.target.value)}
-                            className="text-[10px] border border-slate-200 rounded-md px-2 py-1 bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-primary min-w-[110px] cursor-pointer"
-                          >
-                            <option value="">— No Shift —</option>
-                            {allShifts.filter((s: any) => s.isActive !== false).map((s: any) => (
-                              <option key={s.id} value={s.id}>{s.name}</option>
-                            ))}
-                          </select>
+                        <td className="px-4 py-3">
+                          {emp.shiftId
+                            ? <span className="text-xs text-slate-600 font-medium">
+                                {allShifts.find((s: any) => s.id === emp.shiftId)?.name ?? "—"}
+                              </span>
+                            : <span className="text-xs text-slate-400">—</span>
+                          }
                         </td>
                         <td className="px-4 py-3">
                           <span className={cn("px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide", STATUS_STYLE[emp.status] || STATUS_STYLE.active)}>
