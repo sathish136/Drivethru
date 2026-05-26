@@ -347,8 +347,12 @@ export async function processAttRows(rows: AttRow[]) {
     const status = String(row.status || "0");
     const punchType: "in" | "out" = (status === "1" || status === "255") ? "out" : "in";
 
-    // Collect raw punch for biometric_logs
-    rawPunches.push({ sn: (row.sn || "").trim(), pin, punchTime: new Date(timeStr), punchType });
+    // Collect raw punch for biometric_logs.
+    // .dat / txt files contain device-local time (Sri Lanka UTC+5:30).
+    // Appending "+05:30" makes the Date parser correctly interpret the
+    // timestamp as SL local time and convert it to UTC for DB storage.
+    const punchTimeUtc = new Date(timeStr.replace(" ", "T") + "+05:30");
+    rawPunches.push({ sn: (row.sn || "").trim(), pin, punchTime: punchTimeUtc, punchType });
 
     // For night-shift employees: punches before noon belong to the previous shift's work date
     const workDate = nightShiftPins.has(pin)
@@ -379,7 +383,15 @@ export async function processAttRows(rows: AttRow[]) {
         ? logs.slice().sort((a, b) => nightNorm(a.time) - nightNorm(b.time))
         : logs.slice().sort((a, b) => a.time.localeCompare(b.time));
 
-      const allTimes = sorted.map(l => l.time);
+      // Deduplicate punches within 2 minutes of each other (e.g. double-punch at shift end)
+      const deduped = sorted.filter((log, i, arr) => {
+        if (i === 0) return true;
+        const prevNorm = isNightShift ? nightNorm(arr[i - 1].time) : timeToMins(arr[i - 1].time);
+        const curNorm  = isNightShift ? nightNorm(log.time)        : timeToMins(log.time);
+        return Math.abs(curNorm - prevNorm) >= 2;
+      });
+
+      const allTimes = deduped.map(l => l.time);
 
       let inTime1: string, outTime1: string | null, inTime2: string | null, outTime2: string | null;
       let workHours1: number | null = null;

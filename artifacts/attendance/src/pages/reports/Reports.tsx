@@ -531,7 +531,7 @@ function AttendanceReport() {
   }, [isNightShiftView]);
 
   const HEADERS = isNightShiftView
-    ? ["Shift Date","Next Day","Emp ID","Employee","Department","Branch","Shift","Status","P1","P2","P3","P4","P5","P6","P7","P8","P9","P10","P11","P12","Total Hrs","OT Hrs","Remarks"]
+    ? ["Shift Date","Next Day","Emp ID","Employee","Department","Branch","Shift","Status","P1","P2","P3","P4","P5","P6","P7","P8","P9","P10","P11","P12","P13","Total Hrs","OT Hrs","Remarks"]
     : ["Date","Emp ID","Employee","Department","Branch","Shift","Status","1st In","1st Out","2nd In","2nd Out","Lunch Break","Total Hrs","Late","OT Hrs","Remarks"];
   const NIGHT_WATCHER_POLICY_HEADERS = [
     "Date",
@@ -681,7 +681,7 @@ function AttendanceReport() {
       const remarks = getRemarks(r);
       if (isNightShiftView) {
         const rp: string[] = r.rawPunches ?? [];
-        const punchCells = Array.from({length:12}, (_,i) => `<td>${rp[i]||"—"}</td>`).join("");
+        const punchCells = Array.from({length:13}, (_,i) => `<td>${rp[i]||"—"}</td>`).join("");
         return `<tr>
           <td>${r.date}</td><td>${r.morningDate||"—"}</td>
           <td>${r.employeeCode}</td><td>${r.employeeName}</td>
@@ -768,7 +768,7 @@ function AttendanceReport() {
       const statusLabel = r.status==="late"?"PRESENT (LATE)":r.status==="half_day"?"HALF DAY":r.status==="off_day"?"DAY OFF":r.status.replace("_"," ").toUpperCase();
       if (isNightShiftView) {
         const rp: string[] = r.rawPunches ?? [];
-        const punchCols = Array.from({length:12}, (_,i) => rp[i] || "");
+        const punchCols = Array.from({length:13}, (_,i) => rp[i] || "");
         return [
           `'${r.date}`, r.morningDate||"", r.employeeCode, r.employeeName, r.department||"", r.branchName,
           r.shiftName||"", statusLabel,
@@ -865,7 +865,7 @@ function AttendanceReport() {
       {isNightShiftView && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-medium">
           <span className="text-base">🌙</span>
-          Night Shift View — punches from the shift date (evening) and next calendar day (morning) are merged into one row. Showing 12 punch columns (P1–P12) for hourly punches; Lunch Break column hidden.
+          Night Shift View — punches from the shift date (evening) and next calendar day (morning) are merged into one row. Showing 13 punch columns (P1–P13) for hourly punches; Lunch Break column hidden.
         </div>
       )}
 
@@ -884,7 +884,7 @@ function AttendanceReport() {
                   <col style={{width:"95px"}}/>
                   <col style={{width:"90px"}}/>
                   <col style={{width:"88px"}}/>
-                  {Array.from({length:12}).map((_,i)=><col key={i} style={{width:"52px"}}/>)}
+                  {Array.from({length:13}).map((_,i)=><col key={i} style={{width:"52px"}}/>)}
                   <col style={{width:"70px"}}/>
                   <col style={{width:"58px"}}/>
                   <col/>
@@ -895,7 +895,7 @@ function AttendanceReport() {
                       <th key={h} className="px-2 py-2.5 text-left font-semibold whitespace-nowrap overflow-hidden" rowSpan={2}>{h}</th>
                     ))}
                     <th className="px-2 py-1.5 text-center font-semibold whitespace-nowrap bg-indigo-700/60 text-[10px]" colSpan={6}>Evening Punches (P1–P6)</th>
-                    <th className="px-2 py-1.5 text-center font-semibold whitespace-nowrap bg-violet-700/60 text-[10px]" colSpan={6}>Morning Punches (P7–P12)</th>
+                    <th className="px-2 py-1.5 text-center font-semibold whitespace-nowrap bg-violet-700/60 text-[10px]" colSpan={7}>Morning Punches (P7–P13)</th>
                     <th className="px-2 py-2.5 text-left font-semibold whitespace-nowrap bg-green-800/50 text-[10px]" rowSpan={2}>Total</th>
                     <th className="px-2 py-2.5 text-left font-semibold whitespace-nowrap text-[10px]" rowSpan={2}>OT</th>
                     <th className="px-2 py-2.5 text-left font-semibold whitespace-nowrap bg-indigo-700/40 text-[10px]" rowSpan={2}>Remarks</th>
@@ -904,7 +904,7 @@ function AttendanceReport() {
                     {[1,2,3,4,5,6].map(n=>(
                       <th key={n} className="px-1 py-1 text-[9px] font-medium bg-indigo-700/40 text-center">P{n}</th>
                     ))}
-                    {[7,8,9,10,11,12].map(n=>(
+                    {[7,8,9,10,11,12,13].map(n=>(
                       <th key={n} className="px-1 py-1 text-[9px] font-medium bg-violet-700/40 text-center">P{n}</th>
                     ))}
                   </tr>
@@ -916,7 +916,7 @@ function AttendanceReport() {
                       (r.rawPunches && r.rawPunches.length > 0)
                         ? r.rawPunches
                         : [r.inTime1, r.outTime1, r.inTime2, r.outTime2].filter(Boolean);
-                    const punches: (string|null)[] = Array.from({length:12}, (_,i) =>
+                    const punches: (string|null)[] = Array.from({length:13}, (_,i) =>
                       sourcePunches[i] ?? null
                     );
                     const totalHrs = r.totalHours ?? 0;
@@ -944,7 +944,7 @@ function AttendanceReport() {
                           {fmtStatus(r.status)}
                         </span>
                       </td>
-                      {/* P1–P12 punch columns */}
+                      {/* P1–P13 punch columns */}
                       {punches.map((pt, idx) => {
                         const isEvening = idx < 6;
                         return (

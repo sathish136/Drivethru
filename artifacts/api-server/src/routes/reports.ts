@@ -563,7 +563,20 @@ router.get("/attendance", async (req, res) => {
           if (!bioPunchesByEmpDate.has(key)) bioPunchesByEmpDate.set(key, []);
           bioPunchesByEmpDate.get(key)!.push(timeStr);
         }
-        for (const times of bioPunchesByEmpDate.values()) times.sort();
+        for (const times of bioPunchesByEmpDate.values()) {
+          times.sort();
+          // Deduplicate punches within 2 minutes of each other
+          let i = 1;
+          while (i < times.length) {
+            const [ph, pm] = times[i - 1].split(":").map(Number);
+            const [ch, cm] = times[i].split(":").map(Number);
+            if (Math.abs((ch * 60 + cm) - (ph * 60 + pm)) < 2) {
+              times.splice(i, 1);
+            } else {
+              i++;
+            }
+          }
+        }
       } catch {
         // biometric_logs may be empty — silently fall back to stored punch fields
       }
@@ -640,7 +653,7 @@ router.get("/attendance", async (req, res) => {
             });
             bioPunches = combined;
           }
-          rawPunches = (bioPunches.length > 0 ? bioPunches : storedPunches).slice(0, 12);
+          rawPunches = (bioPunches.length > 0 ? bioPunches : storedPunches).slice(0, 13);
         }
 
         return {
