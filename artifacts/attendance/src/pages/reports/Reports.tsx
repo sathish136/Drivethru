@@ -60,21 +60,16 @@ function useEmployeeOffDays() {
 }
 
 function useHrRules() {
-  const [rules, setRules] = useState<DeptShiftRule[]>([]);
   const [shifts, setShifts] = useState<{ id: number; name: string }[]>([]);
   useEffect(() => {
     const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
     const token = localStorage.getItem("auth_token") || "";
     const authOpts = { credentials: "include" as const, headers: { Authorization: `Bearer ${token}` } };
-    Promise.all([
-      fetch(`${BASE}/api/hr-settings`, authOpts).then(r => r.json()),
-      fetch(`${BASE}/api/shifts`, authOpts).then(r => r.json()),
-    ]).then(([hrData, shiftsData]) => {
-      if (Array.isArray(hrData.departmentRules)) setRules(hrData.departmentRules as DeptShiftRule[]);
+    fetch(`${BASE}/api/shifts`, authOpts).then(r => r.json()).then((shiftsData) => {
       if (Array.isArray(shiftsData)) setShifts(shiftsData);
     }).catch(() => {});
   }, []);
-  return { rules, shifts };
+  return { rules: [] as DeptShiftRule[], shifts };
 }
 
 type Tab = "attendance" | "monthly" | "overtime" | "payroll" | "individual";

@@ -67,7 +67,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/employees",        label: "Employees",        icon: UserRound   },
       { href: "/payroll",          label: "Payroll",          icon: Wallet      },
       { href: "/payroll-settings", label: "Payroll Settings", icon: Sliders     },
-      { href: "/hr-settings",      label: "HR Settings",      icon: BookOpen    },
+
       { href: "/holidays",         label: "Holidays",         icon: CalendarDays  },
       { href: "/weekoffs",         label: "Week Offs",        icon: CalendarOff   },
       { href: "/leave-balances",   label: "Leave Balances",   icon: CalendarClock },
