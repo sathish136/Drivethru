@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { attendanceRecords, employees, branches, shifts, weekoffSchedules, holidays, biometricLogs } from "@workspace/db/schema";
 import { eq, and, gte, lte, sql, inArray } from "drizzle-orm";
 import { getDaysInMonth, today, calcWorkHours } from "../lib/helpers.js";
-import { loadDeptRules, findRule, timeToMins, calcLunchLateMinutes, lateCutoffMins, calcOtHours, calcTimeBasedOtHours, isNightShiftRecord, DeptShiftRule, calcNightWatcherPolicyOtHours } from "../lib/hr-rules.js";
+import { loadDeptRules, findRule, timeToMins, calcLunchLateMinutes, lateCutoffMins, calcOtHours, calcTimeBasedOtHours, isNightShiftRecord, DeptShiftRule, calcNightWatcherPolicyOtHours, calcNightWatcherOtFromAllPunches } from "../lib/hr-rules.js";
 import { processSalaryRow, resolveDayShift, type WeekOffInfo, type DayType } from "../lib/salary-engine.js";
 
 /**
@@ -656,6 +656,13 @@ router.get("/attendance", async (req, res) => {
           rawPunches = (bioPunches.length > 0 ? bioPunches : storedPunches).slice(0, 13);
         }
 
+        // For Night Watcher employees, compute OT from ALL raw punch times using
+        // the correct checkpoint policy (0/1/2/3 h based on 05:xx/06:xx/07:xx presence).
+        // This overrides the salary-engine's simplified estimate when bio data is available.
+        const nightOtHours = (isNightEmp && rawPunches.length > 0 && rule.nightWatcherPayroll)
+          ? calcNightWatcherOtFromAllPunches(rawPunches)
+          : null;
+
         return {
           ...r.rec,
           status: r.effectiveStatus,
@@ -672,10 +679,10 @@ router.get("/attendance", async (req, res) => {
           isNightShiftMerged: (r as any)._nightShiftMerged ?? false,
           morningDate: (r as any)._morningDate ?? null,
           rawPunches,
-          /* Policy-driven values from the salary engine (single source of truth) */
+          /* Policy-driven values — OT uses checkpoint-based calculation for Night Watcher */
           morningLateMinutes: sr.lateMinutes,
           lunchLateMinutes,
-          overtimeHours: sr.otHours,
+          overtimeHours: nightOtHours !== null ? nightOtHours : sr.otHours,
           remarks,
           /* Extra payroll-friendly fields exposed for the reports/payslip UI */
           shiftCategory: sr.shiftCategory,

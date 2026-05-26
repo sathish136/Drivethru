@@ -8,7 +8,9 @@ const router = Router();
 function calcHours(t1: string, t2: string): number {
   const [h1, m1] = t1.split(":").map(Number);
   const [h2, m2] = t2.split(":").map(Number);
-  return Math.max(0, (h2 * 60 + m2 - (h1 * 60 + m1)) / 60);
+  let diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+  if (diff < 0) diff += 24 * 60; // cross-midnight (e.g. Night Watcher 20:00→05:00)
+  return diff / 60;
 }
 
 function mapShift(s: any) {

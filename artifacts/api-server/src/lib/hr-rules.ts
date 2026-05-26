@@ -115,19 +115,39 @@ export const DEFAULT_RULE: DeptShiftRule = {
  *   • Late deduction after 8:15 am  → lateGraceMinutes = 15
  *   • OT begins after 5:30 pm        → otStartTime = "17:30"
  *
+ * Night Watcher Shift (20:00 – 05:00) policy:
+ *   • Late threshold = 10 min grace
+ *   • OT window 05:00 – 08:00 (discrete 0/1/2/3 h based on hourly checkpoints)
+ *   • nightWatcherPayroll = true (15-shift/month basis, OT hourly rate = basic/240)
+ *
  * These defaults only fill in fields the saved rule has left blank, so
  * any HR-configured overrides win.
  */
 export function applyShiftDefaults(rule: DeptShiftRule, shiftName?: string | null): DeptShiftRule {
   const s = (shiftName ?? rule.shift ?? "").toLowerCase().trim();
   const isRegular = s === "regular" || s === "regular shift";
-  if (!isRegular) return rule;
-  return {
-    ...rule,
-    lateGraceMinutes: rule.lateGraceMinutes ?? 15,
-    otStartTime: rule.otStartTime ?? "17:30",
-    otEligible: rule.otEligible !== false,
-  };
+  const isNightWatcher = s.includes("night watcher") || s.includes("nightwatcher") || s.includes("night watch");
+  if (isRegular) {
+    return {
+      ...rule,
+      lateGraceMinutes: rule.lateGraceMinutes ?? 15,
+      otStartTime: rule.otStartTime ?? "17:30",
+      otEligible: rule.otEligible !== false,
+    };
+  }
+  if (isNightWatcher) {
+    return {
+      ...rule,
+      nightWatcherPayroll: rule.nightWatcherPayroll !== false,
+      otStartTime: rule.otStartTime ?? "05:00",
+      otEligible: rule.otEligible !== false,
+      lateGraceMinutes: rule.lateGraceMinutes ?? 10,
+      minHours: rule.minHours && rule.minHours > 0 ? rule.minHours : 9,
+      halfDayHours: rule.halfDayHours ?? 5,
+      nightWatcherMissedPunchDeductHours: rule.nightWatcherMissedPunchDeductHours ?? 1,
+    };
+  }
+  return rule;
 }
 
 /**
@@ -415,6 +435,61 @@ export function calcNightWatcherPunchDeduction(
 
   const missed = Math.max(0, expectedPunches - recordedPunches);
   return Math.round(missed * deductHoursPerMissedPunch * 100) / 100;
+}
+
+/**
+ * Night Watcher OT from ALL raw punch times (the full hourly punch list).
+ *
+ * This is the accurate version that uses every recorded punch time rather
+ * than only the 4 stored DB slots (inTime1/outTime1/inTime2/outTime2).
+ * Use this when rawPunches from biometric_logs are available (reports API).
+ *
+ * Policy:
+ *  - OT window 05:00 → 08:00  (normalised so after-midnight times sort last)
+ *  - Base OT = ceil((lastPunch − 05:00) / 1h), capped at 3
+ *  - Each required hourly checkpoint (05:xx, 06:xx, 07:xx) that has NO punch
+ *    within that 60-minute window deducts 1 h
+ *  - Final OT clamped to {0,1,2,3}
+ */
+export function calcNightWatcherOtFromAllPunches(
+  punchTimes: string[],
+  options?: {
+    otStartTime?: string;        // default "05:00"
+    otEndTime?: string;          // default "08:00"
+    nearEndGraceMinutes?: number; // default 10 (≥07:50 = 3 h)
+  },
+): number {
+  if (punchTimes.length === 0) return 0;
+  const otStart  = options?.otStartTime         ?? "05:00";
+  const otEnd    = options?.otEndTime            ?? "08:00";
+  const nearEndG = options?.nearEndGraceMinutes  ?? 10;
+
+  const rawStart  = timeToMins(otStart);
+  const rawEnd    = timeToMins(otEnd);
+  // Night-normalise: times < noon are after midnight → add 24h so they sort after evening
+  const normStart = rawStart < 12 * 60 ? rawStart + 24 * 60 : rawStart;
+  const normEnd   = rawEnd   < 12 * 60 ? rawEnd   + 24 * 60 : rawEnd;
+  const nearEnd   = normEnd - nearEndG;
+
+  const normMins = punchTimes.map(t => {
+    const m = timeToMins(t);
+    return m < 12 * 60 ? m + 24 * 60 : m;
+  });
+  const lastMins = Math.max(...normMins);
+
+  let baseOt = 0;
+  if (lastMins >= nearEnd)              baseOt = 3;
+  else if (lastMins >= normStart + 120) baseOt = 2;
+  else if (lastMins >= normStart + 60)  baseOt = 1;
+  if (baseOt === 0) return 0;
+
+  const checkpoints = [normStart, normStart + 60, normStart + 120];
+  let missing = 0;
+  for (let i = 0; i < baseOt; i++) {
+    const cp = checkpoints[i];
+    if (!normMins.some(p => p >= cp && p < cp + 60)) missing++;
+  }
+  return Math.max(0, Math.min(3, baseOt - missing));
 }
 
 /**
