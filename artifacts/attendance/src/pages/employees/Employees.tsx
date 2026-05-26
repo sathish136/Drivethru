@@ -173,7 +173,7 @@ function DocUploadRow({
 const EMPTY_EMP = {
   employeeId:"", firstName:"", lastName:"", gender:"male", dateOfBirth:"", phone:"", email:"",
   address:"", nicNumber:"", panNumber:"", aadharNumber:"",
-  department:"", branchId:1, shiftId:"", weekoffScheduleId:"", joiningDate:"",
+  department:"", branchId:"", shiftId:"", weekoffScheduleId:"", joiningDate:"",
   employeeType:"permanent", reportingManagerId:"", biometricId:"", status:"active",
   epfNumber:"", etfNumber:"", basicSalary:"", remarks:"",
 };
@@ -418,7 +418,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
     ...EMPTY_EMP, ...emp,
     firstName: emp.firstName || "",
     lastName: emp.lastName || (emp.fullName && !emp.firstName ? emp.fullName : ""),
-    branchId: emp.branchId || 1,
+    branchId: emp.branchId || "",
     dateOfBirth: emp.dateOfBirth || "",
     shiftId: emp.shiftId || "",
     weekoffScheduleId: emp.weekoffScheduleId ? String(emp.weekoffScheduleId) : "",
@@ -566,8 +566,13 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
   function handleSave() {
     setEmpIdError("");
+    if (!form.branchId) {
+      setTab("overview");
+      alert("Please select a Branch before saving.");
+      return;
+    }
     if (!form.department) {
-      setTab("joining");
+      setTab("overview");
       alert("Please select a Department before saving.");
       return;
     }
@@ -617,9 +622,9 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
     { key: "connections",  label: "Connections"           },
   ] as const;
 
-  const INP = "w-full rounded border border-border bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary transition-colors text-foreground placeholder:text-muted-foreground/50";
+  const INP = "w-full rounded border border-border bg-background px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary transition-colors text-foreground placeholder:text-muted-foreground/50";
   const SEL = `${INP} appearance-none`;
-  const LBL = "block text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide";
+  const LBL = "block text-[10px] font-semibold text-muted-foreground mb-0.5 uppercase tracking-wide";
 
   function FLabel({ label, required }: { label: string; required?: boolean }) {
     return <label className={LBL}>{label}{required && <span className="text-red-500 ml-0.5">*</span>}</label>;
@@ -819,7 +824,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
           {/* ── OVERVIEW TAB ── */}
           {tab === "overview" && (
-            <div className="space-y-6">
+            <div className="space-y-4">
               {/* Error banner */}
               {empIdError && (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
@@ -829,7 +834,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
               {/* Main fields grid */}
               <div>
-                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                <div className="grid grid-cols-3 gap-x-4 gap-y-3">
                   <div>
                     <FLabel label="Employee ID" required />
                     <input
@@ -887,11 +892,11 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
               {/* Company Details divider */}
               <div>
-                <div className="flex items-center gap-2 mb-4">
+                <div className="flex items-center gap-2 mb-3">
                   <span className="text-xs font-bold text-foreground">Company Details</span>
                   <div className="flex-1 border-t border-border" />
                 </div>
-                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                <div className="grid grid-cols-3 gap-x-4 gap-y-3">
                   <div>
                     <FLabel label="Department" required />
                     <select className={SEL} value={form.department} onChange={e => set("department", e.target.value)}>
@@ -904,6 +909,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                   <div>
                     <FLabel label="Branch" required />
                     <select className={SEL} value={form.branchId} onChange={e => set("branchId", Number(e.target.value))}>
+                      <option value="">— Select Branch —</option>
                       {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                     </select>
                   </div>
@@ -923,13 +929,13 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
           {/* ── JOINING TAB ── */}
           {tab === "joining" && (
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
-                <div className="flex items-center gap-2 mb-4">
+                <div className="flex items-center gap-2 mb-3">
                   <span className="text-xs font-bold text-foreground">Joining Details</span>
                   <div className="flex-1 border-t border-border" />
                 </div>
-                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                <div className="grid grid-cols-3 gap-x-4 gap-y-3">
                   <div>
                     <FLabel label="Date of Joining" required />
                     <input type="date" className={INP} value={form.joiningDate} onChange={e => set("joiningDate", e.target.value)} />
@@ -976,13 +982,13 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
           {/* ── ADDRESS & CONTACTS TAB ── */}
           {tab === "contacts" && (
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
-                <div className="flex items-center gap-2 mb-4">
+                <div className="flex items-center gap-2 mb-3">
                   <span className="text-xs font-bold text-foreground">Contact Details</span>
                   <div className="flex-1 border-t border-border" />
                 </div>
-                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                <div className="grid grid-cols-3 gap-x-4 gap-y-3">
                   <div>
                     <FLabel label="Phone" />
                     <input className={INP} placeholder="+94 XX XXX XXXX" value={form.phone} onChange={e => set("phone", e.target.value)} />
