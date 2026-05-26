@@ -898,7 +898,7 @@ function AttendanceReport() {
                     <th className="px-2 py-1.5 text-center font-semibold whitespace-nowrap bg-violet-700/60 text-[10px]" colSpan={7}>Morning Punches (P7–P13)</th>
                     <th className="px-2 py-2.5 text-left font-semibold whitespace-nowrap bg-green-800/50 text-[10px]" rowSpan={2}>Total</th>
                     <th className="px-2 py-2.5 text-left font-semibold whitespace-nowrap text-[10px]" rowSpan={2}>OT</th>
-                    <th className="px-2 py-2.5 text-left font-semibold whitespace-nowrap bg-indigo-700/40 text-[10px]" rowSpan={2}>Remarks</th>
+                    {/* Remarks column hidden — re-enable later */}
                   </tr>
                   <tr className="border-b border-indigo-600">
                     {[1,2,3,4,5,6].map(n=>(
@@ -977,14 +977,7 @@ function AttendanceReport() {
                           <span className="ml-0.5 text-[9px] text-orange-600 font-semibold">×{Number(r.holidayMultiplier).toFixed(1)}</span>
                         )}
                       </td>
-                      <td className="px-2 py-2 bg-indigo-50/10 max-w-[160px] overflow-hidden">
-                        {(() => {
-                          const rm = getRemarks(r);
-                          return rm ? (
-                            <span className="text-[10px] leading-snug text-indigo-700 block break-words" title={rm}>{rm}</span>
-                          ) : <span className="text-muted-foreground/40 text-[10px]">—</span>;
-                        })()}
-                      </td>
+                      {/* Remarks cell hidden — re-enable later */}
                     </tr>
                     );
                   })}
@@ -1021,7 +1014,7 @@ function AttendanceReport() {
                     <th className="px-3 py-2 text-center font-semibold text-orange-600 whitespace-nowrap bg-orange-50/50" colSpan={2}>2nd Session</th>
                     <th className="px-3 py-2.5 text-left font-semibold text-green-700 whitespace-nowrap bg-green-50/40" rowSpan={2}>Total Hrs</th>
                     <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap" rowSpan={2}>OT Hrs</th>
-                    <th className="px-3 py-2.5 text-left font-semibold text-indigo-600 whitespace-nowrap bg-indigo-50/30" rowSpan={2}>Remarks</th>
+                    {/* Remarks column hidden — re-enable later */}
                   </tr>
                   <tr className="border-b border-border">
                     <th className="px-3 py-1 text-[10px] font-medium text-blue-500 bg-blue-50/30 text-center">In</th>
@@ -1122,14 +1115,7 @@ function AttendanceReport() {
                           <span className="ml-1 text-[10px] text-orange-600 font-semibold">×{Number(r.holidayMultiplier).toFixed(1)}</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 bg-indigo-50/10 max-w-[220px]">
-                        {(() => {
-                          const rm = getRemarks(r);
-                          return rm ? (
-                            <span className="text-[10px] leading-snug text-indigo-700 block" title={rm}>{rm}</span>
-                          ) : <span className="text-muted-foreground text-[10px]">—</span>;
-                        })()}
-                      </td>
+                      {/* Remarks cell hidden — re-enable later */}
                     </tr>
                     );
                   })}
