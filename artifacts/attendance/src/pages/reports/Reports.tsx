@@ -503,7 +503,11 @@ function AttendanceReport() {
   const filtered = useMemo(() => (data?.records || []).filter((r: any) =>
     (!department || r.department === department)
     && (!empName || (r.employeeName || "").toLowerCase().includes(empName.toLowerCase()) || String(r.employeeId || "").toLowerCase().includes(empName.toLowerCase()))
-  ), [data, department, empName]);
+  ).sort((a: any, b: any) => {
+    const dateCmp = (a.date || "").localeCompare(b.date || "");
+    if (dateCmp !== 0) return dateCmp;
+    return (a.employeeName || "").localeCompare(b.employeeName || "");
+  }), [data, department, empName]);
 
   // Auto-detect night-shift view: true when ALL non-off/holiday rows in the
   // filtered set belong to employees on a night shift (assigned shift startTime ≥ 18:00).
