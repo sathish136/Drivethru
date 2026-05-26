@@ -922,7 +922,7 @@ function AttendanceReport() {
                     const totalHrs = r.totalHours ?? 0;
                     const totalH = Math.floor(totalHrs), totalMin = Math.round((totalHrs - totalH) * 60);
                     return (
-                    <tr key={r.id} className="hover:bg-indigo-50/30 transition-colors align-middle">
+                    <tr key={r.id > 0 ? r.id : `synth-${r.employeeId}-${r.date}`} className="hover:bg-indigo-50/30 transition-colors align-middle">
                       <td className="px-2 py-2 whitespace-nowrap">
                         <div className="font-mono text-xs">{r.date}</div>
                         {r.isNightShiftMerged && (
@@ -1041,7 +1041,7 @@ function AttendanceReport() {
                     const has2 = !!(r.inTime2 && r.outTime2);
                     const onlyIn = !!(r.inTime1 && !r.outTime1 && !r.inTime2 && !r.outTime2);
                     return (
-                    <tr key={r.id} className="hover:bg-muted/30 transition-colors align-top">
+                    <tr key={r.id > 0 ? r.id : `synth-${r.employeeId}-${r.date}`} className="hover:bg-muted/30 transition-colors align-top">
                       <td className="px-3 py-2 font-mono whitespace-nowrap">{r.date}</td>
                       <td className="px-3 py-2 font-mono whitespace-nowrap text-muted-foreground">{r.employeeCode}</td>
                       <td className="px-3 py-2 font-medium truncate" title={r.employeeName}>{r.employeeName}</td>

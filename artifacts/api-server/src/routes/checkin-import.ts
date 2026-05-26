@@ -158,7 +158,7 @@ router.post("/import", upload.single("file"), async (req, res) => {
 
         const existing = await db.select({ id: attendanceRecords.id })
           .from(attendanceRecords)
-          .where(and(eq(attendanceRecords.employeeId, empId), eq(attendanceRecords.date, date)));
+          .where(and(eq(attendanceRecords.employeeId, empEntry.id), eq(attendanceRecords.date, date)));
 
         if (existing.length > 0) {
           await db.update(attendanceRecords).set(record).where(eq(attendanceRecords.id, existing[0].id));
