@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { attendanceRecords, employees, branches, shifts, weekoffSchedules, holidays } from "@workspace/db/schema";
-import { eq, and, gte, lte, sql } from "drizzle-orm";
+import { attendanceRecords, employees, branches, shifts, weekoffSchedules, holidays, biometricLogs } from "@workspace/db/schema";
+import { eq, and, gte, lte, sql, inArray } from "drizzle-orm";
 import { getDaysInMonth, today, calcWorkHours } from "../lib/helpers.js";
 import { loadDeptRules, findRule, timeToMins, calcLunchLateMinutes, lateCutoffMins, calcOtHours, calcTimeBasedOtHours, isNightShiftRecord, DeptShiftRule, calcNightWatcherPolicyOtHours } from "../lib/hr-rules.js";
 import { processSalaryRow, resolveDayShift, type WeekOffInfo, type DayType } from "../lib/salary-engine.js";
@@ -521,6 +521,43 @@ router.get("/attendance", async (req, res) => {
       else if (st === "invalid") summary.invalid++;
     }
 
+    // ── Fetch raw biometric punches for night-shift employees (up to 12 per shift) ──
+    const bioPunchesByEmpDate = new Map<string, string[]>(); // "empId:localDate" → sorted HH:MM
+    if (nightShiftEmployeeIds.size > 0) {
+      try {
+        const empIdList = [...nightShiftEmployeeIds];
+        // Extend end date by 1 day to capture morning punches of overnight shifts
+        let bioEnd: string | undefined;
+        if (endDate) {
+          const d = new Date((endDate as string) + "T00:00:00Z");
+          d.setUTCDate(d.getUTCDate() + 1);
+          bioEnd = d.toISOString().slice(0, 10);
+        }
+        const conditions: any[] = [inArray(biometricLogs.employeeId, empIdList)];
+        if (startDate) conditions.push(gte(sql`(${biometricLogs.punchTime} AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Colombo')::date`, startDate as string));
+        if (bioEnd)    conditions.push(lte(sql`(${biometricLogs.punchTime} AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Colombo')::date`, bioEnd));
+
+        const bioRows = await db.select({
+          employeeId: biometricLogs.employeeId,
+          punchTime:  biometricLogs.punchTime,
+        }).from(biometricLogs).where(and(...conditions));
+
+        for (const row of bioRows) {
+          if (!row.employeeId) continue;
+          // Convert UTC → Asia/Colombo (UTC+5:30)
+          const local = new Date(row.punchTime.getTime() + 5.5 * 3_600_000);
+          const dateStr = local.toISOString().slice(0, 10);
+          const timeStr = `${String(local.getUTCHours()).padStart(2, "0")}:${String(local.getUTCMinutes()).padStart(2, "0")}`;
+          const key = `${row.employeeId}:${dateStr}`;
+          if (!bioPunchesByEmpDate.has(key)) bioPunchesByEmpDate.set(key, []);
+          bioPunchesByEmpDate.get(key)!.push(timeStr);
+        }
+        for (const times of bioPunchesByEmpDate.values()) times.sort();
+      } catch {
+        // biometric_logs may be empty — silently fall back to stored punch fields
+      }
+    }
+
     res.json({
       startDate: startDate as string,
       endDate: endDate as string,
@@ -549,6 +586,24 @@ router.get("/attendance", async (req, res) => {
           remarks = note ? `${ltLabel} — ${note}` : ltLabel;
         }
 
+        // Build rawPunches (up to 12) for night-shift records
+        const empId = r.rec.employeeId;
+        const isNightEmp = nightShiftEmployeeIds.has(empId);
+        let rawPunches: string[] = [];
+        if (isNightEmp) {
+          const shiftDate   = r.rec.date;
+          const morningDate = (r as any)._morningDate ?? null;
+          const eveningPunches = bioPunchesByEmpDate.get(`${empId}:${shiftDate}`) ?? [];
+          const morningPunches = morningDate ? bioPunchesByEmpDate.get(`${empId}:${morningDate}`) ?? [] : [];
+          if (eveningPunches.length > 0 || morningPunches.length > 0) {
+            rawPunches = [...eveningPunches, ...morningPunches].slice(0, 12);
+          } else {
+            // Fallback: stored attendance punch fields
+            rawPunches = ([r.rec.inTime1, r.rec.outTime1, r.rec.inTime2, r.rec.outTime2]
+              .filter(Boolean) as string[]);
+          }
+        }
+
         return {
           ...r.rec,
           status: r.effectiveStatus,
@@ -560,9 +615,10 @@ router.get("/attendance", async (req, res) => {
           shiftName: empShift?.name ?? sr.shiftName ?? null,
           createdAt: r.rec.createdAt.toISOString(),
           /* Night-shift flags — derived from assigned shift, not punch time */
-          isNightShift: nightShiftEmployeeIds.has(r.rec.employeeId),
+          isNightShift: isNightEmp,
           isNightShiftMerged: (r as any)._nightShiftMerged ?? false,
           morningDate: (r as any)._morningDate ?? null,
+          rawPunches,
           /* Policy-driven values from the salary engine (single source of truth) */
           morningLateMinutes: sr.lateMinutes,
           lunchLateMinutes,

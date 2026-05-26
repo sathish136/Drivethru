@@ -516,7 +516,7 @@ function AttendanceReport() {
   }, [filtered]);
 
   const HEADERS = isNightShiftView
-    ? ["Shift Date","Next Day","Emp ID","Employee","Department","Branch","Shift","Status","Punch 1 (In)","Punch 2 (Out)","Punch 3 (In)","Punch 4 (Out)","Total Hrs","OT Hrs","Remarks"]
+    ? ["Shift Date","Next Day","Emp ID","Employee","Department","Branch","Shift","Status","P1","P2","P3","P4","P5","P6","P7","P8","P9","P10","P11","P12","Total Hrs","OT Hrs","Remarks"]
     : ["Date","Emp ID","Employee","Department","Branch","Shift","Status","1st In","1st Out","2nd In","2nd Out","Lunch Break","Total Hrs","Late","OT Hrs","Remarks"];
   const NIGHT_WATCHER_POLICY_HEADERS = [
     "Date",
@@ -665,14 +665,15 @@ function AttendanceReport() {
       const tot = r.totalHours!=null ? fmtTotal(r.totalHours) : "—";
       const remarks = getRemarks(r);
       if (isNightShiftView) {
+        const rp: string[] = r.rawPunches ?? [];
+        const punchCells = Array.from({length:12}, (_,i) => `<td>${rp[i]||"—"}</td>`).join("");
         return `<tr>
           <td>${r.date}</td><td>${r.morningDate||"—"}</td>
           <td>${r.employeeCode}</td><td>${r.employeeName}</td>
           <td>${r.department||""}</td><td>${r.branchName}</td>
           <td>${r.shiftName||""}</td>
           <td>${statusLabel}</td>
-          <td>${r.inTime1||"—"}</td><td>${r.outTime1||"—"}</td>
-          <td>${r.inTime2||"—"}</td><td>${r.outTime2||"—"}</td>
+          ${punchCells}
           <td>${tot}</td>
           <td>${r.overtimeHours>0?r.overtimeHours.toFixed(1)+"h":"—"}</td>
           <td>${remarks||"—"}</td>
@@ -751,10 +752,12 @@ function AttendanceReport() {
     const rows = filtered.map((r: any) => {
       const statusLabel = r.status==="late"?"PRESENT (LATE)":r.status==="half_day"?"HALF DAY":r.status==="off_day"?"DAY OFF":r.status.replace("_"," ").toUpperCase();
       if (isNightShiftView) {
+        const rp: string[] = r.rawPunches ?? [];
+        const punchCols = Array.from({length:12}, (_,i) => rp[i] || "");
         return [
           `'${r.date}`, r.morningDate||"", r.employeeCode, r.employeeName, r.department||"", r.branchName,
           r.shiftName||"", statusLabel,
-          r.inTime1||"", r.outTime1||"", r.inTime2||"", r.outTime2||"",
+          ...punchCols,
           r.totalHours!=null?fmtTotal(r.totalHours):"",
           r.overtimeHours>0?r.overtimeHours.toFixed(1):"",
           getRemarks(r),
@@ -847,7 +850,7 @@ function AttendanceReport() {
       {isNightShiftView && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-medium">
           <span className="text-base">🌙</span>
-          Night Shift View — punches from the shift date (evening) and next calendar day (morning) are merged into one row. Showing 4 punch columns; Lunch Break column hidden.
+          Night Shift View — punches from the shift date (evening) and next calendar day (morning) are merged into one row. Showing 12 punch columns (P1–P12) for hourly punches; Lunch Break column hidden.
         </div>
       )}
 
@@ -855,139 +858,117 @@ function AttendanceReport() {
         {isLoading ? <div className="p-8 text-center text-sm text-muted-foreground">Loading…</div> : (
           <div className="overflow-x-auto">
             {isNightShiftView ? (
-              /* ── Night-shift 4-punch table ── */
+              /* ── Night-shift 12-punch table ── */
               <table className="w-full table-fixed text-xs">
                 <colgroup>
                   <col style={{width:"82px"}}/>
-                  <col style={{width:"82px"}}/>
-                  <col style={{width:"100px"}}/>
-                  <col style={{width:"155px"}}/>
+                  <col style={{width:"78px"}}/>
                   <col style={{width:"80px"}}/>
-                  <col style={{width:"105px"}}/>
+                  <col style={{width:"140px"}}/>
+                  <col style={{width:"80px"}}/>
+                  <col style={{width:"95px"}}/>
                   <col style={{width:"90px"}}/>
-                  <col style={{width:"110px"}}/>
-                  <col style={{width:"52px"}}/>
-                  <col style={{width:"85px"}}/>
-                  <col style={{width:"52px"}}/>
-                  <col style={{width:"85px"}}/>
-                  <col style={{width:"125px"}}/>
-                  <col style={{width:"60px"}}/>
+                  <col style={{width:"88px"}}/>
+                  {Array.from({length:12}).map((_,i)=><col key={i} style={{width:"52px"}}/>)}
+                  <col style={{width:"70px"}}/>
+                  <col style={{width:"58px"}}/>
                   <col/>
                 </colgroup>
                 <thead className="bg-indigo-900/90 text-white">
                   <tr>
-                    {["Shift Date","Next Day","Emp ID","Employee","Department","Branch","Shift","Status"].map(h=>(
-                      <th key={h} className="px-3 py-2.5 text-left font-semibold whitespace-nowrap overflow-hidden" rowSpan={2}>{h}</th>
+                    {["Shift Date","Next Day","Emp ID","Employee","Dept","Branch","Shift","Status"].map(h=>(
+                      <th key={h} className="px-2 py-2.5 text-left font-semibold whitespace-nowrap overflow-hidden" rowSpan={2}>{h}</th>
                     ))}
-                    <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-indigo-700/60" colSpan={2}>Punch 1–2 (Evening)</th>
-                    <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-violet-700/60" colSpan={2}>Punch 3–4 (Morning)</th>
-                    <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap bg-green-800/50" rowSpan={2}>Total Hrs</th>
-                    <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap" rowSpan={2}>OT Hrs</th>
-                    <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap bg-indigo-700/40" rowSpan={2}>Remarks</th>
+                    <th className="px-2 py-1.5 text-center font-semibold whitespace-nowrap bg-indigo-700/60 text-[10px]" colSpan={6}>Evening Punches (P1–P6)</th>
+                    <th className="px-2 py-1.5 text-center font-semibold whitespace-nowrap bg-violet-700/60 text-[10px]" colSpan={6}>Morning Punches (P7–P12)</th>
+                    <th className="px-2 py-2.5 text-left font-semibold whitespace-nowrap bg-green-800/50 text-[10px]" rowSpan={2}>Total</th>
+                    <th className="px-2 py-2.5 text-left font-semibold whitespace-nowrap text-[10px]" rowSpan={2}>OT</th>
+                    <th className="px-2 py-2.5 text-left font-semibold whitespace-nowrap bg-indigo-700/40 text-[10px]" rowSpan={2}>Remarks</th>
                   </tr>
                   <tr className="border-b border-indigo-600">
-                    <th className="px-3 py-1 text-[10px] font-medium bg-indigo-700/40 text-center">In</th>
-                    <th className="px-3 py-1 text-[10px] font-medium bg-indigo-700/40 text-center">Out</th>
-                    <th className="px-3 py-1 text-[10px] font-medium bg-violet-700/40 text-center">In</th>
-                    <th className="px-3 py-1 text-[10px] font-medium bg-violet-700/40 text-center">Out (next day)</th>
+                    {[1,2,3,4,5,6].map(n=>(
+                      <th key={n} className="px-1 py-1 text-[9px] font-medium bg-indigo-700/40 text-center">P{n}</th>
+                    ))}
+                    {[7,8,9,10,11,12].map(n=>(
+                      <th key={n} className="px-1 py-1 text-[9px] font-medium bg-violet-700/40 text-center">P{n}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {filtered.slice(0,300).map((r:any)=>{
-                    const p1m = calcMins(r.inTime1, r.outTime1, true);
-                    const p2m = calcMins(r.inTime2, r.outTime2, true);
-                    const totalHrs = r.totalHours != null ? r.totalHours : (p1m + p2m) / 60;
+                    const punches: (string|null)[] = Array.from({length:12}, (_,i) =>
+                      r.rawPunches?.[i] ?? null
+                    );
+                    const totalHrs = r.totalHours ?? 0;
                     const totalH = Math.floor(totalHrs), totalMin = Math.round((totalHrs - totalH) * 60);
-                    const hasP1 = !!(r.inTime1);
-                    const hasP2 = !!(r.outTime1);
-                    const hasP3 = !!(r.inTime2);
-                    const hasP4 = !!(r.outTime2);
-                    const missingOut = hasP1 && !hasP2 && !hasP3 && !hasP4;
                     return (
-                    <tr key={r.id} className="hover:bg-indigo-50/30 transition-colors align-top">
-                      <td className="px-3 py-2 whitespace-nowrap">
+                    <tr key={r.id} className="hover:bg-indigo-50/30 transition-colors align-middle">
+                      <td className="px-2 py-2 whitespace-nowrap">
                         <div className="font-mono text-xs">{r.date}</div>
                         {r.isNightShiftMerged && (
-                          <div className="text-[10px] text-indigo-500 font-medium">🌙 overnight</div>
+                          <div className="text-[9px] text-indigo-400 font-medium">🌙 overnight</div>
                         )}
                       </td>
-                      <td className="px-3 py-2 font-mono text-[11px] whitespace-nowrap text-indigo-600">
+                      <td className="px-2 py-2 font-mono text-[10px] whitespace-nowrap text-indigo-500">
                         {r.morningDate || "—"}
                       </td>
-                      <td className="px-3 py-2 font-mono whitespace-nowrap text-muted-foreground">{r.employeeCode}</td>
-                      <td className="px-3 py-2 font-medium truncate" title={r.employeeName}>{r.employeeName}</td>
-                      <td className="px-3 py-2 text-muted-foreground truncate">{r.department||"—"}</td>
-                      <td className="px-3 py-2 text-muted-foreground truncate">{r.branchName}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-2 font-mono whitespace-nowrap text-muted-foreground text-[10px]">{r.employeeCode}</td>
+                      <td className="px-2 py-2 font-medium truncate text-[11px]" title={r.employeeName}>{r.employeeName}</td>
+                      <td className="px-2 py-2 text-muted-foreground truncate text-[10px]">{r.department||"—"}</td>
+                      <td className="px-2 py-2 text-muted-foreground truncate text-[10px]">{r.branchName}</td>
+                      <td className="px-2 py-2">
                         <div className="font-medium text-indigo-700 text-[10px] truncate">{r.shiftName||"—"}</div>
-                        {r.shiftTime && <div className="text-[10px] text-muted-foreground">{r.shiftTime}</div>}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <span className={cn("px-2 py-0.5 rounded text-xs font-medium",STATUS_COLORS[r.status]||"bg-gray-100")}>
+                      <td className="px-2 py-2 whitespace-nowrap">
+                        <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium",STATUS_COLORS[r.status]||"bg-gray-100")}>
                           {fmtStatus(r.status)}
                         </span>
                       </td>
-                      {/* Punch 1 — evening check-in */}
-                      <td className="px-3 py-2 font-mono whitespace-nowrap text-indigo-700 bg-indigo-50/30 text-center">
-                        {hasP1 ? r.inTime1 : <span className="text-muted-foreground">—</span>}
-                      </td>
-                      {/* Punch 2 — evening check-out / break */}
-                      <td className="px-3 py-2 bg-indigo-50/30 whitespace-nowrap text-center">
-                        {hasP2 ? (
-                          <div>
-                            <div className="font-mono text-indigo-700">{r.outTime1}</div>
-                            {p1m > 0 && <div className="text-[10px] text-indigo-500 font-medium">{fmtHM(p1m)}</div>}
-                          </div>
-                        ) : missingOut ? (
-                          <span className="text-amber-500 text-[10px] font-semibold">Missing</span>
-                        ) : <span className="text-muted-foreground">—</span>}
-                      </td>
-                      {/* Punch 3 — morning re-entry */}
-                      <td className="px-3 py-2 font-mono whitespace-nowrap text-violet-700 bg-violet-50/30 text-center">
-                        {hasP3 ? r.inTime2 : <span className="text-muted-foreground">—</span>}
-                      </td>
-                      {/* Punch 4 — morning final checkout */}
-                      <td className="px-3 py-2 bg-violet-50/30 whitespace-nowrap text-center">
-                        {hasP4 ? (
-                          <div>
-                            <div className="font-mono text-violet-700">{r.outTime2}</div>
-                            {p2m > 0 && <div className="text-[10px] text-violet-500 font-medium">{fmtHM(p2m)}</div>}
-                          </div>
-                        ) : <span className="text-muted-foreground">—</span>}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap bg-green-50/20">
-                        {r.totalHours != null && r.totalHours > 0 ? (
+                      {/* P1–P12 punch columns */}
+                      {punches.map((pt, idx) => {
+                        const isEvening = idx < 6;
+                        return (
+                          <td key={idx} className={cn(
+                            "px-1 py-2 font-mono text-[10px] text-center whitespace-nowrap",
+                            isEvening ? "bg-indigo-50/30 text-indigo-700" : "bg-violet-50/30 text-violet-700"
+                          )}>
+                            {pt ?? <span className="text-muted-foreground/40">—</span>}
+                          </td>
+                        );
+                      })}
+                      <td className="px-2 py-2 whitespace-nowrap bg-green-50/20">
+                        {totalHrs > 0 ? (
                           <div className="flex flex-col gap-0.5">
-                            <span className="font-semibold text-green-700 text-xs">✅ {totalH}:{String(totalMin).padStart(2,"0")} hrs</span>
+                            <span className="font-semibold text-green-700 text-[10px]">✅ {totalH}:{String(totalMin).padStart(2,"0")}</span>
                             {r.holidayType && (
-                              <span className={`text-[10px] font-semibold ${
+                              <span className={`text-[9px] font-semibold ${
                                 r.holidayType==="statutory" ? "text-red-600"
                                   : r.holidayType==="poya" ? "text-amber-600"
                                   : "text-blue-600"}`}>
-                                {r.holidayType==="statutory"?"Statutory":r.holidayType==="poya"?"Poya":"Public"} Holiday × {Number(r.holidayMultiplier).toFixed(1)}
+                                ×{Number(r.holidayMultiplier).toFixed(1)}
                               </span>
                             )}
                           </div>
-                        ) : <span className="text-muted-foreground">—</span>}
+                        ) : <span className="text-muted-foreground/50">—</span>}
                       </td>
-                      <td className="px-3 py-2 font-mono whitespace-nowrap">
+                      <td className="px-2 py-2 font-mono whitespace-nowrap text-[10px]">
                         {r.overtimeHours>0?`${r.overtimeHours.toFixed(1)}h`:"—"}
                         {r.holidayWorked && r.overtimeHours>0 && (
-                          <span className="ml-1 text-[10px] text-orange-600 font-semibold">×{Number(r.holidayMultiplier).toFixed(1)}</span>
+                          <span className="ml-0.5 text-[9px] text-orange-600 font-semibold">×{Number(r.holidayMultiplier).toFixed(1)}</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 bg-indigo-50/10 max-w-[200px]">
+                      <td className="px-2 py-2 bg-indigo-50/10 max-w-[160px]">
                         {(() => {
                           const rm = getRemarks(r);
                           return rm ? (
                             <span className="text-[10px] leading-snug text-indigo-700 block" title={rm}>{rm}</span>
-                          ) : <span className="text-muted-foreground text-[10px]">—</span>;
+                          ) : <span className="text-muted-foreground/40 text-[10px]">—</span>;
                         })()}
                       </td>
                     </tr>
                     );
                   })}
-                  {!filtered.length && <tr><td colSpan={13} className="text-center py-8 text-muted-foreground">No records found for the selected filters.</td></tr>}
+                  {!filtered.length && <tr><td colSpan={23} className="text-center py-8 text-muted-foreground">No records found for the selected filters.</td></tr>}
                 </tbody>
               </table>
             ) : (
