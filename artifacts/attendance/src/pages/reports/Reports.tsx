@@ -1087,8 +1087,10 @@ function AttendanceReport() {
                           <span className={cn("px-2 py-0.5 rounded text-xs font-medium",STATUS_COLORS[r.status]||"bg-gray-100")}>
                             {fmtStatus(r.status)}
                           </span>
-                          {r.status === "late" && r.inTime1 && (() => {
-                            const lm = calcLateMinutes(r.inTime1);
+                          {r.status === "late" && (() => {
+                            const lm = (r as any).morningLateMinutes > 0
+                              ? (r as any).morningLateMinutes
+                              : calcLateMinutes(r.inTime1);
                             if (lm <= 0) return null;
                             const display = lm >= 60
                               ? `+${Math.floor(lm/60)}h ${lm%60}m late`
