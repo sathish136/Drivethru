@@ -453,6 +453,10 @@ router.get("/attendance", async (req, res) => {
           if (seen.has(`${emp.id}|${date}`)) continue;
           // Don't synthesize rows for dates before the employee joined.
           if (joinDate && date < joinDate) continue;
+          // Guard against JS Date overflow (e.g. "2026-04-31" → May 1).
+          // Always clamp synthesized rows to the requested string range.
+          if ((startDate as string) && date < (startDate as string)) continue;
+          if ((endDate as string) && date > (endDate as string)) continue;
 
           const dow = new Date(date + "T00:00:00Z").getUTCDay();
           const isOffDay = !!(wo?.offDays?.includes(dow));
