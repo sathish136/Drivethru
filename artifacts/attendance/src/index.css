@@ -78,6 +78,20 @@
   width: calc(100% + 8px); /* stretch into the nav's right padding to reach sidebar wall */
 }
 
+/* ── Professional financial amount display ──────────────────────────── */
+.amt-currency {
+  font-size: 0.68em;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  margin-right: 0.28em;
+  opacity: 0.52;
+  font-variant-numeric: normal;
+}
+.amt-number {
+  font-feature-settings: "tnum" 1, "zero" 1;
+  letter-spacing: -0.03em;
+}
+
 /* Custom Scrollbar for dense tables */
 ::-webkit-scrollbar {
   width: 6px;

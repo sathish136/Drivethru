@@ -1063,6 +1063,12 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
             const totalDeductions = epfEe + epfEr + etf + totalCustomDeds;
             const netPay = totalEarnings - epfEe - totalCustomDeds;
             const fmt = (n: number) => n.toLocaleString("en-LK", { minimumFractionDigits: 2 });
+            const Amt = ({ n, cls = "" }: { n: number; cls?: string }) => (
+              <span className={cls}>
+                <span className="amt-currency">LKR</span>
+                <span className="amt-number">{fmt(n)}</span>
+              </span>
+            );
 
             return (
               <div className="space-y-5">
@@ -1123,8 +1129,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                     <div className="flex items-center gap-3 px-3 py-2 bg-green-50/40 border-b border-green-100">
                       <span className="text-[10px] text-muted-foreground w-4 shrink-0">1</span>
                       <span className="text-xs font-semibold flex-1 text-foreground">Basic Salary</span>
-                      <span className="text-xs text-muted-foreground">LKR</span>
-                      <span className="text-xs font-mono font-semibold text-green-700 w-28 text-right">{basic > 0 ? fmt(basic) : "—"}</span>
+                      <Amt n={basic} cls="text-sm font-bold text-green-700 w-32 text-right" />
                       <span className="w-5 shrink-0" />
                     </div>
                     {/* Additional earnings */}
@@ -1133,8 +1138,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                         <span className="text-[10px] text-muted-foreground w-4 shrink-0">{i + 2}</span>
                         <input className={cn(INP, "flex-1 h-7")} placeholder="e.g. Transport Allowance"
                           value={row.component} onChange={e => setEmpEarnings(p => p.map(r => r.id === row.id ? { ...r, component: e.target.value } : r))} />
-                        <span className="text-xs text-muted-foreground shrink-0">LKR</span>
-                        <input type="number" min="0" className={cn(INP, "w-28 h-7 text-right")} placeholder="0"
+                        <input type="number" min="0" className={cn(INP, "w-28 h-7 text-right amt-number")} placeholder="0"
                           value={row.amount || ""} onChange={e => setEmpEarnings(p => p.map(r => r.id === row.id ? { ...r, amount: parseFloat(e.target.value) || 0 } : r))} />
                         <button onClick={() => setEmpEarnings(p => p.filter(r => r.id !== row.id))}
                           className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500">
@@ -1148,7 +1152,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                     {/* Total */}
                     <div className="flex items-center justify-between px-3 py-2 bg-green-50/60 border-t border-green-200">
                       <span className="text-xs font-bold text-green-900">Total Earnings</span>
-                      <span className="text-sm font-bold font-mono text-green-700">LKR {fmt(totalEarnings)}</span>
+                      <Amt n={totalEarnings} cls="text-sm font-bold text-green-700" />
                     </div>
                   </div>
                 </div>
@@ -1177,9 +1181,10 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                         <span className="text-[10px] text-muted-foreground w-4 shrink-0">{i + 1}</span>
                         <span className="text-xs flex-1">{d.label}</span>
                         <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded-full shrink-0">{d.pct}%</span>
-                        <span className={cn("text-xs font-mono font-semibold w-28 text-right", basic > 0 ? "text-red-700" : "text-muted-foreground")}>
-                          {basic > 0 ? `LKR ${fmt(d.val)}` : "—"}
-                        </span>
+                        {basic > 0
+                          ? <Amt n={d.val} cls="text-sm font-semibold text-red-700 w-32 text-right" />
+                          : <span className="text-xs text-muted-foreground w-32 text-right">—</span>
+                        }
                       </div>
                     ))}
                     {/* Custom deductions */}
@@ -1193,8 +1198,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                         <span className="text-[10px] text-muted-foreground w-4 shrink-0">{i + 4}</span>
                         <input className={cn(INP, "flex-1 h-7")} placeholder="e.g. Loan Installment"
                           value={row.component} onChange={e => setEmpCustomDeds(p => p.map(r => r.id === row.id ? { ...r, component: e.target.value } : r))} />
-                        <span className="text-xs text-muted-foreground shrink-0">LKR</span>
-                        <input type="number" min="0" className={cn(INP, "w-28 h-7 text-right")} placeholder="0"
+                        <input type="number" min="0" className={cn(INP, "w-28 h-7 text-right amt-number")} placeholder="0"
                           value={row.amount || ""} onChange={e => setEmpCustomDeds(p => p.map(r => r.id === row.id ? { ...r, amount: parseFloat(e.target.value) || 0 } : r))} />
                         <button onClick={() => setEmpCustomDeds(p => p.filter(r => r.id !== row.id))}
                           className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500">
@@ -1205,7 +1209,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                     {/* Total */}
                     <div className="flex items-center justify-between px-3 py-2 bg-red-50/60 border-t border-red-200">
                       <span className="text-xs font-bold text-red-900">Total Deductions</span>
-                      <span className="text-sm font-bold font-mono text-red-700">LKR {fmt(totalDeductions)}</span>
+                      <Amt n={totalDeductions} cls="text-sm font-bold text-red-700" />
                     </div>
                   </div>
                 </div>
@@ -1217,7 +1221,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                       <p className="text-xs font-bold text-foreground">Estimated Net Pay</p>
                       <p className="text-[10px] text-muted-foreground mt-0.5">Gross earnings – EPF(EE) – other deductions</p>
                     </div>
-                    <span className="text-xl font-bold font-mono text-primary">LKR {fmt(netPay)}</span>
+                    <Amt n={netPay} cls="text-xl font-bold text-primary" />
                   </div>
                 )}
 
