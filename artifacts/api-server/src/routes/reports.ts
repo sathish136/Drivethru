@@ -329,12 +329,19 @@ router.get("/attendance", async (req, res) => {
       }])
     );
     const empWeekoffById = new Map<number, WeekOffInfo | null>();
+    /* Also build nightShiftEmployeeIds from the employees table directly so
+       it works even when the attendance table is empty (e.g. after a reset). */
+    const nightShiftEmployeeIds = new Set<number>();
     {
       const rows = await db.select({
-        id: employees.id, weekoffScheduleId: employees.weekoffScheduleId,
+        id: employees.id,
+        weekoffScheduleId: employees.weekoffScheduleId,
+        shiftId: employees.shiftId,
       }).from(employees);
       for (const r of rows) {
         empWeekoffById.set(r.id, r.weekoffScheduleId ? weekoffMap.get(r.weekoffScheduleId) ?? null : null);
+        const empShift = r.shiftId ? shiftMap.get(r.shiftId) : undefined;
+        if (isNightShift(empShift)) nightShiftEmployeeIds.add(r.id);
       }
     }
 
@@ -352,12 +359,6 @@ router.get("/attendance", async (req, res) => {
     // Merge overnight (evening + morning) records for night-shift employees
     const getShift = (shiftId: number | null | undefined) =>
       shiftId ? shiftMap.get(shiftId) : undefined;
-
-    const nightShiftEmployeeIds = new Set(
-      all
-        .filter(r => isNightShift(getShift(r.empShiftId)))
-        .map(r => r.rec.employeeId),
-    );
 
     const processedAll = nightShiftEmployeeIds.size > 0
       ? mergeNightShiftRecords(all, nightShiftEmployeeIds)
