@@ -621,9 +621,9 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
     { key: "connections",  label: "Connections" },
   ] as const;
 
-  const INP = "w-full rounded border border-border bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary transition-colors text-foreground placeholder:text-muted-foreground/50";
+  const INP = "w-full rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors text-foreground placeholder:text-muted-foreground/50";
   const SEL = `${INP} appearance-none`;
-  const LBL = "block text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide";
+  const LBL = "block text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide";
 
   function FLabel({ label, required }: { label: string; required?: boolean }) {
     return <label className={LBL}>{label}{required && <span className="text-red-500 ml-0.5">*</span>}</label>;
@@ -644,78 +644,78 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
     <div className="flex overflow-hidden bg-background" style={{height:"calc(100vh - 56px)"}}>
 
       {/* ── Left Sidebar ── */}
-      <div className="w-56 shrink-0 border-r border-border flex flex-col bg-muted/10 overflow-y-auto">
+      <div className="w-64 shrink-0 border-r border-border flex flex-col bg-muted/10 overflow-y-auto">
 
         {/* Photo */}
-        <div className="flex flex-col items-center pt-6 pb-4 px-4 border-b border-border">
-          <div className="relative group mb-3">
-            <div className="w-28 h-28 rounded-xl border-2 border-border bg-muted overflow-hidden flex items-center justify-center shadow-sm">
+        <div className="flex flex-col items-center pt-8 pb-5 px-5 border-b border-border">
+          <div className="relative group mb-4">
+            <div className="w-36 h-36 rounded-2xl border-2 border-border bg-muted overflow-hidden flex items-center justify-center shadow-sm">
               {photoPreview
                 ? <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
-                : <span className="text-3xl font-bold text-muted-foreground/40">{initials}</span>
+                : <span className="text-4xl font-bold text-muted-foreground/40">{initials}</span>
               }
             </div>
             <button type="button"
               disabled={!emp?.id || photoUploading}
               onClick={() => photoRef.current?.click()}
               className={cn(
-                "absolute bottom-1 right-1 w-7 h-7 rounded-full border-2 border-background flex items-center justify-center shadow transition-all",
+                "absolute bottom-1.5 right-1.5 w-8 h-8 rounded-full border-2 border-background flex items-center justify-center shadow transition-all",
                 emp?.id ? "bg-primary text-white hover:bg-primary/90 cursor-pointer" : "bg-muted text-muted-foreground cursor-not-allowed"
               )}>
               {photoUploading
-                ? <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                : <Camera className="w-3 h-3" />
+                ? <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                : <Camera className="w-3.5 h-3.5" />
               }
             </button>
             <input ref={photoRef} type="file" className="hidden" accept="image/jpeg,image/png,image/webp" onChange={handlePhotoUpload} />
           </div>
 
           {/* Name + Status */}
-          <p className="font-bold text-sm text-foreground text-center leading-tight">{displayName}</p>
+          <p className="font-bold text-base text-foreground text-center leading-tight">{displayName}</p>
           {emp && (
-            <span className={cn("mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold", STATUS_STYLE[emp.status] || STATUS_STYLE.active)}>
+            <span className={cn("mt-2 px-2.5 py-1 rounded-full text-xs font-bold", STATUS_STYLE[emp.status] || STATUS_STYLE.active)}>
               {emp.status === "on_leave" ? "On Leave" : (emp.status?.[0]?.toUpperCase() + emp.status?.slice(1)) || "Active"}
             </span>
           )}
           {emp && (
-            <p className="mt-1 text-[10px] text-muted-foreground font-mono">{emp.employeeId}</p>
+            <p className="mt-1.5 text-xs text-muted-foreground font-mono">{emp.employeeId}</p>
           )}
         </div>
 
         {/* Meta sections */}
-        <div className="flex-1 px-3 py-3 space-y-4 text-xs">
+        <div className="flex-1 px-4 py-4 space-y-5 text-sm">
 
           {/* Employment info pills */}
           {emp && (
-            <div className="space-y-1.5">
+            <div className="space-y-2.5">
               {emp.department && (
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Briefcase className="w-3 h-3 shrink-0" />
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Briefcase className="w-4 h-4 shrink-0" />
                   <span className="truncate">{emp.department}</span>
                 </div>
               )}
               {branchObj && (
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <MapPin className="w-3 h-3 shrink-0" />
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <MapPin className="w-4 h-4 shrink-0" />
                   <span className="truncate">{branchObj.name}</span>
                 </div>
               )}
               {selectedShift && (
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Clock className="w-3 h-3 shrink-0" />
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Clock className="w-4 h-4 shrink-0" />
                   <span className="truncate">{selectedShift.name}</span>
                 </div>
               )}
               {emp.phone && (
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Phone className="w-3 h-3 shrink-0" />
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Phone className="w-4 h-4 shrink-0" />
                   <span className="truncate">{emp.phone}</span>
                 </div>
               )}
               {emp.email && (
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Mail className="w-3 h-3 shrink-0" />
-                  <span className="truncate text-[10px]">{emp.email}</span>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Mail className="w-4 h-4 shrink-0" />
+                  <span className="truncate text-xs">{emp.email}</span>
                 </div>
               )}
             </div>
@@ -726,15 +726,15 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
           {/* Documents status */}
           <div>
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-1">
-              <FileText className="w-3 h-3" /> Documents
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5" /> Documents
             </p>
-            <div className="space-y-1">
+            <div className="space-y-2">
               {docList.map(d => (
-                <div key={d.label} className="flex items-center gap-1.5 text-[10px]">
+                <div key={d.label} className="flex items-center gap-2 text-xs">
                   {d.url
-                    ? <CheckCircle className="w-3 h-3 text-green-500 shrink-0" />
-                    : <CircleDashed className="w-3 h-3 text-muted-foreground/50 shrink-0" />}
+                    ? <CheckCircle className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                    : <CircleDashed className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />}
                   <span className={d.url ? "text-foreground" : "text-muted-foreground/70"}>{d.label}</span>
                 </div>
               ))}
@@ -746,10 +746,10 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
             <>
               <div className="border-t border-border" />
               <div>
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-1">
-                  <BadgeIndianRupee className="w-3 h-3" /> Payroll
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                  <BadgeIndianRupee className="w-3.5 h-3.5" /> Payroll
                 </p>
-                <div className="space-y-1 text-[10px]">
+                <div className="space-y-1.5 text-xs">
                   {form.basicSalary && (
                     <div className="flex justify-between text-muted-foreground">
                       <span>Basic</span>
@@ -777,37 +777,37 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Top bar */}
-        <div className="shrink-0 border-b border-border bg-background px-5 py-2.5 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <button onClick={onClose} className="hover:text-foreground transition-colors flex items-center gap-1">
-              <ChevronLeft className="w-3.5 h-3.5" /> Employee
+        <div className="shrink-0 border-b border-border bg-background px-6 py-3.5 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <button onClick={onClose} className="hover:text-foreground transition-colors flex items-center gap-1.5">
+              <ChevronLeft className="w-4 h-4" /> Employee
             </button>
             <span className="text-border">›</span>
             <span className="text-foreground font-medium">{emp ? emp.employeeId : "New Employee"}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={onClose} className="px-3 py-1.5 text-xs border border-border rounded-lg hover:bg-muted transition-colors">
+          <div className="flex items-center gap-2.5">
+            <button onClick={onClose} className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors">
               Cancel
             </button>
             <button
               onClick={handleSave}
               disabled={isPending}
-              className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-60 transition-colors"
+              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-60 transition-colors"
             >
-              <Save className="w-3.5 h-3.5" />
+              <Save className="w-4 h-4" />
               {isPending ? "Saving…" : emp ? "Save" : "Create Employee"}
             </button>
           </div>
         </div>
 
         {/* Tab bar */}
-        <div className="shrink-0 border-b border-border bg-background px-5 flex gap-0">
+        <div className="shrink-0 border-b border-border bg-background px-6 flex gap-0">
           {PROFILE_TABS.map(({ key, label }) => (
             <button
               key={key}
               onClick={() => setTab(key as any)}
               className={cn(
-                "px-4 py-3 text-xs font-medium border-b-2 transition-all whitespace-nowrap",
+                "px-5 py-3.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap",
                 tab === key
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
@@ -819,21 +819,21 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
         </div>
 
         {/* Tab content */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-8 py-7">
 
           {/* ── OVERVIEW TAB ── */}
           {tab === "overview" && (
-            <div className="space-y-6">
+            <div className="space-y-8">
               {/* Error banner */}
               {empIdError && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />{empIdError}
+                <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  <AlertCircle className="w-4 h-4 shrink-0" />{empIdError}
                 </div>
               )}
 
               {/* Main fields grid */}
               <div>
-                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                <div className="grid grid-cols-3 gap-x-8 gap-y-6">
                   <div>
                     <FLabel label="Employee ID" required />
                     <input
@@ -844,7 +844,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                       disabled={!!emp}
                     />
                     {!emp && (
-                      <p className="text-[10px] text-muted-foreground mt-0.5">Auto-fills when Biometric ID is entered (Joining tab)</p>
+                      <p className="text-xs text-muted-foreground mt-1">Auto-fills when Biometric ID is entered (Joining tab)</p>
                     )}
                   </div>
                   <div>
@@ -891,11 +891,11 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
               {/* Company Details divider */}
               <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-xs font-bold text-foreground">Company Details</span>
+                <div className="flex items-center gap-3 mb-5">
+                  <span className="text-sm font-bold text-foreground">Company Details</span>
                   <div className="flex-1 border-t border-border" />
                 </div>
-                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                <div className="grid grid-cols-3 gap-x-8 gap-y-6">
                   <div>
                     <FLabel label="Department" required />
                     <select className={SEL} value={form.department} onChange={e => set("department", e.target.value)}>
@@ -928,15 +928,15 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
           {/* ── DETAILS TAB (Joining + Contacts + Personal merged) ── */}
           {tab === "details" && (
-            <div className="space-y-6">
+            <div className="space-y-8">
 
               {/* Joining */}
               <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-xs font-bold text-foreground">Joining</span>
+                <div className="flex items-center gap-3 mb-5">
+                  <span className="text-sm font-bold text-foreground">Joining</span>
                   <div className="flex-1 border-t border-border" />
                 </div>
-                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                <div className="grid grid-cols-3 gap-x-8 gap-y-6">
                   <div>
                     <FLabel label="Date of Joining" required />
                     <input type="date" className={INP} value={form.joiningDate} onChange={e => set("joiningDate", e.target.value)} />
@@ -945,7 +945,7 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                     <FLabel label="Biometric Device ID" />
                     <input className={INP} placeholder="e.g. 50" value={form.biometricId} onChange={e => set("biometricId", e.target.value)} />
                     {!emp && form.biometricId && (
-                      <p className="text-[10px] text-primary mt-0.5">
+                      <p className="text-xs text-primary mt-1">
                         Employee ID will be auto-set to <span className="font-mono font-semibold">{form.employeeId}</span>
                       </p>
                     )}
@@ -959,10 +959,10 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                       ))}
                     </select>
                     {weekoffSched && (
-                      <div className="flex gap-1 mt-1.5 flex-wrap">
+                      <div className="flex gap-1.5 mt-2 flex-wrap">
                         {DAY_S.map((d, i) => (
                           <span key={i} className={cn(
-                            "text-[10px] font-bold px-1 py-0.5 rounded",
+                            "text-xs font-bold px-1.5 py-0.5 rounded",
                             weekoffSched.offDays?.includes(i) ? "bg-red-100 text-red-700" :
                             weekoffSched.halfDays?.includes(i) ? "bg-amber-100 text-amber-700" :
                             "bg-green-50 text-green-700"
@@ -976,11 +976,11 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
               {/* Contact */}
               <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-xs font-bold text-foreground">Contact</span>
+                <div className="flex items-center gap-3 mb-5">
+                  <span className="text-sm font-bold text-foreground">Contact</span>
                   <div className="flex-1 border-t border-border" />
                 </div>
-                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                <div className="grid grid-cols-3 gap-x-8 gap-y-6">
                   <div>
                     <FLabel label="Phone" />
                     <input className={INP} placeholder="+94 XX XXX XXXX" value={form.phone} onChange={e => set("phone", e.target.value)} />
@@ -998,20 +998,20 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
               {/* Identity */}
               <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-xs font-bold text-foreground">Identity</span>
+                <div className="flex items-center gap-3 mb-5">
+                  <span className="text-sm font-bold text-foreground">Identity</span>
                   <div className="flex-1 border-t border-border" />
                 </div>
-                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                <div className="grid grid-cols-3 gap-x-8 gap-y-6">
                   <div>
                     <FLabel label="NIC Number" />
                     <input className={cn(INP, "font-mono")} placeholder="e.g. 199012345678" value={form.nicNumber} onChange={e => set("nicNumber", e.target.value)} maxLength={12} />
-                    <p className="text-[10px] text-muted-foreground mt-0.5">National Identity Card (9 or 12 digits)</p>
+                    <p className="text-xs text-muted-foreground mt-1">National Identity Card (9 or 12 digits)</p>
                   </div>
                   <div>
                     <FLabel label="Passport No." />
                     <input className={cn(INP, "font-mono uppercase")} placeholder="e.g. N1234567" value={form.panNumber} onChange={e => set("panNumber", e.target.value.toUpperCase())} maxLength={15} />
-                    <p className="text-[10px] text-muted-foreground mt-0.5">Optional — for non-citizen staff only</p>
+                    <p className="text-xs text-muted-foreground mt-1">Optional — for non-citizen staff only</p>
                   </div>
                 </div>
               </div>
@@ -1290,11 +1290,11 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
                 {/* ── Provident Fund ── */}
                 <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-xs font-bold text-foreground">Provident Fund</span>
+                  <div className="flex items-center gap-3 mb-4">
+                    <span className="text-sm font-bold text-foreground">Provident Fund</span>
                     <div className="flex-1 border-t border-border" />
                   </div>
-                  <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                  <div className="grid grid-cols-3 gap-x-8 gap-y-6">
                     <div>
                       <FLabel label="EPF Number" />
                       <input className={cn(INP, "font-mono")} placeholder="Employees' Provident Fund No." value={form.epfNumber} onChange={e => set("epfNumber", e.target.value)} />
@@ -1308,12 +1308,12 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
 
                 {/* ── Remarks ── */}
                 <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-xs font-bold text-foreground">Remarks</span>
+                  <div className="flex items-center gap-3 mb-4">
+                    <span className="text-sm font-bold text-foreground">Remarks</span>
                     <div className="flex-1 border-t border-border" />
                   </div>
                   <textarea
-                    className="w-full min-h-[70px] resize-y rounded-lg border border-border bg-background px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary transition-colors placeholder:text-muted-foreground/50"
+                    className="w-full min-h-[90px] resize-y rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors placeholder:text-muted-foreground/50"
                     placeholder="e.g. Late deduction after 8:15 am / OT after 5:30pm"
                     value={form.remarks} onChange={e => set("remarks", e.target.value)}
                   />
