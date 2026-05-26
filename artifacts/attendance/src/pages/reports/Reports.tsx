@@ -465,7 +465,6 @@ function AttendanceReport() {
   const [endDate, setEndDate]       = useState(now.toISOString().split("T")[0]);
   const [branchId, setBranchId]     = useState("");
   const [status, setStatus]         = useState("");
-  const [empType, setEmpType]       = useState("");
   const [department, setDepartment] = useState("");
   const [empName, setEmpName]       = useState("");
 
@@ -499,10 +498,9 @@ function AttendanceReport() {
   }, [data]);
 
   const filtered = useMemo(() => (data?.records || []).filter((r: any) =>
-    (!empType || r.employeeType === empType)
-    && (!department || r.department === department)
+    (!department || r.department === department)
     && (!empName || (r.employeeName || "").toLowerCase().includes(empName.toLowerCase()) || String(r.employeeId || "").toLowerCase().includes(empName.toLowerCase()))
-  ), [data, empType, department, empName]);
+  ), [data, department, empName]);
 
   // Auto-detect night-shift view: true when ALL non-off/holiday rows in the
   // filtered set belong to employees on a night shift (assigned shift startTime ≥ 18:00).
@@ -814,12 +812,6 @@ function AttendanceReport() {
               <option value="leave">Leave</option><option value="holiday">Holiday</option>
               <option value="off_day">Day Off</option>
             </Select></div>
-          <div><Label className="text-xs">Employee Type</Label>
-            <Select value={empType} onChange={e=>setEmpType(e.target.value)}>
-              <option value="">All Types</option>
-              <option value="permanent">Permanent</option><option value="contract">Contract</option>
-              <option value="casual">Casual</option>
-            </Select></div>
           <div><Label className="text-xs">Department</Label>
             <Select value={department} onChange={e=>setDepartment(e.target.value)}>
               <option value="">All Departments</option>
@@ -892,7 +884,7 @@ function AttendanceReport() {
                     const hasP4 = !!(r.outTime2);
                     const missingOut = hasP1 && !hasP2 && !hasP3 && !hasP4;
                     return (
-                    <tr key={r.id} className="hover:bg-indigo-50/30 transition-colors">
+                    <tr key={r.id} className="hover:bg-indigo-50/30 transition-colors align-top">
                       <td className="px-3 py-2 whitespace-nowrap">
                         <div className="font-mono text-xs">{r.date}</div>
                         {r.isNightShiftMerged && (
@@ -1007,7 +999,7 @@ function AttendanceReport() {
                     const has2 = !!(r.inTime2 && r.outTime2);
                     const onlyIn = !!(r.inTime1 && !r.outTime1 && !r.inTime2 && !r.outTime2);
                     return (
-                    <tr key={r.id} className="hover:bg-muted/30 transition-colors">
+                    <tr key={r.id} className="hover:bg-muted/30 transition-colors align-top">
                       <td className="px-3 py-2 font-mono whitespace-nowrap">{r.date}</td>
                       <td className="px-3 py-2 font-mono whitespace-nowrap text-muted-foreground">{r.employeeCode}</td>
                       <td className="px-3 py-2 font-medium whitespace-nowrap">{r.employeeName}</td>
