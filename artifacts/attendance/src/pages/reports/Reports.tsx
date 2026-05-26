@@ -991,9 +991,9 @@ function AttendanceReport() {
                   <col style={{width:"82px"}}/>
                   <col style={{width:"100px"}}/>
                   <col style={{width:"155px"}}/>
-                  <col style={{width:"80px"}}/>
-                  <col style={{width:"105px"}}/>
-                  <col style={{width:"90px"}}/>
+                  <col style={{width:"120px"}}/>
+                  <col style={{width:"130px"}}/>
+                  <col style={{width:"120px"}}/>
                   <col style={{width:"110px"}}/>
                   <col style={{width:"52px"}}/>
                   <col style={{width:"85px"}}/>
