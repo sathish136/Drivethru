@@ -975,7 +975,7 @@ function AttendanceReport() {
                         {(() => {
                           const rm = getRemarks(r);
                           return rm ? (
-                            <span className="text-[10px] leading-snug text-indigo-700 block" title={rm}>{rm}</span>
+                            <span className="text-[10px] leading-snug text-indigo-700 block line-clamp-2 break-words" title={rm}>{rm}</span>
                           ) : <span className="text-muted-foreground/40 text-[10px]">—</span>;
                         })()}
                       </td>
@@ -1120,7 +1120,7 @@ function AttendanceReport() {
                         {(() => {
                           const rm = getRemarks(r);
                           return rm ? (
-                            <span className="text-[10px] leading-snug text-indigo-700 block" title={rm}>{rm}</span>
+                            <span className="text-[10px] leading-snug text-indigo-700 block line-clamp-2 break-words" title={rm}>{rm}</span>
                           ) : <span className="text-muted-foreground text-[10px]">—</span>;
                         })()}
                       </td>
