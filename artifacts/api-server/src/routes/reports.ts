@@ -375,7 +375,7 @@ router.get("/attendance", async (req, res) => {
       // Run the policy-driven salary engine for THIS row.
       const sr = processSalaryRow({
         date,
-        shift: { name: empShift?.name, startTime: empShift?.startTime1, endTime: empShift?.endTime1 },
+        shift: { name: empShift?.name, startTime: empShift?.startTime1, endTime: empShift?.endTime1, graceMinutes: empShift?.graceMinutes ?? null },
         weekoff: empWeekoff,
         holiday: holidayByDate.get(date) ?? null,
         rec: {
@@ -471,7 +471,7 @@ router.get("/attendance", async (req, res) => {
           const empShift = baseShift ? resolveDayShift(baseShift, date, shiftsByName as any) : undefined;
           const sr = processSalaryRow({
             date,
-            shift: { name: empShift?.name, startTime: empShift?.startTime1, endTime: empShift?.endTime1 },
+            shift: { name: empShift?.name, startTime: empShift?.startTime1, endTime: empShift?.endTime1, graceMinutes: empShift?.graceMinutes ?? null },
             weekoff: wo,
             holiday: holidayByDate.get(date) ?? null,
             rec: { date, inTime1: null, outTime1: null, inTime2: null, outTime2: null, totalHours: 0 },
@@ -772,7 +772,7 @@ router.get("/monthly", async (req, res) => {
         // Salary engine = single source of truth
         const sr = processSalaryRow({
           date: r.date,
-          shift: { name: dayShift?.name, startTime: dayShift?.startTime1, endTime: dayShift?.endTime1 },
+          shift: { name: dayShift?.name, startTime: dayShift?.startTime1, endTime: dayShift?.endTime1, graceMinutes: dayShift?.graceMinutes ?? empShift?.graceMinutes ?? null },
           weekoff: empWeekoff,
           holiday: holidayInfo,
           rec: {

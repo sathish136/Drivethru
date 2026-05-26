@@ -202,6 +202,8 @@ export interface ShiftInfo {
   startTime?: string | null;
   /** Optional override: assigned end (HH:MM). Falls back to category default. */
   endTime?: string | null;
+  /** Late grace period in minutes from shift configuration. Falls back to LATE_GRACE_MINUTES (15). */
+  graceMinutes?: number | null;
 }
 
 export interface WeekOffInfo {
@@ -378,16 +380,13 @@ export function processSalaryRow(opts: {
     category !== "FLEXIBLE"
   ) {
     if (firstIn) {
-      // Late cutoff = assigned/category start + 15-min general grace, OR the
-      // category's explicit lateAfter when it differs (e.g. Reception 08:45).
-      const cutoff = (() => {
-        if (category === "REGULAR")   return defaults.lateAfter;          // 08:15
-        if (category === "RECEPTION") return defaults.lateAfter;          // 08:45
-        if (category === "HALF_DAY")  return defaults.lateAfter;          // 08:15
-        // KITCHEN, NIGHT → assigned/default start + 15 grace
-        // Night: startTime = "20:00" → cutoff "20:15"
-        return minsToTime(timeToMins(startTime) + LATE_GRACE_MINUTES);
-      })();
+      // Late cutoff = shift start + graceMinutes from shift configuration.
+      // graceMinutes from the DB shift record always wins; fall back to the
+      // hardcoded LATE_GRACE_MINUTES (15) only when not configured.
+      const grace = (shift?.graceMinutes != null && shift.graceMinutes >= 0)
+        ? shift.graceMinutes
+        : LATE_GRACE_MINUTES;
+      const cutoff = minsToTime(timeToMins(startTime) + grace);
       lateMinutes = lateMinutesAfter(firstIn, cutoff);
     }
   }

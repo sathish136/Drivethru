@@ -317,7 +317,7 @@ router.post("/generate", async (req, res) => {
         const dayShift = empShift ? resolveDayShift(empShift, rec.date, shiftsByName as any) : null;
         const sr = processSalaryRow({
           date: rec.date,
-          shift: { name: dayShift?.name ?? empShiftName, startTime: dayShift?.startTime1 ?? shiftStart1, endTime: dayShift?.endTime1 ?? shiftEnd1 },
+          shift: { name: dayShift?.name ?? empShiftName, startTime: dayShift?.startTime1 ?? shiftStart1, endTime: dayShift?.endTime1 ?? shiftEnd1, graceMinutes: dayShift?.graceMinutes ?? empShift?.graceMinutes ?? null },
           weekoff: empWeekoffInfo,
           holiday: holidayInfoMap.get(rec.date) ?? null,
           rec: {
