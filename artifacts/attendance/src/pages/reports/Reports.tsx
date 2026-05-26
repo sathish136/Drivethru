@@ -1042,7 +1042,7 @@ function AttendanceReport() {
                       <td className="px-3 py-2 whitespace-nowrap text-muted-foreground truncate">{r.branchName}</td>
                       <td className="px-3 py-2">
                         <div className="font-medium text-slate-700 text-[10px] truncate">{r.shiftName||"—"}</div>
-                        {r.shiftTime && <div className="text-[10px] text-muted-foreground">{r.shiftTime}</div>}
+                        {/* shiftTime hidden — re-enable later */}
                         {r.isNightShift && <span className="text-[10px] text-indigo-500 font-semibold">🌙</span>}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
