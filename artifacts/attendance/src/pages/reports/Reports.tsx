@@ -853,7 +853,7 @@ function AttendanceReport() {
           <div className="overflow-x-auto">
             {isNightShiftView ? (
               /* ── Night-shift 4-punch table ── */
-              <table className="w-full text-xs">
+              <table className="text-xs">
                 <thead className="bg-indigo-900/90 text-white">
                   <tr>
                     {["Shift Date","Next Day","Emp ID","Employee","Department","Branch","Status"].map(h=>(
@@ -968,7 +968,7 @@ function AttendanceReport() {
               </table>
             ) : (
               /* ── Standard day-shift table ── */
-              <table className="w-full text-xs">
+              <table className="text-xs">
                 <thead className="bg-muted/50">
                   <tr>
                     {["Date","Emp ID","Employee","Department","Branch","Status"].map(h=>(
