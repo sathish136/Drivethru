@@ -1114,116 +1114,167 @@ function EmployeeDrawer({ emp, branches, onClose, onSaved }: { emp?: any; branch
                   </div>
                 </div>
 
-                {/* ── Earnings Components ── */}
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-bold text-green-800">Earnings</span>
-                    <div className="flex-1 border-t border-green-200" />
-                    <button onClick={() => setEmpEarnings(p => [...p, newRow()])} disabled={!emp?.id}
-                      className="flex items-center gap-1 text-[10px] font-semibold text-green-700 hover:text-green-900 disabled:opacity-40">
-                      <Plus className="w-3 h-3" /> Add
-                    </button>
-                  </div>
-                  <div className="rounded-xl border border-green-200 overflow-hidden">
-                    {/* Basic row (fixed) */}
-                    <div className="flex items-center gap-3 px-3 py-2 bg-green-50/40 border-b border-green-100">
-                      <span className="text-[10px] text-muted-foreground w-4 shrink-0">1</span>
-                      <span className="text-xs font-semibold flex-1 text-foreground">Basic Salary</span>
-                      <Amt n={basic} cls="text-sm font-bold text-green-700 w-32 text-right" />
-                      <span className="w-5 shrink-0" />
-                    </div>
-                    {/* Additional earnings */}
-                    {empEarnings.map((row, i) => (
-                      <div key={row.id} className="flex items-center gap-2 px-3 py-1.5 border-b border-green-50 last:border-0">
-                        <span className="text-[10px] text-muted-foreground w-4 shrink-0">{i + 2}</span>
-                        <input className={cn(INP, "flex-1 h-7")} placeholder="e.g. Transport Allowance"
-                          value={row.component} onChange={e => setEmpEarnings(p => p.map(r => r.id === row.id ? { ...r, component: e.target.value } : r))} />
-                        <input type="number" min="0" className={cn(INP, "w-28 h-7 text-right amt-number")} placeholder="0"
-                          value={row.amount || ""} onChange={e => setEmpEarnings(p => p.map(r => r.id === row.id ? { ...r, amount: parseFloat(e.target.value) || 0 } : r))} />
-                        <button onClick={() => setEmpEarnings(p => p.filter(r => r.id !== row.id))}
-                          className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500">
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                    {empEarnings.length === 0 && (
-                      <div className="px-3 py-2 text-[10px] text-muted-foreground italic">No additional earnings. Click Add to include allowances.</div>
-                    )}
-                    {/* Total */}
-                    <div className="flex items-center justify-between px-3 py-2 bg-green-50/60 border-t border-green-200">
-                      <span className="text-xs font-bold text-green-900">Total Earnings</span>
-                      <Amt n={totalEarnings} cls="text-sm font-bold text-green-700" />
-                    </div>
-                  </div>
-                </div>
+                {/* ══ SALARY STRUCTURE TABLE ══════════════════════════════ */}
+                <div className="rounded-lg border border-border overflow-hidden text-xs">
 
-                {/* ── Deductions ── */}
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-bold text-red-800">Deductions</span>
-                    <div className="flex-1 border-t border-red-200" />
-                    <button onClick={() => setEmpCustomDeds(p => [...p, newRow()])} disabled={!emp?.id}
-                      className="flex items-center gap-1 text-[10px] font-semibold text-red-700 hover:text-red-900 disabled:opacity-40">
-                      <Plus className="w-3 h-3" /> Add
-                    </button>
-                  </div>
-                  <div className="rounded-xl border border-red-200 overflow-hidden">
-                    {/* Statutory section header */}
-                    <div className="px-3 py-1 bg-muted/20 border-b border-red-100">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Statutory (auto-calculated)</span>
-                    </div>
-                    {[
-                      { label: "EPF – Employee", pct: 8, val: epfEe },
-                      { label: "EPF – Employer", pct: 12, val: epfEr },
-                      { label: "ETF",             pct: 3,  val: etf },
-                    ].map((d, i) => (
-                      <div key={d.label} className="flex items-center gap-3 px-3 py-2 border-b border-red-50">
-                        <span className="text-[10px] text-muted-foreground w-4 shrink-0">{i + 1}</span>
-                        <span className="text-xs flex-1">{d.label}</span>
-                        <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded-full shrink-0">{d.pct}%</span>
-                        {basic > 0
-                          ? <Amt n={d.val} cls="text-sm font-semibold text-red-700 w-32 text-right" />
-                          : <span className="text-xs text-muted-foreground w-32 text-right">—</span>
-                        }
-                      </div>
-                    ))}
-                    {/* Custom deductions */}
-                    {empCustomDeds.length > 0 && (
-                      <div className="px-3 py-1 bg-muted/20 border-b border-red-100">
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Other Deductions</span>
-                      </div>
-                    )}
-                    {empCustomDeds.map((row, i) => (
-                      <div key={row.id} className="flex items-center gap-2 px-3 py-1.5 border-b border-red-50 last:border-0">
-                        <span className="text-[10px] text-muted-foreground w-4 shrink-0">{i + 4}</span>
-                        <input className={cn(INP, "flex-1 h-7")} placeholder="e.g. Loan Installment"
-                          value={row.component} onChange={e => setEmpCustomDeds(p => p.map(r => r.id === row.id ? { ...r, component: e.target.value } : r))} />
-                        <input type="number" min="0" className={cn(INP, "w-28 h-7 text-right amt-number")} placeholder="0"
-                          value={row.amount || ""} onChange={e => setEmpCustomDeds(p => p.map(r => r.id === row.id ? { ...r, amount: parseFloat(e.target.value) || 0 } : r))} />
-                        <button onClick={() => setEmpCustomDeds(p => p.filter(r => r.id !== row.id))}
-                          className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500">
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                    {/* Total */}
-                    <div className="flex items-center justify-between px-3 py-2 bg-red-50/60 border-t border-red-200">
-                      <span className="text-xs font-bold text-red-900">Total Deductions</span>
-                      <Amt n={totalDeductions} cls="text-sm font-bold text-red-700" />
-                    </div>
-                  </div>
-                </div>
+                  {/* ── EARNINGS section ── */}
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-green-700 text-white">
+                        <th className="px-3 py-2 text-left font-semibold w-8">#</th>
+                        <th className="px-3 py-2 text-left font-semibold">Earnings Component</th>
+                        <th className="px-3 py-2 text-center font-semibold w-32">Basis</th>
+                        <th className="px-3 py-2 text-right font-semibold w-36">Amount (LKR)</th>
+                        <th className="w-8" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {/* Basic — fixed row */}
+                      <tr className="bg-green-50/50 border-b border-green-100">
+                        <td className="px-3 py-2 text-muted-foreground">1</td>
+                        <td className="px-3 py-2 font-medium text-foreground">Basic Salary</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-[10px] font-semibold">Fixed</span>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <Amt n={basic} cls="font-bold text-green-700" />
+                        </td>
+                        <td />
+                      </tr>
+                      {/* Additional earnings */}
+                      {empEarnings.map((row, i) => (
+                        <tr key={row.id} className="border-b border-green-50 hover:bg-green-50/30">
+                          <td className="px-3 py-1.5 text-muted-foreground">{i + 2}</td>
+                          <td className="px-3 py-1.5">
+                            <input className={cn(INP, "h-7 w-full")} placeholder="Component name"
+                              value={row.component} onChange={e => setEmpEarnings(p => p.map(r => r.id === row.id ? { ...r, component: e.target.value } : r))} />
+                          </td>
+                          <td className="px-3 py-1.5 text-center">
+                            <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-semibold">Fixed</span>
+                          </td>
+                          <td className="px-3 py-1.5">
+                            <input type="number" min="0" className={cn(INP, "h-7 w-full text-right amt-number")} placeholder="0"
+                              value={row.amount || ""} onChange={e => setEmpEarnings(p => p.map(r => r.id === row.id ? { ...r, amount: parseFloat(e.target.value) || 0 } : r))} />
+                          </td>
+                          <td className="px-1 py-1.5 text-center">
+                            <button onClick={() => setEmpEarnings(p => p.filter(r => r.id !== row.id))}
+                              className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {empEarnings.length === 0 && (
+                        <tr className="border-b border-green-50">
+                          <td colSpan={5} className="px-3 py-2 text-[10px] text-muted-foreground italic">No additional earnings. Click + Add to include allowances.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-green-50 border-t-2 border-green-300">
+                        <td colSpan={2} className="px-3 py-2">
+                          <button onClick={() => setEmpEarnings(p => [...p, newRow()])} disabled={!emp?.id}
+                            className="flex items-center gap-1 text-[10px] font-semibold text-green-700 hover:text-green-900 disabled:opacity-40">
+                            <Plus className="w-3 h-3" /> Add Earning
+                          </button>
+                        </td>
+                        <td className="px-3 py-2 text-center text-[10px] font-bold text-green-800 uppercase tracking-wide">Total Earnings</td>
+                        <td className="px-3 py-2 text-right">
+                          <Amt n={totalEarnings} cls="font-bold text-green-800" />
+                        </td>
+                        <td />
+                      </tr>
+                    </tfoot>
+                  </table>
 
-                {/* ── Net Pay ── */}
-                {basic > 0 && (
-                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-bold text-foreground">Estimated Net Pay</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">Gross earnings – EPF(EE) – other deductions</p>
+                  {/* ── DEDUCTIONS section ── */}
+                  <table className="w-full border-collapse border-t-2 border-border">
+                    <thead>
+                      <tr className="bg-red-600 text-white">
+                        <th className="px-3 py-2 text-left font-semibold w-8">#</th>
+                        <th className="px-3 py-2 text-left font-semibold">Deduction Component</th>
+                        <th className="px-3 py-2 text-center font-semibold w-32">Rate / Basis</th>
+                        <th className="px-3 py-2 text-right font-semibold w-36">Amount (LKR)</th>
+                        <th className="w-8" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {/* Statutory rows */}
+                      {[
+                        { label: "EPF – Employee", pct: "8%", basis: "Basic × 8%", val: epfEe },
+                        { label: "EPF – Employer", pct: "12%", basis: "Basic × 12%", val: epfEr },
+                        { label: "ETF",             pct: "3%",  basis: "Basic × 3%",  val: etf },
+                      ].map((d, i) => (
+                        <tr key={d.label} className="border-b border-red-50 hover:bg-red-50/30">
+                          <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
+                          <td className="px-3 py-2 text-foreground font-medium">
+                            {d.label}
+                            <span className="ml-2 text-[10px] text-muted-foreground font-normal">(statutory)</span>
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-semibold">{d.pct}</span>
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            {basic > 0
+                              ? <Amt n={d.val} cls="font-semibold text-red-700" />
+                              : <span className="text-muted-foreground">—</span>
+                            }
+                          </td>
+                          <td />
+                        </tr>
+                      ))}
+                      {/* Custom deduction rows */}
+                      {empCustomDeds.map((row, i) => (
+                        <tr key={row.id} className="border-b border-red-50 hover:bg-red-50/30">
+                          <td className="px-3 py-1.5 text-muted-foreground">{i + 4}</td>
+                          <td className="px-3 py-1.5">
+                            <input className={cn(INP, "h-7 w-full")} placeholder="e.g. Loan Installment"
+                              value={row.component} onChange={e => setEmpCustomDeds(p => p.map(r => r.id === row.id ? { ...r, component: e.target.value } : r))} />
+                          </td>
+                          <td className="px-3 py-1.5 text-center">
+                            <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-semibold">Fixed</span>
+                          </td>
+                          <td className="px-3 py-1.5">
+                            <input type="number" min="0" className={cn(INP, "h-7 w-full text-right amt-number")} placeholder="0"
+                              value={row.amount || ""} onChange={e => setEmpCustomDeds(p => p.map(r => r.id === row.id ? { ...r, amount: parseFloat(e.target.value) || 0 } : r))} />
+                          </td>
+                          <td className="px-1 py-1.5 text-center">
+                            <button onClick={() => setEmpCustomDeds(p => p.filter(r => r.id !== row.id))}
+                              className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-red-50 border-t-2 border-red-300">
+                        <td colSpan={2} className="px-3 py-2">
+                          <button onClick={() => setEmpCustomDeds(p => [...p, newRow()])} disabled={!emp?.id}
+                            className="flex items-center gap-1 text-[10px] font-semibold text-red-700 hover:text-red-900 disabled:opacity-40">
+                            <Plus className="w-3 h-3" /> Add Deduction
+                          </button>
+                        </td>
+                        <td className="px-3 py-2 text-center text-[10px] font-bold text-red-800 uppercase tracking-wide">Total Deductions</td>
+                        <td className="px-3 py-2 text-right">
+                          <Amt n={totalDeductions} cls="font-bold text-red-800" />
+                        </td>
+                        <td />
+                      </tr>
+                    </tfoot>
+                  </table>
+
+                  {/* ── NET PAY footer ── */}
+                  {basic > 0 && (
+                    <div className="flex items-center justify-between px-4 py-3 bg-primary/5 border-t-2 border-primary/30">
+                      <div>
+                        <p className="font-bold text-foreground">Estimated Net Pay</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Gross Earnings − EPF (Employee) − Other Deductions</p>
+                      </div>
+                      <Amt n={netPay} cls="text-xl font-bold text-primary" />
                     </div>
-                    <Amt n={netPay} cls="text-xl font-bold text-primary" />
-                  </div>
-                )}
+                  )}
+                </div>
 
                 {/* ── Save button ── */}
                 {emp?.id && (
