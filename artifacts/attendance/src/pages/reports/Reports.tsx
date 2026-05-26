@@ -548,6 +548,17 @@ function AttendanceReport() {
     return relevant.every((r: any) => r.isNightShift === true);
   }, [filtered]);
 
+  // Flexible-shift view: true when ALL rows belong to a flexible shift.
+  // In this mode we show only first-punch In / last-punch Out / Total Hrs.
+  const isFlexibleView = useMemo(() => {
+    if (!filtered.length) return false;
+    const relevant = filtered.filter((r: any) => !["off_day","holiday"].includes(r.status));
+    if (!relevant.length) return false;
+    return relevant.every((r: any) =>
+      (empShiftNameMap[Number(r.employeeId)] ?? "").toLowerCase().includes("flexible")
+    );
+  }, [filtered, empShiftNameMap]);
+
   /* Auto-collapse sidebar when the night-shift 12-punch table is visible (needs extra width) */
   useEffect(() => {
     if (isNightShiftView) {
@@ -1041,18 +1052,31 @@ function AttendanceReport() {
                     {["Date","Emp ID","Employee","Department","Branch","Shift","Status"].map(h=>(
                       <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap overflow-hidden" rowSpan={2}>{h}</th>
                     ))}
-                    <th className="px-3 py-2 text-center font-semibold text-blue-600 whitespace-nowrap bg-blue-50/50" colSpan={2}>1st Session</th>
-                    <th className="px-3 py-2 text-center font-semibold text-purple-600 whitespace-nowrap bg-purple-50/50" rowSpan={2}>Lunch Break</th>
-                    <th className="px-3 py-2 text-center font-semibold text-orange-600 whitespace-nowrap bg-orange-50/50" colSpan={2}>2nd Session</th>
+                    {isFlexibleView ? (
+                      <>
+                        <th className="px-3 py-2 text-center font-semibold text-blue-600 whitespace-nowrap bg-blue-50/50" rowSpan={2}>In</th>
+                        <th className="px-3 py-2 text-center font-semibold text-blue-600 whitespace-nowrap bg-blue-50/50" rowSpan={2}>Out</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="px-3 py-2 text-center font-semibold text-blue-600 whitespace-nowrap bg-blue-50/50" colSpan={2}>1st Session</th>
+                        <th className="px-3 py-2 text-center font-semibold text-purple-600 whitespace-nowrap bg-purple-50/50" rowSpan={2}>Lunch Break</th>
+                        <th className="px-3 py-2 text-center font-semibold text-orange-600 whitespace-nowrap bg-orange-50/50" colSpan={2}>2nd Session</th>
+                      </>
+                    )}
                     <th className="px-3 py-2.5 text-left font-semibold text-green-700 whitespace-nowrap bg-green-50/40" rowSpan={2}>Total Hrs</th>
                     <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap" rowSpan={2}>OT Hrs</th>
                     {/* Remarks column hidden — re-enable later */}
                   </tr>
                   <tr className="border-b border-border">
-                    <th className="px-3 py-1 text-[10px] font-medium text-blue-500 bg-blue-50/30 text-center">In</th>
-                    <th className="px-3 py-1 text-[10px] font-medium text-blue-500 bg-blue-50/30 text-center">Out</th>
-                    <th className="px-3 py-1 text-[10px] font-medium text-orange-500 bg-orange-50/30 text-center">In</th>
-                    <th className="px-3 py-1 text-[10px] font-medium text-orange-500 bg-orange-50/30 text-center">Out</th>
+                    {!isFlexibleView && (
+                      <>
+                        <th className="px-3 py-1 text-[10px] font-medium text-blue-500 bg-blue-50/30 text-center">In</th>
+                        <th className="px-3 py-1 text-[10px] font-medium text-blue-500 bg-blue-50/30 text-center">Out</th>
+                        <th className="px-3 py-1 text-[10px] font-medium text-orange-500 bg-orange-50/30 text-center">In</th>
+                        <th className="px-3 py-1 text-[10px] font-medium text-orange-500 bg-orange-50/30 text-center">Out</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -1094,41 +1118,67 @@ function AttendanceReport() {
                           })()}
                         </div>
                       </td>
-                      <td className="px-3 py-2 font-mono whitespace-nowrap text-blue-700 bg-blue-50/20 text-center">
-                        {r.inTime1||"—"}
-                      </td>
-                      <td className="px-3 py-2 bg-blue-50/20 whitespace-nowrap text-center">
-                        {has1 ? (
-                          <div>
-                            <div className="font-mono text-blue-700">{r.outTime1}</div>
-                            <div className="text-[10px] text-blue-500 font-medium">{fmtHM(s1m)}</div>
-                          </div>
-                        ) : onlyIn ? (
-                          <span className="text-red-500 text-[10px] font-semibold">Missing</span>
-                        ) : <span className="text-muted-foreground">—</span>}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap bg-purple-50/20 text-center">
-                        {lb > 0 ? (
-                          <span className="font-mono text-purple-700 font-medium">{fmtHM(lb)}</span>
-                        ) : <span className="text-muted-foreground">—</span>}
-                      </td>
-                      <td className="px-3 py-2 font-mono whitespace-nowrap text-orange-700 bg-orange-50/20 text-center">
-                        {r.inTime2||"—"}
-                      </td>
-                      <td className="px-3 py-2 bg-orange-50/20 whitespace-nowrap text-center">
-                        {has2 ? (
-                          <div>
-                            <div className="font-mono text-orange-700">{r.outTime2}</div>
-                            <div className="text-[10px] text-orange-500 font-medium">{fmtHM(s2m)}</div>
-                          </div>
-                        ) : <span className="text-muted-foreground">—</span>}
-                      </td>
+                      {isFlexibleView ? (
+                        // Flexible shift: show only first punch In / last punch Out
+                        <>
+                          <td className="px-3 py-2 font-mono whitespace-nowrap text-blue-700 bg-blue-50/20 text-center">
+                            {r.inTime1 || "—"}
+                          </td>
+                          <td className="px-3 py-2 font-mono whitespace-nowrap text-blue-700 bg-blue-50/20 text-center">
+                            {r.outTime2 || r.outTime1
+                              ? <span>{r.outTime2 || r.outTime1}</span>
+                              : r.inTime1
+                                ? <span className="text-red-500 text-[10px] font-semibold">Missing</span>
+                                : <span className="text-muted-foreground">—</span>
+                            }
+                          </td>
+                        </>
+                      ) : (
+                        // Normal / split shift: full session breakdown
+                        <>
+                          <td className="px-3 py-2 font-mono whitespace-nowrap text-blue-700 bg-blue-50/20 text-center">
+                            {r.inTime1||"—"}
+                          </td>
+                          <td className="px-3 py-2 bg-blue-50/20 whitespace-nowrap text-center">
+                            {has1 ? (
+                              <div>
+                                <div className="font-mono text-blue-700">{r.outTime1}</div>
+                                <div className="text-[10px] text-blue-500 font-medium">{fmtHM(s1m)}</div>
+                              </div>
+                            ) : onlyIn ? (
+                              <span className="text-red-500 text-[10px] font-semibold">Missing</span>
+                            ) : <span className="text-muted-foreground">—</span>}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap bg-purple-50/20 text-center">
+                            {lb > 0 ? (
+                              <span className="font-mono text-purple-700 font-medium">{fmtHM(lb)}</span>
+                            ) : <span className="text-muted-foreground">—</span>}
+                          </td>
+                          <td className="px-3 py-2 font-mono whitespace-nowrap text-orange-700 bg-orange-50/20 text-center">
+                            {r.inTime2||"—"}
+                          </td>
+                          <td className="px-3 py-2 bg-orange-50/20 whitespace-nowrap text-center">
+                            {has2 ? (
+                              <div>
+                                <div className="font-mono text-orange-700">{r.outTime2}</div>
+                                <div className="text-[10px] text-orange-500 font-medium">{fmtHM(s2m)}</div>
+                              </div>
+                            ) : <span className="text-muted-foreground">—</span>}
+                          </td>
+                        </>
+                      )}
                       <td className="px-3 py-2 whitespace-nowrap bg-green-50/20">
-                        {totalMins > 0 ? (
+                        {(isFlexibleView ? (r.totalHours ?? 0) > 0 : totalMins > 0) ? (
                           <div className="flex flex-col gap-0.5">
-                            {has1 && <div className="text-[10px] text-muted-foreground font-mono">{r.inTime1} → {r.outTime1} = {fmtHM(s1m)}</div>}
-                            {has2 && <div className="text-[10px] text-muted-foreground font-mono">{r.inTime2} → {r.outTime2} = {fmtHM(s2m)}</div>}
-                            <span className="font-semibold text-green-700 text-xs">✅ {totalH}:{String(totalMin).padStart(2,"0")} hrs</span>
+                            {isFlexibleView ? (
+                              <span className="font-semibold text-green-700 text-xs">✅ {Math.floor(r.totalHours??0)}:{String(Math.round(((r.totalHours??0)%1)*60)).padStart(2,"0")} hrs</span>
+                            ) : (
+                              <>
+                                {has1 && <div className="text-[10px] text-muted-foreground font-mono">{r.inTime1} → {r.outTime1} = {fmtHM(s1m)}</div>}
+                                {has2 && <div className="text-[10px] text-muted-foreground font-mono">{r.inTime2} → {r.outTime2} = {fmtHM(s2m)}</div>}
+                                <span className="font-semibold text-green-700 text-xs">✅ {totalH}:{String(totalMin).padStart(2,"0")} hrs</span>
+                              </>
+                            )}
                             {r.weekOffWorked && (
                               <span className="text-violet-600 text-[10px] font-semibold">(Week Off Worked)</span>
                             )}
