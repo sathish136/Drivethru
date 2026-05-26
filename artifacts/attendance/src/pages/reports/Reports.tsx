@@ -515,6 +515,15 @@ function AttendanceReport() {
     return relevant.every((r: any) => r.isNightShift === true);
   }, [filtered]);
 
+  /* Auto-collapse sidebar when the night-shift 12-punch table is visible (needs extra width) */
+  useEffect(() => {
+    if (isNightShiftView) {
+      window.dispatchEvent(new Event("sidebar_force_collapse"));
+    } else {
+      window.dispatchEvent(new Event("sidebar_force_expand"));
+    }
+  }, [isNightShiftView]);
+
   const HEADERS = isNightShiftView
     ? ["Shift Date","Next Day","Emp ID","Employee","Department","Branch","Shift","Status","P1","P2","P3","P4","P5","P6","P7","P8","P9","P10","P11","P12","Total Hrs","OT Hrs","Remarks"]
     : ["Date","Emp ID","Employee","Department","Branch","Shift","Status","1st In","1st Out","2nd In","2nd Out","Lunch Break","Total Hrs","Late","OT Hrs","Remarks"];

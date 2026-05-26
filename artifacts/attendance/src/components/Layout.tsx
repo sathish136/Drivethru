@@ -165,6 +165,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("org_logo_updated", handler);
   }, []);
 
+  /* Auto-collapse sidebar when a page requests more horizontal space (e.g. night-shift 12-punch table) */
+  useEffect(() => {
+    const collapseHandler = () => setCollapsed(true);
+    const expandHandler   = () => setCollapsed(false);
+    window.addEventListener("sidebar_force_collapse", collapseHandler);
+    window.addEventListener("sidebar_force_expand",   expandHandler);
+    return () => {
+      window.removeEventListener("sidebar_force_collapse", collapseHandler);
+      window.removeEventListener("sidebar_force_expand",   expandHandler);
+    };
+  }, []);
+
   /* Live clock */
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
