@@ -664,6 +664,7 @@ router.get("/attendance", async (req, res) => {
           designation: r.empDesignation || "",
           department: r.empDepartment || "",
           branchName: r.branchName || "",
+          shiftId: r.empShiftId ?? null,
           shiftName: empShift?.name ?? sr.shiftName ?? null,
           createdAt: r.rec.createdAt.toISOString(),
           /* Night-shift flags — derived from assigned shift, not punch time */
