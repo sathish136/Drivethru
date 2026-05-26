@@ -594,13 +594,42 @@ router.get("/attendance", async (req, res) => {
         if (isNightEmp) {
           const shiftDate   = String(r.rec.date);
           const morningDate = (r as any)._morningDate ? String((r as any)._morningDate) : null;
-          const eveningPunches = bioPunchesByEmpDate.get(`${empId}:${shiftDate}`) ?? [];
-          const morningPunches = morningDate ? bioPunchesByEmpDate.get(`${empId}:${morningDate}`) ?? [] : [];
-          // Always include the 4 stored punch fields as a baseline
+          const allShiftDateBio = bioPunchesByEmpDate.get(`${empId}:${shiftDate}`) ?? [];
+          const allMorningDateBio = morningDate ? bioPunchesByEmpDate.get(`${empId}:${morningDate}`) ?? [] : [];
+
+          // Stored punch fields (inTime1/outTime1/inTime2/outTime2) as ultimate fallback
           const storedPunches = ([r.rec.inTime1, r.rec.outTime1, r.rec.inTime2, r.rec.outTime2]
             .filter((t): t is string => typeof t === "string" && t.trim().length > 0));
-          // Prefer bio-log raw punches (more granular) over stored fields; fall back to stored
-          const bioPunches = [...eveningPunches, ...morningPunches];
+
+          let bioPunches: string[];
+          if (morningDate) {
+            // Explicitly-merged overnight row – combine both date's bio punches as-is
+            bioPunches = [...allShiftDateBio, ...allMorningDateBio];
+          } else {
+            /* Non-merged night-shift row.  Bio punches on the shift date that fall
+               in the morning hours (<18:00) actually belong to the *previous* day's
+               overnight tail and must NOT be shown here.  Instead:
+               • keep only evening bio punches (≥18:00) from the shift date
+               • append stored inTime1 if it is an evening time and not already in bio
+               • pull morning bio punches (< 12:00) from the NEXT calendar day — those
+                 are the overnight tail of *this* shift */
+            const eveningBio  = allShiftDateBio.filter(t => timeToMins(t) >= 18 * 60);
+            const nd          = nextDate(shiftDate);
+            const nextMorning = (bioPunchesByEmpDate.get(`${empId}:${nd}`) ?? [])
+              .filter(t => timeToMins(t) < 12 * 60);
+            // Seed with stored evening punch if bio doesn't have it
+            const storedEvening = storedPunches.filter(t => timeToMins(t) >= 18 * 60);
+            const combined = [...new Set([...storedEvening, ...eveningBio, ...nextMorning])];
+            // Sort: evening times first (≥18:00), then morning (00:00–11:59)
+            combined.sort((a, b) => {
+              const am = timeToMins(a), bm = timeToMins(b);
+              const ae = am >= 18 * 60, be = bm >= 18 * 60;
+              if (ae && !be) return -1;
+              if (!ae && be) return 1;
+              return am - bm;
+            });
+            bioPunches = combined;
+          }
           rawPunches = (bioPunches.length > 0 ? bioPunches : storedPunches).slice(0, 12);
         }
 
