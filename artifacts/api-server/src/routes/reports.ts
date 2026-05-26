@@ -56,7 +56,7 @@ function nextDate(dateStr: string): string {
 function mergeNightShiftRecords<T extends {
   rec: typeof attendanceRecords.$inferSelect;
   [k: string]: any;
-}>(recs: T[]): T[] {
+}>(recs: T[], nightShiftEmpIds: Set<number>): T[] {
   const grouped = new Map<number, T[]>();
   for (const r of recs) {
     if (!grouped.has(r.rec.employeeId)) grouped.set(r.rec.employeeId, []);
@@ -68,6 +68,13 @@ function mergeNightShiftRecords<T extends {
 
   for (const [empId, empRecs] of grouped) {
     const sorted = [...empRecs].sort((a, b) => a.rec.date.localeCompare(b.rec.date));
+
+    // Only attempt overnight merging for employees whose ASSIGNED shift is a night shift.
+    // This avoids incorrectly merging day-shift employees who happen to punch in late.
+    if (!nightShiftEmpIds.has(empId)) {
+      result.push(...sorted);
+      continue;
+    }
 
     for (const r of sorted) {
       const key = `${empId}:${r.rec.date}`;
@@ -348,7 +355,7 @@ router.get("/attendance", async (req, res) => {
     );
 
     const processedAll = nightShiftEmployeeIds.size > 0
-      ? mergeNightShiftRecords(all)
+      ? mergeNightShiftRecords(all, nightShiftEmployeeIds)
       : all;
 
     let enriched = processedAll.map(r => {
@@ -552,7 +559,8 @@ router.get("/attendance", async (req, res) => {
           branchName: r.branchName || "",
           shiftName: empShift?.name ?? sr.shiftName ?? null,
           createdAt: r.rec.createdAt.toISOString(),
-          /* Overnight merge metadata */
+          /* Night-shift flags — derived from assigned shift, not punch time */
+          isNightShift: nightShiftEmployeeIds.has(r.rec.employeeId),
           isNightShiftMerged: (r as any)._nightShiftMerged ?? false,
           morningDate: (r as any)._morningDate ?? null,
           /* Policy-driven values from the salary engine (single source of truth) */

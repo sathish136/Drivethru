@@ -504,7 +504,21 @@ function AttendanceReport() {
     && (!empName || (r.employeeName || "").toLowerCase().includes(empName.toLowerCase()) || String(r.employeeId || "").toLowerCase().includes(empName.toLowerCase()))
   ), [data, empType, department, empName]);
 
-  const HEADERS = ["Date","Emp ID","Employee","Department","Branch","Designation","Status","1st In","1st Out","2nd In","2nd Out","Lunch Break","Total Hrs","Late","OT Hrs","Remarks"];
+  // Auto-detect night-shift view: true when ALL non-off/holiday rows in the
+  // filtered set belong to employees on a night shift (assigned shift startTime ≥ 18:00).
+  // This is driven by the isNightShift flag returned by the API, which is based on
+  // the employee's assigned shift — not the actual punch time, so it works for ANY
+  // department whose employees are linked to a night-shift schedule.
+  const isNightShiftView = useMemo(() => {
+    if (!filtered.length) return false;
+    const relevant = filtered.filter((r: any) => !["off_day","holiday"].includes(r.status));
+    if (!relevant.length) return false;
+    return relevant.every((r: any) => r.isNightShift === true);
+  }, [filtered]);
+
+  const HEADERS = isNightShiftView
+    ? ["Shift Date","Next Day","Emp ID","Employee","Department","Branch","Designation","Status","Punch 1 (In)","Punch 2 (Out)","Punch 3 (In)","Punch 4 (Out)","Total Hrs","OT Hrs","Remarks"]
+    : ["Date","Emp ID","Employee","Department","Branch","Designation","Status","1st In","1st Out","2nd In","2nd Out","Lunch Break","Total Hrs","Late","OT Hrs","Remarks"];
   const NIGHT_WATCHER_POLICY_HEADERS = [
     "Date",
     "Day",
@@ -519,11 +533,13 @@ function AttendanceReport() {
     "Policy Remark",
   ];
 
-  function calcMins(inT: string|null, outT: string|null): number {
+  function calcMins(inT: string|null, outT: string|null, nightAware = false): number {
     if (!inT || !outT) return 0;
     const [ih,im] = inT.split(":").map(Number);
     const [oh,om] = outT.split(":").map(Number);
-    return Math.max(0, (oh*60+om)-(ih*60+im));
+    let diff = (oh*60+om)-(ih*60+im);
+    if (nightAware && diff < 0) diff += 24 * 60;
+    return Math.max(0, diff);
   }
   function fmtHM(mins: number): string {
     const h = Math.floor(mins/60), m = mins%60;
@@ -646,13 +662,26 @@ function AttendanceReport() {
     const offDay   = filtered.filter((r: any) => r.status === "off_day").length;
     const thead = `<tr>${HEADERS.map(h=>`<th>${h}</th>`).join("")}</tr>`;
     const tbody = filtered.map((r: any) => {
+      const statusLabel = r.status==="late"?"PRESENT (LATE)":r.status==="half_day"?"HALF DAY":r.status==="off_day"?"DAY OFF":r.status.replace("_"," ").toUpperCase();
+      const tot = r.totalHours!=null ? fmtTotal(r.totalHours) : "—";
+      const remarks = getRemarks(r);
+      if (isNightShiftView) {
+        return `<tr>
+          <td>${r.date}</td><td>${r.morningDate||"—"}</td>
+          <td>${r.employeeCode}</td><td>${r.employeeName}</td>
+          <td>${r.department||""}</td><td>${r.branchName}</td><td>${r.designation||""}</td>
+          <td>${statusLabel}</td>
+          <td>${r.inTime1||"—"}</td><td>${r.outTime1||"—"}</td>
+          <td>${r.inTime2||"—"}</td><td>${r.outTime2||"—"}</td>
+          <td>${tot}</td>
+          <td>${r.overtimeHours>0?r.overtimeHours.toFixed(1)+"h":"—"}</td>
+          <td>${remarks||"—"}</td>
+        </tr>`;
+      }
       const s1m = calcMins(r.inTime1, r.outTime1);
       const s2m = calcMins(r.inTime2, r.outTime2);
       const lb  = lunchBreakMins(r);
-      const session1 = r.inTime1&&r.outTime1 ? `${r.inTime1} → ${r.outTime1} = ${fmtHM(s1m)}` : "—";
-      const session2 = r.inTime2&&r.outTime2 ? `${r.inTime2} → ${r.outTime2} = ${fmtHM(s2m)}` : "—";
       const lbStr = lb>0 ? fmtHM(lb) : "—";
-      const tot = r.totalHours!=null ? fmtTotal(r.totalHours) : "—";
       const morningLate = r.morningLateMinutes || 0;
       const lunchLate = r.lunchLateMinutes || 0;
       const totalLateMin = morningLate + lunchLate;
@@ -666,8 +695,6 @@ function AttendanceReport() {
           ? `${totalLateMin} min${tag}`
           : `${totalLateMin} min / ${hrsStr}${tag}`;
       })();
-      const remarks = getRemarks(r);
-      const statusLabel = r.status==="late"?"PRESENT (LATE)":r.status==="half_day"?"HALF DAY":r.status==="off_day"?"DAY OFF":r.status.replace("_"," ").toUpperCase();
       return `<tr>
         <td>${r.date}</td><td>${r.employeeCode}</td><td>${r.employeeName}</td>
         <td>${r.department||""}</td><td>${r.branchName}</td><td>${r.designation||""}</td>
@@ -681,7 +708,7 @@ function AttendanceReport() {
       </tr>`;
     }).join("");
     await printReport({
-      title: "Attendance Report",
+      title: isNightShiftView ? "Attendance Report (Night Shift)" : "Attendance Report",
       meta: [
         { label:"Period",        value:`${dStart} – ${dEnd}` },
         { label:"Total Records", value:String(filtered.length) },
@@ -721,6 +748,17 @@ function AttendanceReport() {
       return;
     }
     const rows = filtered.map((r: any) => {
+      const statusLabel = r.status==="late"?"PRESENT (LATE)":r.status==="half_day"?"HALF DAY":r.status==="off_day"?"DAY OFF":r.status.replace("_"," ").toUpperCase();
+      if (isNightShiftView) {
+        return [
+          `'${r.date}`, r.morningDate||"", r.employeeCode, r.employeeName, r.department||"", r.branchName,
+          r.designation||"", statusLabel,
+          r.inTime1||"", r.outTime1||"", r.inTime2||"", r.outTime2||"",
+          r.totalHours!=null?fmtTotal(r.totalHours):"",
+          r.overtimeHours>0?r.overtimeHours.toFixed(1):"",
+          getRemarks(r),
+        ];
+      }
       const s1m = calcMins(r.inTime1, r.outTime1);
       const s2m = calcMins(r.inTime2, r.outTime2);
       const lb = lunchBreakMins(r);
@@ -739,7 +777,7 @@ function AttendanceReport() {
       })();
       return [
         r.date, r.employeeCode, r.employeeName, r.department||"", r.branchName,
-        r.designation||"", r.status==="late"?"PRESENT (LATE)":r.status==="half_day"?"HALF DAY":r.status==="off_day"?"DAY OFF":r.status.replace("_"," ").toUpperCase(),
+        r.designation||"", statusLabel,
         r.inTime1||"", r.outTime1||"", r.inTime2||"", r.outTime2||"",
         lb>0?fmtHM(lb):"",
         r.totalHours!=null?fmtTotal(r.totalHours):"",
@@ -811,135 +849,257 @@ function AttendanceReport() {
         </div>
       )}
 
+      {isNightShiftView && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-medium">
+          <span className="text-base">🌙</span>
+          Night Shift View — punches from the shift date (evening) and next calendar day (morning) are merged into one row. Showing 4 punch columns; Lunch Break column hidden.
+        </div>
+      )}
+
       <Card className="overflow-hidden">
         {isLoading ? <div className="p-8 text-center text-sm text-muted-foreground">Loading…</div> : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-muted/50">
-                <tr>
-                  {["Date","Emp ID","Employee","Department","Branch","Designation","Status"].map(h=>(
-                    <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap" rowSpan={2}>{h}</th>
-                  ))}
-                  <th className="px-3 py-2 text-center font-semibold text-blue-600 whitespace-nowrap bg-blue-50/50" colSpan={2}>1st Session</th>
-                  <th className="px-3 py-2 text-center font-semibold text-purple-600 whitespace-nowrap bg-purple-50/50" rowSpan={2}>Lunch Break</th>
-                  <th className="px-3 py-2 text-center font-semibold text-orange-600 whitespace-nowrap bg-orange-50/50" colSpan={2}>2nd Session</th>
-                  <th className="px-3 py-2.5 text-left font-semibold text-green-700 whitespace-nowrap bg-green-50/40" rowSpan={2}>Total Hrs</th>
-                  <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap" rowSpan={2}>OT Hrs</th>
-                  <th className="px-3 py-2.5 text-left font-semibold text-indigo-600 whitespace-nowrap bg-indigo-50/30" rowSpan={2}>Remarks</th>
-                </tr>
-                <tr className="border-b border-border">
-                  <th className="px-3 py-1 text-[10px] font-medium text-blue-500 bg-blue-50/30 text-center">In</th>
-                  <th className="px-3 py-1 text-[10px] font-medium text-blue-500 bg-blue-50/30 text-center">Out</th>
-                  <th className="px-3 py-1 text-[10px] font-medium text-orange-500 bg-orange-50/30 text-center">In</th>
-                  <th className="px-3 py-1 text-[10px] font-medium text-orange-500 bg-orange-50/30 text-center">Out</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filtered.slice(0,300).map((r:any)=>{
-                  const s1m = calcMins(r.inTime1, r.outTime1);
-                  const s2m = calcMins(r.inTime2, r.outTime2);
-                  const lb  = lunchBreakMins(r);
-                  const totalMins = s1m + s2m;
-                  const totalH = Math.floor(totalMins/60), totalMin = totalMins%60;
-                  const has1 = !!(r.inTime1 && r.outTime1);
-                  const has2 = !!(r.inTime2 && r.outTime2);
-                  const onlyIn = !!(r.inTime1 && !r.outTime1 && !r.inTime2 && !r.outTime2);
-                  return (
-                  <tr key={r.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-3 py-2 font-mono whitespace-nowrap">{r.date}</td>
-                    <td className="px-3 py-2 font-mono whitespace-nowrap text-muted-foreground">{r.employeeCode}</td>
-                    <td className="px-3 py-2 font-medium whitespace-nowrap">{r.employeeName}</td>
-                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.department||"—"}</td>
-                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.branchName}</td>
-                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.designation||"—"}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      <div className="flex flex-col gap-0.5">
+            {isNightShiftView ? (
+              /* ── Night-shift 4-punch table ── */
+              <table className="w-full text-xs">
+                <thead className="bg-indigo-900/90 text-white">
+                  <tr>
+                    {["Shift Date","Next Day","Emp ID","Employee","Department","Branch","Designation","Status"].map(h=>(
+                      <th key={h} className="px-3 py-2.5 text-left font-semibold whitespace-nowrap" rowSpan={2}>{h}</th>
+                    ))}
+                    <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-indigo-700/60" colSpan={2}>Punch 1–2 (Evening)</th>
+                    <th className="px-3 py-2 text-center font-semibold whitespace-nowrap bg-violet-700/60" colSpan={2}>Punch 3–4 (Morning)</th>
+                    <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap bg-green-800/50" rowSpan={2}>Total Hrs</th>
+                    <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap" rowSpan={2}>OT Hrs</th>
+                    <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap bg-indigo-700/40" rowSpan={2}>Remarks</th>
+                  </tr>
+                  <tr className="border-b border-indigo-600">
+                    <th className="px-3 py-1 text-[10px] font-medium bg-indigo-700/40 text-center">In</th>
+                    <th className="px-3 py-1 text-[10px] font-medium bg-indigo-700/40 text-center">Out</th>
+                    <th className="px-3 py-1 text-[10px] font-medium bg-violet-700/40 text-center">In</th>
+                    <th className="px-3 py-1 text-[10px] font-medium bg-violet-700/40 text-center">Out (next day)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filtered.slice(0,300).map((r:any)=>{
+                    const p1m = calcMins(r.inTime1, r.outTime1, true);
+                    const p2m = calcMins(r.inTime2, r.outTime2, true);
+                    const totalHrs = r.totalHours != null ? r.totalHours : (p1m + p2m) / 60;
+                    const totalH = Math.floor(totalHrs), totalMin = Math.round((totalHrs - totalH) * 60);
+                    const hasP1 = !!(r.inTime1);
+                    const hasP2 = !!(r.outTime1);
+                    const hasP3 = !!(r.inTime2);
+                    const hasP4 = !!(r.outTime2);
+                    const missingOut = hasP1 && !hasP2 && !hasP3 && !hasP4;
+                    return (
+                    <tr key={r.id} className="hover:bg-indigo-50/30 transition-colors">
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <div className="font-mono text-xs">{r.date}</div>
+                        {r.isNightShiftMerged && (
+                          <div className="text-[10px] text-indigo-500 font-medium">🌙 overnight</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-[11px] whitespace-nowrap text-indigo-600">
+                        {r.morningDate || "—"}
+                      </td>
+                      <td className="px-3 py-2 font-mono whitespace-nowrap text-muted-foreground">{r.employeeCode}</td>
+                      <td className="px-3 py-2 font-medium whitespace-nowrap">{r.employeeName}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.department||"—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.branchName}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.designation||"—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
                         <span className={cn("px-2 py-0.5 rounded text-xs font-medium",STATUS_COLORS[r.status]||"bg-gray-100")}>
                           {fmtStatus(r.status)}
                         </span>
-                        {r.status === "late" && r.inTime1 && (() => {
-                          const lm = calcLateMinutes(r.inTime1);
-                          if (lm <= 0) return null;
-                          const display = lm >= 60
-                            ? `+${Math.floor(lm/60)}h ${lm%60}m late`
-                            : `+${lm}m late`;
-                          return (
-                            <span className="text-[10px] font-semibold text-red-500 text-center">
-                              {display}
-                            </span>
-                          );
+                      </td>
+                      {/* Punch 1 — evening check-in */}
+                      <td className="px-3 py-2 font-mono whitespace-nowrap text-indigo-700 bg-indigo-50/30 text-center">
+                        {hasP1 ? r.inTime1 : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      {/* Punch 2 — evening check-out / break */}
+                      <td className="px-3 py-2 bg-indigo-50/30 whitespace-nowrap text-center">
+                        {hasP2 ? (
+                          <div>
+                            <div className="font-mono text-indigo-700">{r.outTime1}</div>
+                            {p1m > 0 && <div className="text-[10px] text-indigo-500 font-medium">{fmtHM(p1m)}</div>}
+                          </div>
+                        ) : missingOut ? (
+                          <span className="text-amber-500 text-[10px] font-semibold">Missing</span>
+                        ) : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      {/* Punch 3 — morning re-entry */}
+                      <td className="px-3 py-2 font-mono whitespace-nowrap text-violet-700 bg-violet-50/30 text-center">
+                        {hasP3 ? r.inTime2 : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      {/* Punch 4 — morning final checkout */}
+                      <td className="px-3 py-2 bg-violet-50/30 whitespace-nowrap text-center">
+                        {hasP4 ? (
+                          <div>
+                            <div className="font-mono text-violet-700">{r.outTime2}</div>
+                            {p2m > 0 && <div className="text-[10px] text-violet-500 font-medium">{fmtHM(p2m)}</div>}
+                          </div>
+                        ) : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap bg-green-50/20">
+                        {r.totalHours != null && r.totalHours > 0 ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-semibold text-green-700 text-xs">✅ {totalH}:{String(totalMin).padStart(2,"0")} hrs</span>
+                            {r.holidayType && (
+                              <span className={`text-[10px] font-semibold ${
+                                r.holidayType==="statutory" ? "text-red-600"
+                                  : r.holidayType==="poya" ? "text-amber-600"
+                                  : "text-blue-600"}`}>
+                                {r.holidayType==="statutory"?"Statutory":r.holidayType==="poya"?"Poya":"Public"} Holiday × {Number(r.holidayMultiplier).toFixed(1)}
+                              </span>
+                            )}
+                          </div>
+                        ) : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="px-3 py-2 font-mono whitespace-nowrap">
+                        {r.overtimeHours>0?`${r.overtimeHours.toFixed(1)}h`:"—"}
+                        {r.holidayWorked && r.overtimeHours>0 && (
+                          <span className="ml-1 text-[10px] text-orange-600 font-semibold">×{Number(r.holidayMultiplier).toFixed(1)}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 bg-indigo-50/10 max-w-[200px]">
+                        {(() => {
+                          const rm = getRemarks(r);
+                          return rm ? (
+                            <span className="text-[10px] leading-snug text-indigo-700 block" title={rm}>{rm}</span>
+                          ) : <span className="text-muted-foreground text-[10px]">—</span>;
                         })()}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 font-mono whitespace-nowrap text-blue-700 bg-blue-50/20 text-center">
-                      {r.inTime1||"—"}
-                    </td>
-                    <td className="px-3 py-2 bg-blue-50/20 whitespace-nowrap text-center">
-                      {has1 ? (
-                        <div>
-                          <div className="font-mono text-blue-700">{r.outTime1}</div>
-                          <div className="text-[10px] text-blue-500 font-medium">{fmtHM(s1m)}</div>
-                        </div>
-                      ) : onlyIn ? (
-                        <span className="text-red-500 text-[10px] font-semibold">Missing</span>
-                      ) : <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap bg-purple-50/20 text-center">
-                      {lb > 0 ? (
-                        <span className="font-mono text-purple-700 font-medium">{fmtHM(lb)}</span>
-                      ) : <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td className="px-3 py-2 font-mono whitespace-nowrap text-orange-700 bg-orange-50/20 text-center">
-                      {r.inTime2||"—"}
-                    </td>
-                    <td className="px-3 py-2 bg-orange-50/20 whitespace-nowrap text-center">
-                      {has2 ? (
-                        <div>
-                          <div className="font-mono text-orange-700">{r.outTime2}</div>
-                          <div className="text-[10px] text-orange-500 font-medium">{fmtHM(s2m)}</div>
-                        </div>
-                      ) : <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap bg-green-50/20">
-                      {totalMins > 0 ? (
-                        <div className="flex flex-col gap-0.5">
-                          {has1 && <div className="text-[10px] text-muted-foreground font-mono">{r.inTime1} → {r.outTime1} = {fmtHM(s1m)}</div>}
-                          {has2 && <div className="text-[10px] text-muted-foreground font-mono">{r.inTime2} → {r.outTime2} = {fmtHM(s2m)}</div>}
-                          <span className="font-semibold text-green-700 text-xs">✅ {totalH}:{String(totalMin).padStart(2,"0")} hrs</span>
-                          {r.weekOffWorked && (
-                            <span className="text-violet-600 text-[10px] font-semibold">(Week Off Worked)</span>
-                          )}
-                          {r.holidayType && (
-                            <span className={`text-[10px] font-semibold ${
-                              r.holidayType==="statutory" ? "text-red-600"
-                                : r.holidayType==="poya" ? "text-amber-600"
-                                : "text-blue-600"}`}>
-                              {r.holidayType==="statutory"?"Statutory":r.holidayType==="poya"?"Poya":"Public"} Holiday × {Number(r.holidayMultiplier).toFixed(1)}
-                            </span>
-                          )}
-                        </div>
-                      ) : <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td className="px-3 py-2 font-mono whitespace-nowrap">
-                      {r.overtimeHours>0?`${r.overtimeHours.toFixed(1)}h`:"—"}
-                      {r.holidayWorked && r.overtimeHours>0 && (
-                        <span className="ml-1 text-[10px] text-orange-600 font-semibold">×{Number(r.holidayMultiplier).toFixed(1)}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 bg-indigo-50/10 max-w-[220px]">
-                      {(() => {
-                        const rm = getRemarks(r);
-                        return rm ? (
-                          <span className="text-[10px] leading-snug text-indigo-700 block" title={rm}>{rm}</span>
-                        ) : <span className="text-muted-foreground text-[10px]">—</span>;
-                      })()}
-                    </td>
+                      </td>
+                    </tr>
+                    );
+                  })}
+                  {!filtered.length && <tr><td colSpan={13} className="text-center py-8 text-muted-foreground">No records found for the selected filters.</td></tr>}
+                </tbody>
+              </table>
+            ) : (
+              /* ── Standard day-shift table ── */
+              <table className="w-full text-xs">
+                <thead className="bg-muted/50">
+                  <tr>
+                    {["Date","Emp ID","Employee","Department","Branch","Designation","Status"].map(h=>(
+                      <th key={h} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap" rowSpan={2}>{h}</th>
+                    ))}
+                    <th className="px-3 py-2 text-center font-semibold text-blue-600 whitespace-nowrap bg-blue-50/50" colSpan={2}>1st Session</th>
+                    <th className="px-3 py-2 text-center font-semibold text-purple-600 whitespace-nowrap bg-purple-50/50" rowSpan={2}>Lunch Break</th>
+                    <th className="px-3 py-2 text-center font-semibold text-orange-600 whitespace-nowrap bg-orange-50/50" colSpan={2}>2nd Session</th>
+                    <th className="px-3 py-2.5 text-left font-semibold text-green-700 whitespace-nowrap bg-green-50/40" rowSpan={2}>Total Hrs</th>
+                    <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap" rowSpan={2}>OT Hrs</th>
+                    <th className="px-3 py-2.5 text-left font-semibold text-indigo-600 whitespace-nowrap bg-indigo-50/30" rowSpan={2}>Remarks</th>
                   </tr>
-                  );
-                })}
-                {!filtered.length&&<tr><td colSpan={11} className="text-center py-8 text-muted-foreground">No records found for the selected filters.</td></tr>}
-              </tbody>
-            </table>
+                  <tr className="border-b border-border">
+                    <th className="px-3 py-1 text-[10px] font-medium text-blue-500 bg-blue-50/30 text-center">In</th>
+                    <th className="px-3 py-1 text-[10px] font-medium text-blue-500 bg-blue-50/30 text-center">Out</th>
+                    <th className="px-3 py-1 text-[10px] font-medium text-orange-500 bg-orange-50/30 text-center">In</th>
+                    <th className="px-3 py-1 text-[10px] font-medium text-orange-500 bg-orange-50/30 text-center">Out</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filtered.slice(0,300).map((r:any)=>{
+                    const s1m = calcMins(r.inTime1, r.outTime1);
+                    const s2m = calcMins(r.inTime2, r.outTime2);
+                    const lb  = lunchBreakMins(r);
+                    const totalMins = s1m + s2m;
+                    const totalH = Math.floor(totalMins/60), totalMin = totalMins%60;
+                    const has1 = !!(r.inTime1 && r.outTime1);
+                    const has2 = !!(r.inTime2 && r.outTime2);
+                    const onlyIn = !!(r.inTime1 && !r.outTime1 && !r.inTime2 && !r.outTime2);
+                    return (
+                    <tr key={r.id} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-3 py-2 font-mono whitespace-nowrap">{r.date}</td>
+                      <td className="px-3 py-2 font-mono whitespace-nowrap text-muted-foreground">{r.employeeCode}</td>
+                      <td className="px-3 py-2 font-medium whitespace-nowrap">{r.employeeName}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.department||"—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.branchName}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{r.designation||"—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <div className="flex flex-col gap-0.5">
+                          <span className={cn("px-2 py-0.5 rounded text-xs font-medium",STATUS_COLORS[r.status]||"bg-gray-100")}>
+                            {fmtStatus(r.status)}
+                          </span>
+                          {r.status === "late" && r.inTime1 && (() => {
+                            const lm = calcLateMinutes(r.inTime1);
+                            if (lm <= 0) return null;
+                            const display = lm >= 60
+                              ? `+${Math.floor(lm/60)}h ${lm%60}m late`
+                              : `+${lm}m late`;
+                            return <span className="text-[10px] font-semibold text-red-500 text-center">{display}</span>;
+                          })()}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 font-mono whitespace-nowrap text-blue-700 bg-blue-50/20 text-center">
+                        {r.inTime1||"—"}
+                      </td>
+                      <td className="px-3 py-2 bg-blue-50/20 whitespace-nowrap text-center">
+                        {has1 ? (
+                          <div>
+                            <div className="font-mono text-blue-700">{r.outTime1}</div>
+                            <div className="text-[10px] text-blue-500 font-medium">{fmtHM(s1m)}</div>
+                          </div>
+                        ) : onlyIn ? (
+                          <span className="text-red-500 text-[10px] font-semibold">Missing</span>
+                        ) : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap bg-purple-50/20 text-center">
+                        {lb > 0 ? (
+                          <span className="font-mono text-purple-700 font-medium">{fmtHM(lb)}</span>
+                        ) : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="px-3 py-2 font-mono whitespace-nowrap text-orange-700 bg-orange-50/20 text-center">
+                        {r.inTime2||"—"}
+                      </td>
+                      <td className="px-3 py-2 bg-orange-50/20 whitespace-nowrap text-center">
+                        {has2 ? (
+                          <div>
+                            <div className="font-mono text-orange-700">{r.outTime2}</div>
+                            <div className="text-[10px] text-orange-500 font-medium">{fmtHM(s2m)}</div>
+                          </div>
+                        ) : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap bg-green-50/20">
+                        {totalMins > 0 ? (
+                          <div className="flex flex-col gap-0.5">
+                            {has1 && <div className="text-[10px] text-muted-foreground font-mono">{r.inTime1} → {r.outTime1} = {fmtHM(s1m)}</div>}
+                            {has2 && <div className="text-[10px] text-muted-foreground font-mono">{r.inTime2} → {r.outTime2} = {fmtHM(s2m)}</div>}
+                            <span className="font-semibold text-green-700 text-xs">✅ {totalH}:{String(totalMin).padStart(2,"0")} hrs</span>
+                            {r.weekOffWorked && (
+                              <span className="text-violet-600 text-[10px] font-semibold">(Week Off Worked)</span>
+                            )}
+                            {r.holidayType && (
+                              <span className={`text-[10px] font-semibold ${
+                                r.holidayType==="statutory" ? "text-red-600"
+                                  : r.holidayType==="poya" ? "text-amber-600"
+                                  : "text-blue-600"}`}>
+                                {r.holidayType==="statutory"?"Statutory":r.holidayType==="poya"?"Poya":"Public"} Holiday × {Number(r.holidayMultiplier).toFixed(1)}
+                              </span>
+                            )}
+                          </div>
+                        ) : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="px-3 py-2 font-mono whitespace-nowrap">
+                        {r.overtimeHours>0?`${r.overtimeHours.toFixed(1)}h`:"—"}
+                        {r.holidayWorked && r.overtimeHours>0 && (
+                          <span className="ml-1 text-[10px] text-orange-600 font-semibold">×{Number(r.holidayMultiplier).toFixed(1)}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 bg-indigo-50/10 max-w-[220px]">
+                        {(() => {
+                          const rm = getRemarks(r);
+                          return rm ? (
+                            <span className="text-[10px] leading-snug text-indigo-700 block" title={rm}>{rm}</span>
+                          ) : <span className="text-muted-foreground text-[10px]">—</span>;
+                        })()}
+                      </td>
+                    </tr>
+                    );
+                  })}
+                  {!filtered.length&&<tr><td colSpan={11} className="text-center py-8 text-muted-foreground">No records found for the selected filters.</td></tr>}
+                </tbody>
+              </table>
+            )}
           </div>
         )}
       </Card>
