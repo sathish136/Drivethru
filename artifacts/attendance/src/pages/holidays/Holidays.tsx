@@ -206,11 +206,14 @@ export default function Holidays() {
     public:    holidays.filter(h => h.type === "public").length,
   }), [holidays]);
 
-  const TypeBadge = ({ type }: { type: Holiday["type"] }) => (
-    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${TYPE_META[type].badge}`}>
-      {TYPE_META[type].label}
-    </span>
-  );
+  const TypeBadge = ({ type }: { type: Holiday["type"] }) => {
+    const meta = TYPE_META[type] ?? TYPE_META.public;
+    return (
+      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${meta.badge}`}>
+        {meta.label}
+      </span>
+    );
+  };
 
   return (
     <div className="space-y-5 max-w-full">
