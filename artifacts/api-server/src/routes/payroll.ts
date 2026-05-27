@@ -9,7 +9,7 @@ import { eq, and, inArray, gte, lte, sql } from "drizzle-orm";
 import {
   loadDeptRules, findRule, effectiveHours, calcOtHours, lateCutoffMins,
   timeToMins, calcLunchLateMinutes, calcTimeBasedOtHours,
-  isNightShiftRecord, calcNightWatcherPolicyOtHours,
+  isNightShiftRecord, calcNightWatcherPolicyOtHours, calcNightWatcherOtFromAllPunches,
 } from "../lib/hr-rules.js";
 import { processSalaryRow, resolveDayShift, type WeekOffInfo } from "../lib/salary-engine.js";
 
@@ -260,6 +260,9 @@ router.post("/generate", async (req, res) => {
       inTime2: string | null; outTime2: string | null;
       totalHours: number; leaveType: null;
     }>>();
+    // All evening+morning punches per Night Watcher shift (key: `${empId}:${shiftDate}`)
+    // Used by calcNightWatcherOtFromAllPunches for accurate checkpoint validation.
+    const nwAllPunchesMap = new Map<string, string[]>();
 
     {
       // Determine which target employees are Night Watcher payroll employees
@@ -337,6 +340,8 @@ router.post("/generate", async (req, res) => {
             }
 
             recs.push({ employeeId: empId, date: dateStr, status: "present", inTime1, outTime1, inTime2, outTime2, totalHours, leaveType: null });
+            // Store all punches (evening-first, then morning) for checkpoint-aware OT calculation
+            nwAllPunchesMap.set(`${empId}:${dateStr}`, [...eveningPunches, ...morningPunches]);
           }
           if (recs.length > 0) syntheticAttByEmp.set(empId, recs);
         }
@@ -642,11 +647,21 @@ router.post("/generate", async (req, res) => {
            *   Flexible    OT only when worked > 9 hrs 30 mins
            *   Night       Discrete 0/1/2/3 hrs based on hourly punch validation
            */
-          const ot = salaryRowFor(rec).otHours;
+          let ot: number;
+          if (isNightWatcherPayroll) {
+            // Use ALL evening+morning punches so 05:xx/06:xx/07:xx checkpoints are validated correctly.
+            // calcNightWatcherPolicyOtHours only has 4 stored times and misses intermediate checkpoints.
+            const allPunches = nwAllPunchesMap.get(`${emp.id}:${rec.date}`) ?? [];
+            ot = allPunches.length > 0
+              ? calcNightWatcherOtFromAllPunches(allPunches)
+              : calcNightWatcherPolicyOtHours(rec);
+          } else {
+            ot = salaryRowFor(rec).otHours;
+          }
           if (ot > 0) {
             regularOtHours += ot;
-            // Night Watcher OT is paid at ×2 (evening→morning cross-midnight shift)
-            const effectiveOtMult = isNightWatcherPayroll ? 2.0 : ruleOtMult;
+            // Night Watcher OT rate: Basic ÷ 240 × 1.5 (standard OT multiplier)
+            const effectiveOtMult = isNightWatcherPayroll ? 1.5 : ruleOtMult;
             regularOtPay   += Math.round(ot * hourlyRate * effectiveOtMult);
           }
         }
