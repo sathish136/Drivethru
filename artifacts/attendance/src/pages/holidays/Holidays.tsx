@@ -408,8 +408,8 @@ export default function Holidays() {
                     <td className="px-4 py-2.5 text-xs font-medium">{h.name}</td>
                     <td className="px-4 py-2.5"><TypeBadge type={h.type} /></td>
                     <td className="px-4 py-2.5 text-center bg-red-50/20">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${TYPE_META[h.type].otColor}`}>
-                        {TYPE_META[h.type].otRate} OT
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${(TYPE_META[h.type] ?? TYPE_META.public).otColor}`}>
+                        {(TYPE_META[h.type] ?? TYPE_META.public).otRate} OT
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-xs text-muted-foreground max-w-[200px] truncate">
