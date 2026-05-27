@@ -2951,7 +2951,7 @@ ${nwOtTableHtml}
                           : [];
                         const apiAllPunches: string[] = (r?.rawPunches as string[]) ?? [];
                         // Use bio log if it has more punches, otherwise fall back to API rawPunches
-                        allPunches = bioAllPunches.length >= apiAllPunches.length ? bioAllPunches : apiAllPunches;
+                        const allPunches = bioAllPunches.length >= apiAllPunches.length ? bioAllPunches : apiAllPunches;
                         // P1-P6 = first 6 punches (evening section), P7-P13 = next 7 (morning section)
                         const eveningSlots = allPunches.slice(0, 6);
                         const morningSlots = allPunches.slice(6, 13);
