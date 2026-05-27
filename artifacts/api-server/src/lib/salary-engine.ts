@@ -308,8 +308,10 @@ export function processSalaryRow(opts: {
   rec: AttendanceRow | null | undefined;
   /** Holiday classification for this date, if any. */
   holiday?: { type: HolidayType; name: string } | null;
+  /** Optional override multipliers from payroll settings (defaults to hardcoded values if not provided). */
+  holidayMultipliers?: Partial<Record<HolidayType, number>>;
 }): SalaryRunRow {
-  const { date, shift, weekoff, rec, holiday = null } = opts;
+  const { date, shift, weekoff, rec, holiday = null, holidayMultipliers } = opts;
   const category = categoryFromShiftName(shift?.name);
   const defaults = categoryDefaults(category);
 
@@ -490,7 +492,10 @@ export function processSalaryRow(opts: {
   /* ── Holiday classification ───────────────────────────────────────── */
   const holidayType: HolidayType | null = holiday?.type ?? null;
   const holidayName: string | null      = holiday?.name ?? null;
-  const holidayMultiplier               = holidayType ? HOLIDAY_MULTIPLIERS[holidayType] : 1;
+  const effectiveMultipliers = holidayMultipliers
+    ? { ...HOLIDAY_MULTIPLIERS, ...holidayMultipliers }
+    : HOLIDAY_MULTIPLIERS;
+  const holidayMultiplier               = holidayType ? (effectiveMultipliers[holidayType] ?? 1) : 1;
   const holidayWorked                   = !!holidayType && punchCount > 0;
 
   /* ── Dynamic remarks ──────────────────────────────────────────────── */

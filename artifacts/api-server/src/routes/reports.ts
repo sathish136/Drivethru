@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { attendanceRecords, employees, branches, shifts, weekoffSchedules, holidays, biometricLogs } from "@workspace/db/schema";
+import { attendanceRecords, employees, branches, shifts, weekoffSchedules, holidays, biometricLogs, payrollSettings } from "@workspace/db/schema";
 import { eq, and, gte, lte, sql, inArray } from "drizzle-orm";
 import { getDaysInMonth, today, calcWorkHours } from "../lib/helpers.js";
 import { loadDeptRules, findRule, timeToMins, calcLunchLateMinutes, lateCutoffMins, calcOtHours, calcTimeBasedOtHours, isNightShiftRecord, DeptShiftRule, calcNightWatcherPolicyOtHours, calcNightWatcherOtFromAllPunches } from "../lib/hr-rules.js";
@@ -343,6 +343,14 @@ router.get("/attendance", async (req, res) => {
       }
     }
 
+    /* Load payroll settings multipliers so the salary engine uses DB-configured values. */
+    const [psRow] = await db.select().from(payrollSettings);
+    const holidayMultipliers = psRow ? {
+      statutory: psRow.statutoryOtMultiplier,
+      poya:      psRow.poyaOtMultiplier,
+      public:    psRow.publicHolidayOtMultiplier,
+    } : undefined;
+
     /* Load holidays so the salary engine can apply OT pay multipliers
        (Statutory ×2.0 / Poya ×1.5 / Public ×1.5) when employees work on them. */
     const allHolidays = await db.select().from(holidays);
@@ -386,6 +394,7 @@ router.get("/attendance", async (req, res) => {
           totalHours: r.rec.totalHours,
           leaveType: (r.rec as any).leaveType ?? null,
         },
+        holidayMultipliers,
       });
 
       // Preserve authoritative entries.
@@ -474,6 +483,7 @@ router.get("/attendance", async (req, res) => {
             weekoff: wo,
             holiday: holidayByDate.get(date) ?? null,
             rec: { date, inTime1: null, outTime1: null, inTime2: null, outTime2: null, totalHours: 0 },
+            holidayMultipliers,
           });
 
           let synthStatus: string;
@@ -738,6 +748,14 @@ router.get("/monthly", async (req, res) => {
       }])
     );
 
+    /* Load payroll settings multipliers for the salary engine. */
+    const [psRowM] = await db.select().from(payrollSettings);
+    const holidayMultipliers = psRowM ? {
+      statutory: psRowM.statutoryOtMultiplier,
+      poya:      psRowM.poyaOtMultiplier,
+      public:    psRowM.publicHolidayOtMultiplier,
+    } : undefined;
+
     // Holiday lookup for OT multipliers / status preservation in this month.
     const monthHolidays = await db.select().from(holidays)
       .where(and(gte(holidays.date, startDate), lte(holidays.date, endDate)));
@@ -799,6 +817,7 @@ router.get("/monthly", async (req, res) => {
             totalHours: r.totalHours,
             leaveType: (r as any).leaveType ?? null,
           },
+          holidayMultipliers,
         });
         const recSource = (r as any).source as string | null | undefined;
         const recApproval = (r as any).approvalStatus as string | null | undefined;

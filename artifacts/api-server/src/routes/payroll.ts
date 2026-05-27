@@ -440,6 +440,11 @@ router.post("/generate", async (req, res) => {
             totalHours: rec.totalHours,
             leaveType: (rec as any).leaveType ?? null,
           },
+          holidayMultipliers: {
+            statutory: cfg.statutoryOtMultiplier,
+            poya:      cfg.poyaOtMultiplier,
+            public:    cfg.publicHolidayOtMultiplier,
+          },
         });
         salaryRowByDate.set(rec.date, sr);
         return sr;
