@@ -2940,20 +2940,28 @@ ${nwOtTableHtml}
                         const dayName = DAY_NAMES[dow];
                         const r = recMap.get(dateStr);
                         const punches = nwPunchMap.get(dateStr);
-                        // Fall back to rawPunches from the attendance record when bio logs have no data
-                        const fallbackRaw: string[] = (!punches && r?.rawPunches?.length)
-                          ? (r.rawPunches as string[])
-                          : [];
-                        const fallbackEvening = fallbackRaw.filter((t: string) => { const [h] = t.split(":").map(Number); return h >= 18; });
-                        const fallbackMorning = fallbackRaw.filter((t: string) => { const [h] = t.split(":").map(Number); return h < 9; });
-                        const evening = punches?.evening.slice().sort() ?? fallbackEvening;
-                        const morning = punches?.morning.slice().sort() ?? fallbackMorning;
+                        // Build a sequential punch list (evening first, then morning).
+                        // This matches the Attendance Report: the 6th punch (e.g. 00:15) fills
+                        // P6 even though it is past midnight, instead of leaving a gap.
+                        let allPunches: string[];
+                        if (punches) {
+                          // Bio-log data: combine sorted evening + sorted morning in order
+                          allPunches = [...punches.evening.slice().sort(), ...punches.morning.slice().sort()];
+                        } else if (r?.rawPunches?.length) {
+                          // rawPunches from API is already in the correct evening-first order
+                          allPunches = r.rawPunches as string[];
+                        } else {
+                          allPunches = [];
+                        }
+                        // P1-P6 = first 6 punches (evening section), P7-P13 = next 7 (morning section)
+                        const eveningSlots = allPunches.slice(0, 6);
+                        const morningSlots = allPunches.slice(6, 13);
                         const ot = r ? (r.overtimeHours || 0) : 0;
                         const isHol = r ? !!(r as any).holidayWorked : false;
                         const isAbsent = !r || r.status === "absent";
                         const isOff = r?.status === "off_day";
                         const isHoliday = r?.status === "holiday";
-                        const hasActivity = evening.length > 0 || morning.length > 0;
+                        const hasActivity = allPunches.length > 0;
                         if (!hasActivity && !r) return null;
                         const rowBg = isHol ? "bg-blue-50" : isOff ? "bg-violet-50/40" : isHoliday ? "bg-gray-50" : "hover:bg-muted/20";
                         const absLabel = isAbsent && !isOff && !isHoliday
@@ -2977,12 +2985,12 @@ ${nwOtTableHtml}
                             </td>
                             {[0,1,2,3,4,5].map(idx => (
                               <td key={idx} className="px-2 py-1.5 font-mono text-center text-amber-700 bg-amber-50/30 border-x border-amber-100 text-[10px]">
-                                {evening[idx] ?? <span className="text-muted-foreground/40">—</span>}
+                                {eveningSlots[idx] ?? <span className="text-muted-foreground/40">—</span>}
                               </td>
                             ))}
                             {[0,1,2,3,4,5,6].map(idx => (
                               <td key={idx} className="px-2 py-1.5 font-mono text-center text-sky-700 bg-sky-50/30 border-x border-sky-100 text-[10px]">
-                                {morning[idx] ?? <span className="text-muted-foreground/40">—</span>}
+                                {morningSlots[idx] ?? <span className="text-muted-foreground/40">—</span>}
                               </td>
                             ))}
                             <td className="px-2 py-1.5 text-right font-mono text-[10px]">
