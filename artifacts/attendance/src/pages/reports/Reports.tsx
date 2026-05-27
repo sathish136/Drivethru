@@ -2915,6 +2915,7 @@ ${nwOtTableHtml}
                       <th className="px-2 py-2 text-left font-semibold">Status</th>
                       <th className="px-2 py-2 text-center font-semibold text-amber-300 bg-amber-900/40" colSpan={6}>Evening Punches (P1 – P6)</th>
                       <th className="px-2 py-2 text-center font-semibold text-sky-300 bg-sky-900/40" colSpan={7}>Morning Punches (P7 – P13)</th>
+                      <th className="px-2 py-2 text-right font-semibold text-green-300">Total</th>
                       <th className="px-2 py-2 text-right font-semibold text-orange-300">OT</th>
                       <th className="px-2 py-2 text-left font-semibold text-rose-300">Absence</th>
                     </tr>
@@ -2926,6 +2927,7 @@ ${nwOtTableHtml}
                       {[7,8,9,10,11,12,13].map(n => (
                         <th key={n} className="px-2 py-1 text-center text-[10px] font-medium text-sky-200 bg-sky-900/20 border-x border-sky-900/30">P{n}</th>
                       ))}
+                      <th className="px-2 py-1"></th>
                       <th className="px-2 py-1"></th>
                       <th className="px-2 py-1"></th>
                     </tr>
@@ -2943,21 +2945,19 @@ ${nwOtTableHtml}
                         // Build a sequential punch list (evening first, then morning).
                         // This matches the Attendance Report: the 6th punch (e.g. 00:15) fills
                         // P6 even though it is past midnight, instead of leaving a gap.
-                        let allPunches: string[];
-                        if (punches) {
-                          // Bio-log data: combine sorted evening + sorted morning in order
-                          allPunches = [...punches.evening.slice().sort(), ...punches.morning.slice().sort()];
-                        } else if (r?.rawPunches?.length) {
-                          // rawPunches from API is already in the correct evening-first order
-                          allPunches = r.rawPunches as string[];
-                        } else {
-                          allPunches = [];
-                        }
+                        // Build sequential punch list: prefer whichever source has MORE punches
+                        const bioAllPunches = punches
+                          ? [...punches.evening.slice().sort(), ...punches.morning.slice().sort()]
+                          : [];
+                        const apiAllPunches: string[] = (r?.rawPunches as string[]) ?? [];
+                        // Use bio log if it has more punches, otherwise fall back to API rawPunches
+                        allPunches = bioAllPunches.length >= apiAllPunches.length ? bioAllPunches : apiAllPunches;
                         // P1-P6 = first 6 punches (evening section), P7-P13 = next 7 (morning section)
                         const eveningSlots = allPunches.slice(0, 6);
                         const morningSlots = allPunches.slice(6, 13);
                         const ot = r ? (r.overtimeHours || 0) : 0;
                         const isHol = r ? !!(r as any).holidayWorked : false;
+                        const holName: string = (r as any)?.holidayName || "Holiday";
                         const isAbsent = !r || r.status === "absent";
                         const isOff = r?.status === "off_day";
                         const isHoliday = r?.status === "holiday";
@@ -2968,7 +2968,7 @@ ${nwOtTableHtml}
                           ? <span className="text-red-600 font-semibold text-[10px]">ABSENT</span>
                           : isOff ? <span className="text-violet-600 text-[10px]">DAY OFF</span>
                           : isHoliday ? <span className="text-gray-500 text-[10px]">HOLIDAY</span>
-                          : isHol ? <span className="text-blue-600 text-[10px]">Holiday worked</span>
+                          : isHol ? <span className="text-blue-600 text-[10px] font-semibold">Holiday worked — {holName}</span>
                           : null;
                         return (
                           <tr key={dateStr} className={cn("transition-colors", rowBg)}>
@@ -2993,6 +2993,9 @@ ${nwOtTableHtml}
                                 {morningSlots[idx] ?? <span className="text-muted-foreground/40">—</span>}
                               </td>
                             ))}
+                            <td className="px-2 py-1.5 text-right font-mono text-[10px] text-green-700 font-semibold">
+                              {r?.totalHours != null ? fmtTotal(r.totalHours) : <span className="text-muted-foreground font-normal">—</span>}
+                            </td>
                             <td className="px-2 py-1.5 text-right font-mono text-[10px]">
                               {ot > 0 ? <span className={isHol ? "text-blue-600 font-semibold" : "text-orange-600 font-semibold"}>{ot.toFixed(1)}h</span> : <span className="text-muted-foreground">—</span>}
                             </td>
