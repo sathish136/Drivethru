@@ -502,6 +502,11 @@ router.post("/generate", async (req, res) => {
           else if (name.includes("lunch") || name.includes("incentive")) lunchIncentive += e.amount || 0;
           else otherAllowances += e.amount || 0;
         }
+        /* Default lunch incentive: if no lunch component in structure and employee has present days, apply per-day default */
+        if (lunchIncentive === 0 && (presentDays + halfDaysCount) > 0) {
+          const lunchPerDay = cfg.lunchIncentivePerDay ?? 125;
+          lunchIncentive = Math.round(lunchPerDay * (presentDays + halfDaysCount));
+        }
 
         epfEmployee = Math.round(basicSalary * 0.08);
         epfEmployer = Math.round(basicSalary * 0.12);
@@ -862,7 +867,17 @@ router.get("/:id", async (req, res) => {
 
     if (!rows.length) return res.status(404).json({ message: "Not found" });
     const r = rows[0];
-    res.json({ ...r.payroll, employee: r.emp });
+
+    /* Fetch active loans so the payslip always shows live installment amounts */
+    const empActiveLoans = await db.select().from(staffLoans)
+      .where(and(eq(staffLoans.employeeId, r.emp.id), eq(staffLoans.status, "active")));
+    const currentPeriod = r.payroll.year * 100 + r.payroll.month;
+    const liveInstallment = Math.round(empActiveLoans.reduce((sum, loan) => {
+      if (loan.startYear * 100 + loan.startMonth > currentPeriod) return sum;
+      return sum + Math.min(loan.monthlyInstallment, loan.remainingBalance);
+    }, 0));
+
+    res.json({ ...r.payroll, employee: r.emp, activeLoanInstallment: liveInstallment });
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: "Failed to fetch payslip" });

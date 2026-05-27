@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Printer, ArrowLeft, AlertCircle } from "lucide-react";
 import drivethruLogo from "@/assets/drivethru-wave-logo.png";
+import liveuLogo from "@/assets/liveu-logo.png";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 function apiUrl(path: string) { return `${BASE}/api${path}`; }
@@ -50,6 +51,7 @@ interface PayrollRow {
   totalDeductions: number;
   netSalary: number;
   status: string;
+  activeLoanInstallment?: number;
   reqHoursPerDay?: number | null;
   lateMinutes?: number | null;
   lunchLateMinutes?: number | null;
@@ -132,7 +134,7 @@ export default function PayslipPage() {
   const totalEarnings = totalForEPF + overtime;
 
   const epf8         = row.epfEmployee || 0;
-  const loans        = row.loanDeduction || 0;
+  const loans        = row.loanDeduction || row.activeLoanInstallment || 0;
   const otherDeds    = row.otherDeductions || 0;
   const apit         = row.apit || 0;
   const totalRecoveries = epf8 + loans + otherDeds + apit;
@@ -192,7 +194,13 @@ export default function PayslipPage() {
     ...(lunchLateDed > 0  ? [{ label: "Less  :  Lunch Return Late",                     value: fmtAmt(lunchLateDed),  italic: true }] : []),
     ...(earlyExitDed > 0  ? [{ label: "Less  :  Early Exit / Short Hours",              value: fmtAmt(earlyExitDed),  italic: true }] : []),
     { label: "Total for EPF / ETF",     value: fmtAmt(totalForEPF), bold: true },
-    { label: "Add  :  Overtime / Holiday Pay", value: overtime > 0 ? fmtAmt(overtime) : "", italic: true },
+    ...((row.overtimePay || 0) > 0
+      ? [{ label: `Add  :  Overtime  (${(row.overtimeHours || 0).toFixed(1)} hrs)`, value: fmtAmt(row.overtimePay || 0), italic: true }]
+      : []),
+    ...((row.holidayOtPay || 0) > 0
+      ? [{ label: "Add  :  Holiday / Off-Day Pay", value: fmtAmt(row.holidayOtPay || 0), italic: true }]
+      : []),
+    ...(overtime === 0 ? [{ label: "Add  :  Overtime / Holiday Pay", value: "", italic: true }] : []),
     { label: "Total Earnings",          value: fmtAmt(totalEarnings), borderTop: true },
     { label: "Recoveries  :  EPF 8%",   value: fmtAmt(epf8) },
     ...(loans > 0     ? [{ label: "Loans / Advances",   value: fmtAmt(loans),    indent: true }] : []),
@@ -586,13 +594,19 @@ export default function PayslipPage() {
         </div>
 
         {/* Footer */}
-        <div style={{ background: "#f8fafc", borderTop: "1px solid #e2e8f0", padding: "10px 32px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
-          <div style={{ width: "6px", height: "6px", background: "#3a9ec2", borderRadius: "50%", flexShrink: 0 }} />
-          <p style={{ fontSize: "9.5px", color: "#94a3b8", textAlign: "center" }}>
-            <span style={{ fontWeight: "600", color: "#64748b" }}>System Generated</span>
-            &nbsp;·&nbsp;{generatedAt}
-            &nbsp;·&nbsp;Drivethru Attendance Management System
-          </p>
+        <div style={{ background: "#f8fafc", borderTop: "1px solid #e2e8f0", padding: "10px 32px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", marginBottom: "6px" }}>
+            <div style={{ width: "6px", height: "6px", background: "#3a9ec2", borderRadius: "50%", flexShrink: 0 }} />
+            <p style={{ fontSize: "9.5px", color: "#94a3b8", textAlign: "center" }}>
+              <span style={{ fontWeight: "600", color: "#64748b" }}>System Generated</span>
+              &nbsp;·&nbsp;{generatedAt}
+            </p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "5px", borderTop: "1px dashed #e2e8f0", paddingTop: "6px" }}>
+            <span style={{ fontSize: "8.5px", color: "#94a3b8", letterSpacing: "0.04em" }}>Powered by</span>
+            <img src={liveuLogo} alt="Live U" style={{ height: "14px", width: "auto", display: "block", opacity: 0.75 }} />
+            <span style={{ fontSize: "8.5px", color: "#64748b", fontWeight: "600" }}>Live U Pvt Ltd</span>
+          </div>
         </div>
 
       </div>
