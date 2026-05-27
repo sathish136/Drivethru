@@ -652,9 +652,12 @@ router.post("/generate", async (req, res) => {
             // Use ALL evening+morning punches so 05:xx/06:xx/07:xx checkpoints are validated correctly.
             // calcNightWatcherPolicyOtHours only has 4 stored times and misses intermediate checkpoints.
             const allPunches = nwAllPunchesMap.get(`${emp.id}:${rec.date}`) ?? [];
-            ot = allPunches.length > 0
+            const baseOt = allPunches.length > 0
               ? calcNightWatcherOtFromAllPunches(allPunches)
               : calcNightWatcherPolicyOtHours(rec);
+            // Night Watcher holiday rule: if worked (baseOt > 0) on a holiday → 11 OT hrs (8 base + 3).
+            // Synthetic records always have status="present", so holiday detection uses holidayDateMap.
+            ot = (holidayDateMap.has(rec.date) && baseOt > 0) ? 11 : baseOt;
           } else {
             ot = salaryRowFor(rec).otHours;
           }
