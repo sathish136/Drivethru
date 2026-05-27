@@ -198,24 +198,24 @@ export function nightShiftOt(rec: {
   const lastOut = rec.outTime2 ?? rec.outTime1 ?? rec.inTime2 ?? rec.inTime1;
   if (!lastOut) return { otHours: 3, missedBlocks: 0, deductedHours: 0 };
 
-  const OT_START_MINS = 5 * 60;      // 05:00 AM = 300 min
-  const OT_CAP_MINS   = 3 * 60;      // 3 h cap (08:00 AM)
+  const OT_START_MINS = 5 * 60;  // 05:00 AM = 300 min
 
-  // Night shift crosses midnight: times < 12:00 are morning (next day), ≥ 12:00 are evening.
-  // Morning out-times (e.g. 06:30, 07:00) will be < 300 compared to OT_START=300 if we
-  // use raw timeToMins — which is correct because 06:30 = 390 min > 300 min. ✓
+  // Night shift crosses midnight: times before noon are morning (next day).
+  // Evening out-times (>= 12:00) mean they left before the OT window.
   const outMins = timeToMins(lastOut);
-
-  // Only count OT if the last punch is in the morning window (00:00 – 12:00).
-  // Evening punches (>= 18:00 = 1080 min) mean they left before OT window.
   if (outMins >= 12 * 60) {
-    // Punched out in the evening — no morning OT.
     return { otHours: 0, missedBlocks: 0, deductedHours: 0 };
   }
 
+  // Discrete whole-hour OT: count only full hours past 05:00.
+  // No cap — if they stayed past 08:00, those hours still count.
+  //   out 05:59 → 0h   (under 1 full hour)
+  //   out 06:00 → 1h
+  //   out 07:00 → 2h
+  //   out 08:00 → 3h
+  //   out 09:00 → 4h   etc.
   const overMins = Math.max(0, outMins - OT_START_MINS);
-  const cappedMins = Math.min(overMins, OT_CAP_MINS);
-  const otHours = Math.round((cappedMins / 60) * 100) / 100;
+  const otHours = Math.floor(overMins / 60);  // whole hours only
 
   return { otHours, missedBlocks: 0, deductedHours: 0 };
 }
