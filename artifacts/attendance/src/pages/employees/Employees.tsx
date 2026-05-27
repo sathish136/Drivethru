@@ -42,6 +42,12 @@ function empDisplayName(emp: any) {
   return emp.fullName || "";
 }
 
+function shortEmpId(empId: string) {
+  if (!empId) return "";
+  const numeric = empId.replace(/^[A-Za-z]+/, "").replace(/^0+/, "");
+  return numeric || empId;
+}
+
 function useGet(key: string[], path: string) {
   return useQuery({ queryKey: key, queryFn: () => fetch(apiUrl(path)).then(r => r.json()) });
 }
@@ -1882,7 +1888,7 @@ function ShiftDetailsTab() {
                                     </div>
                                     <div>
                                       <span className="font-semibold text-foreground">{empDisplayName(e)}</span>
-                                      <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{e.employeeId}</span>
+                                      <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">{shortEmpId(e.employeeId)}</span>
                                     </div>
                                   </div>
                                 ))}
@@ -1988,7 +1994,7 @@ function ShiftDetailsTab() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-xs text-foreground truncate">{empDisplayName(e)}</span>
-                        <span className="text-[10px] font-mono text-muted-foreground shrink-0">{e.employeeId}</span>
+                        <span className="text-[10px] font-mono text-muted-foreground shrink-0">{shortEmpId(e.employeeId)}</span>
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span className="text-[10px] text-muted-foreground truncate">{e.department || "—"}</span>
@@ -2310,7 +2316,7 @@ function PayrollTab() {
                           className="rounded pointer-events-none"
                         />
                       </td>
-                      <td className="px-3 py-2.5 font-mono text-primary font-medium whitespace-nowrap">{emp.employeeId}</td>
+                      <td className="px-3 py-2.5 font-mono text-primary font-medium whitespace-nowrap">{shortEmpId(emp.employeeId)}</td>
                       <td className="px-3 py-2.5">
                         <div className="font-semibold text-foreground whitespace-nowrap">{empDisplayName(emp)}</div>
                         <div className="text-[10px] text-muted-foreground">{emp.email}</div>
@@ -2595,7 +2601,7 @@ export default function Employees() {
                       return (
                       <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors group">
                         <td className="px-4 py-3">
-                          <span className="font-mono text-xs font-semibold text-primary tracking-tight">{emp.employeeId}</span>
+                          <span className="font-mono text-xs font-semibold text-primary tracking-tight">{shortEmpId(emp.employeeId)}</span>
                         </td>
                         <td className="px-4 py-3">
                           <span className="font-mono text-xs font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{emp.biometricId || "—"}</span>
