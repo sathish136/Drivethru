@@ -3,9 +3,9 @@ import { db } from "@workspace/db";
 import {
   payrollRecords, employees, attendanceRecords, payrollSettings,
   salaryStructures, employeeSalaryAssignments, holidays, shifts, staffLoans,
-  weekoffSchedules,
+  weekoffSchedules, biometricLogs,
 } from "@workspace/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, gte, lte, sql } from "drizzle-orm";
 import {
   loadDeptRules, findRule, effectiveHours, calcOtHours, lateCutoffMins,
   timeToMins, calcLunchLateMinutes, calcTimeBasedOtHours,
@@ -224,9 +224,14 @@ router.post("/generate", async (req, res) => {
     const holidayInfoMap = new Map<string, { type: "statutory" | "poya" | "public"; name: string }>();
     for (const h of monthHolidays) {
       const t = (h.type as string)?.toLowerCase();
-      if (t === "statutory" || t === "poya" || t === "public") {
-        holidayDateMap.set(h.date, t as any);
-        holidayInfoMap.set(h.date, { type: t as any, name: h.name });
+      const normalizedType =
+        t === "statutory" || t === "national" ? "statutory"
+        : t === "poya" || t === "religious"   ? "poya"
+        : t === "public"                       ? "public"
+        : null;
+      if (normalizedType) {
+        holidayDateMap.set(h.date, normalizedType as any);
+        holidayInfoMap.set(h.date, { type: normalizedType as any, name: h.name });
       }
     }
 
@@ -243,6 +248,100 @@ router.post("/generate", async (req, res) => {
 
     /* ── Load HR department rules ── */
     const deptRules = await loadDeptRules();
+
+    /* ── Identify Night Watcher employees and synthesize attendance from bio logs ──
+       Night Watcher employees store punches in biometric_logs only (no attendance_records).
+       For each shift date in the month we look for evening punches (≥18:00) on that date
+       and morning punches (<12:00) on the NEXT date, then build a synthetic attendance
+       row that the salary engine can process identically to a real attendance_record. */
+    const syntheticAttByEmp = new Map<number, Array<{
+      employeeId: number; date: string; status: string;
+      inTime1: string | null; outTime1: string | null;
+      inTime2: string | null; outTime2: string | null;
+      totalHours: number; leaveType: null;
+    }>>();
+
+    {
+      // Determine which target employees are Night Watcher payroll employees
+      const nightWatcherEmpIds: number[] = [];
+      for (const emp of targetEmps) {
+        const empShiftName = emp.shiftId ? shiftMap.get(emp.shiftId)?.name ?? null : null;
+        const rule = findRule(deptRules, emp.department ?? "", empShiftName);
+        if (rule.nightWatcherPayroll === true) nightWatcherEmpIds.push(emp.id);
+      }
+
+      if (nightWatcherEmpIds.length > 0) {
+        // Extend end by 1 day to capture morning punches of the last night of the month
+        const bioStart = `${year}-${String(month).padStart(2, "0")}-01`;
+        const nextMonthFirst = new Date(Date.UTC(year, month, 1)); // month is 1-based; Date.UTC month is 0-based so month=4 gives May 1
+        const bioEnd = nextMonthFirst.toISOString().slice(0, 10);
+
+        const bioRows = await db.select({
+          employeeId: biometricLogs.employeeId,
+          punchTime: biometricLogs.punchTime,
+        }).from(biometricLogs).where(and(
+          inArray(biometricLogs.employeeId, nightWatcherEmpIds),
+          gte(sql`(${biometricLogs.punchTime} AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Colombo')::date`, bioStart),
+          lte(sql`(${biometricLogs.punchTime} AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Colombo')::date`, bioEnd),
+        ));
+
+        // Group by "empId:localDate" → sorted HH:MM list
+        const byEmpDate = new Map<string, string[]>();
+        for (const row of bioRows) {
+          if (!row.employeeId) continue;
+          const local = new Date((row.punchTime as Date).getTime() + 5.5 * 3_600_000);
+          const dateStr = local.toISOString().slice(0, 10);
+          const timeStr = `${String(local.getUTCHours()).padStart(2, "0")}:${String(local.getUTCMinutes()).padStart(2, "0")}`;
+          const key = `${row.employeeId}:${dateStr}`;
+          if (!byEmpDate.has(key)) byEmpDate.set(key, []);
+          byEmpDate.get(key)!.push(timeStr);
+        }
+        for (const times of byEmpDate.values()) times.sort();
+
+        const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+
+        for (const empId of nightWatcherEmpIds) {
+          const recs: Array<{ employeeId: number; date: string; status: string; inTime1: string | null; outTime1: string | null; inTime2: string | null; outTime2: string | null; totalHours: number; leaveType: null; }> = [];
+          for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+            // Next calendar date (handles month boundary)
+            const nextD = new Date(Date.UTC(year, month - 1, d + 1)).toISOString().slice(0, 10);
+
+            const dayPunches  = byEmpDate.get(`${empId}:${dateStr}`) ?? [];
+            const nextDayPunches = byEmpDate.get(`${empId}:${nextD}`) ?? [];
+
+            // Evening punches on the shift date (≥18:00)
+            const eveningPunches = dayPunches.filter(t => timeToMins(t) >= 18 * 60);
+
+            // Morning punches on the next date (00:00–09:00, covers OT window + grace)
+            // Night Watcher shift ends 05:00, OT window extends to 08:00
+            const morningPunches = nextDayPunches.filter(t => timeToMins(t) < 9 * 60);
+
+            // A shift is worked if evening punches exist OR morning punches from the
+            // overnight tail exist (evening punch may be missing from device logs)
+            if (eveningPunches.length === 0 && morningPunches.length === 0) continue;
+
+            // Use default shift start time if evening punch was not recorded by device
+            const inTime1  = eveningPunches.length > 0 ? eveningPunches[0] : "20:00";
+            const outTime1 = eveningPunches.length > 1 ? eveningPunches[eveningPunches.length - 1] : null;
+            const inTime2  = morningPunches.length > 1 ? morningPunches[0] : null;
+            const outTime2 = morningPunches.length > 0 ? morningPunches[morningPunches.length - 1] : null;
+
+            // Total hours (span from first evening punch to last morning punch, crossing midnight)
+            let totalHours = 0;
+            if (outTime2) {
+              const startMins = timeToMins(inTime1);
+              const endMins   = timeToMins(outTime2);
+              const spanMins  = endMins < startMins ? (24 * 60 - startMins + endMins) : (endMins - startMins);
+              totalHours = spanMins / 60;
+            }
+
+            recs.push({ employeeId: empId, date: dateStr, status: "present", inTime1, outTime1, inTime2, outTime2, totalHours, leaveType: null });
+          }
+          if (recs.length > 0) syntheticAttByEmp.set(empId, recs);
+        }
+      }
+    }
 
     /* ── Fetch active loans for target employees ── */
     const activeLoans = await db.select().from(staffLoans)
@@ -266,8 +365,15 @@ router.post("/generate", async (req, res) => {
     );
 
     for (const emp of targetEmps) {
-      const empAtt = filteredAtt.filter(a => a.employeeId === emp.id);
+      let empAtt: Array<any> = filteredAtt.filter(a => a.employeeId === emp.id);
       const designation = (emp.designation ?? "").toLowerCase();
+
+      /* ── For Night Watcher employees: if no attendance_records exist,
+         synthesize them from biometric_logs so payroll can compute
+         present days, late minutes, and OT from actual punch data. ── */
+      if (empAtt.length === 0 && syntheticAttByEmp.has(emp.id)) {
+        empAtt = syntheticAttByEmp.get(emp.id)!;
+      }
 
       /* ── Weekoff schedule for this employee ── */
       const empWeekoff = emp.weekoffScheduleId ? weekoffMap.get(emp.weekoffScheduleId) : null;

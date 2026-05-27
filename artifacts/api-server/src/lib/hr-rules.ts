@@ -161,7 +161,7 @@ export async function loadDeptRules(): Promise<DeptShiftRule[]> {
   try {
     const parsed = JSON.parse(row.departmentRules) as any[];
     if (Array.isArray(parsed) && parsed.length > 0
-        && "department" in parsed[0] && "shift" in parsed[0]) {
+        && "department" in parsed[0]) {
       return parsed as DeptShiftRule[];
     }
   } catch { /* malformed JSON */ }
@@ -188,7 +188,7 @@ export function findRule(
   if (shift) {
     const both = rules.find(
       r => r.department.toLowerCase().trim() === dept &&
-           r.shift.toLowerCase().trim() === shift,
+           (r.shift ?? "").toLowerCase().trim() === shift,
     );
     if (both) return applyShiftDefaults(both, shiftName);
   }

@@ -2050,6 +2050,8 @@ function IndividualReport() {
   const [activeEmpId, setActiveEmpId] = useState<string>("");
   const [showReport, setShowReport] = useState(false);
   const [deptFilter, setDeptFilter] = useState("");
+  const [empNameFilter, setEmpNameFilter] = useState("");
+  const [nwBioLogs, setNwBioLogs] = useState<any[]>([]);
 
   const { data: empData, isLoading: empLoading } = useListEmployees({ limit: 1000 });
   const { rules: hrRules } = useHrRules();
@@ -2099,9 +2101,16 @@ function IndividualReport() {
   }, [employees]);
 
   const filteredEmployees = useMemo(() => {
-    if (!deptFilter) return employees;
-    return employees.filter((e: any) => e.department === deptFilter);
-  }, [employees, deptFilter]);
+    let list = deptFilter ? employees.filter((e: any) => e.department === deptFilter) : employees;
+    if (empNameFilter.trim()) {
+      const q = empNameFilter.toLowerCase();
+      list = list.filter((e: any) =>
+        (e.fullName || "").toLowerCase().includes(q) ||
+        (e.employeeId || "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [employees, deptFilter, empNameFilter]);
 
   useEffect(() => {
     if (empIds.length > 0 && !empIds.includes(activeEmpId)) {
@@ -2336,13 +2345,15 @@ function IndividualReport() {
         const empNwOtRate = empNwHasValidBasic ? Math.round(((empBasicForNW ?? 0) / 240 * 1.5) * 100) / 100 : 0;
         // Build full-calendar rows for PDF (all days, like reference screenshot)
         const pdfRecMap = new Map(recs.map((r: any) => [r.date as string, r]));
-        const nwTotalOt = recs.reduce((s: number, r: any) => s + (r.overtimeHours || 0), 0);
         const nwCalRows: string[] = [];
+        let nwTotalOt = 0;
         for (let d = 1; d <= daysInMonth; d++) {
           const dateStr = `${year}-${String(month).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
           const r = pdfRecMap.get(dateStr);
-          const ot = r ? (r.overtimeHours || 0) : 0;
           const isHol = r ? !!(r as any).holidayWorked : false;
+          const rawOt = r ? (r.overtimeHours || 0) : 0;
+          const ot = isHol && rawOt > 0 ? 11 : rawOt;
+          if (ot > 0) nwTotalOt += ot;
           const isAbsent = !r || r.status === "absent";
           const isOff = r?.status === "off_day";
           const isHoliday = r?.status === "holiday";
@@ -2496,8 +2507,9 @@ ${nwOtTableHtml}
         const dateStr = `${year}-${String(month).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
         const dow = new Date(dateStr + "T00:00:00Z").getUTCDay();
         const r = recMap.get(dateStr);
-        const ot = r ? (r.overtimeHours || 0) : 0;
         const isHol = r ? !!r.holidayWorked : false;
+        const rawOt = r ? (r.overtimeHours || 0) : 0;
+        const ot = isHol && rawOt > 0 ? 11 : rawOt;
         const isAbsent = !r || r.status === "absent";
         const isOff = r?.status === "off_day";
         const isHoliday = r?.status === "holiday";
@@ -2506,7 +2518,11 @@ ${nwOtTableHtml}
         const otHrsStr = ot > 0 ? ot.toFixed(1) : "";
         nwRows.push([d, `'${dateStr}`, otHrsStr, nwOtRate.toFixed(2), amount.toFixed(2), absenceNote]);
       }
-      const totalOt = records.reduce((s: number, r: any) => s + (r.overtimeHours || 0), 0);
+      const totalOt = records.reduce((s: number, r: any) => {
+        const hol = !!(r.holidayWorked);
+        const raw = r.overtimeHours || 0;
+        return s + (hol && raw > 0 ? 11 : raw);
+      }, 0);
       nwRows.push(["TOTAL", "", totalOt.toFixed(1), "", (Math.round(totalOt * nwOtRate * 100) / 100).toFixed(2), `Absence: ${summary.absent}`]);
       const safeMonth = `${getMonthName(month)}-${year}`;
       exportCsv(NW_HEADERS, nwRows, `night-watcher-ot-${(selectedEmp as any).employeeId}-${safeMonth}.csv`);
@@ -2592,6 +2608,44 @@ ${nwOtTableHtml}
 
   const isOffSeasonInd = useOffSeasonStatus(month, year);
 
+  // Fetch bio logs for Night Watcher punch display
+  useEffect(() => {
+    if (!showReport || !activeEmpId) { setNwBioLogs([]); return; }
+    const token = localStorage.getItem("auth_token") || "";
+    const extEnd = new Date(year, month, 1).toISOString().split("T")[0];
+    fetch(apiUrl(`/biometric/logs?employeeId=${activeEmpId}&startDate=${startDate}&endDate=${extEnd}`), {
+      credentials: "include", headers: { Authorization: `Bearer ${token}` },
+    }).then(r => r.json()).then(d => {
+      setNwBioLogs(Array.isArray(d) ? d : d.logs || []);
+    }).catch(() => { setNwBioLogs([]); });
+  }, [showReport, activeEmpId, startDate, endDate]);
+
+  const nwPunchMap = useMemo((): Map<string, { evening: string[]; morning: string[] }> => {
+    const map = new Map<string, { evening: string[]; morning: string[] }>();
+    for (const log of nwBioLogs) {
+      if (!log.punchTime) continue;
+      const localMs = new Date(log.punchTime).getTime() + 330 * 60 * 1000;
+      const localD = new Date(localMs);
+      const localDate = localD.toISOString().split("T")[0];
+      const localHour = localD.getUTCHours();
+      const localMin = localD.getUTCMinutes();
+      const totalMins = localHour * 60 + localMin;
+      const timeStr = `${String(localHour).padStart(2, "0")}:${String(localMin).padStart(2, "0")}`;
+      if (totalMins >= 18 * 60) {
+        const entry = map.get(localDate) ?? { evening: [], morning: [] };
+        entry.evening.push(timeStr);
+        map.set(localDate, entry);
+      } else if (totalMins < 9 * 60) {
+        const prevMs = localMs - 24 * 60 * 60 * 1000;
+        const prevDate = new Date(prevMs).toISOString().split("T")[0];
+        const entry = map.get(prevDate) ?? { evening: [], morning: [] };
+        entry.morning.push(timeStr);
+        map.set(prevDate, entry);
+      }
+    }
+    return map;
+  }, [nwBioLogs]);
+
   return (
     <div className="space-y-4">
       <SeasonBadge month={month} year={year} />
@@ -2604,13 +2658,22 @@ ${nwOtTableHtml}
           </div>
         </div>
         <div className="p-4 space-y-4 overflow-visible relative">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-start">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-start">
             <div>
               <Label className="text-xs">Department</Label>
               <Select value={deptFilter} onChange={e => { setDeptFilter(e.target.value); setEmpIds([]); setActiveEmpId(""); setShowReport(false); }}>
                 <option value="">— All Departments —</option>
                 {departments.map(d => <option key={d} value={d}>{d}</option>)}
               </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Search Employee</Label>
+              <Input
+                placeholder="Name or Employee ID…"
+                value={empNameFilter}
+                onChange={e => { setEmpNameFilter(e.target.value); setEmpIds([]); setActiveEmpId(""); setShowReport(false); }}
+                className="text-xs"
+              />
             </div>
             <div>
               <Label className="text-xs">Employee(s)</Label>
@@ -2778,11 +2841,12 @@ ${nwOtTableHtml}
                   </thead>
                   <tbody className="divide-y divide-border">
                     {calRows.filter(({ r }) => {
-                      const ot = r ? (r.overtimeHours || 0) : 0;
-                      return ot > 0;
+                      const rawOt = r ? (r.overtimeHours || 0) : 0;
+                      return rawOt > 0;
                     }).map(({ date, dow, r }, idx) => {
-                      const ot = r ? (r.overtimeHours || 0) : 0;
                       const isHol = r ? !!r.holidayWorked : false;
+                      const rawOt = r ? (r.overtimeHours || 0) : 0;
+                      const ot = isHol && rawOt > 0 ? 11 : rawOt;
                       const amount = Math.round(ot * nwOtRate * 100) / 100;
                       const rowCls = isHol ? "bg-blue-50" : "hover:bg-muted/20";
                       return (
@@ -2809,10 +2873,20 @@ ${nwOtTableHtml}
                   <tfoot className="bg-muted/70">
                     <tr>
                       <td colSpan={2} className="px-3 py-2 text-xs font-bold">TOTAL</td>
-                      <td className="px-3 py-2 text-right font-mono font-bold text-orange-600">{summary.totalOT.toFixed(1)}</td>
+                      <td className="px-3 py-2 text-right font-mono font-bold text-orange-600">
+                        {calRows.filter(({r}) => (r?.overtimeHours||0) > 0).reduce((_,{r}) => {
+                          const isH = r ? !!r.holidayWorked : false;
+                          const raw = r ? (r.overtimeHours||0) : 0;
+                          return _ + (isH && raw > 0 ? 11 : raw);
+                        }, 0).toFixed(1)}
+                      </td>
                       <td className="px-3 py-2"></td>
                       <td className="px-3 py-2 text-right font-mono font-bold text-emerald-700">
-                        {(Math.round(summary.totalOT * nwOtRate * 100) / 100).toLocaleString("en-LK", { minimumFractionDigits: 2 })}
+                        {(Math.round(calRows.filter(({r}) => (r?.overtimeHours||0) > 0).reduce((_,{r}) => {
+                          const isH = r ? !!r.holidayWorked : false;
+                          const raw = r ? (r.overtimeHours||0) : 0;
+                          return _ + (isH && raw > 0 ? 11 : raw);
+                        }, 0) * nwOtRate * 100) / 100).toLocaleString("en-LK", { minimumFractionDigits: 2 })}
                       </td>
                       <td className="px-3 py-2 text-xs text-muted-foreground">
                         Abs: <span className="font-semibold text-red-600">{summary.absent}</span>
@@ -2830,7 +2904,94 @@ ${nwOtTableHtml}
               <div className="p-8 text-center text-sm text-muted-foreground">Loading attendance data…</div>
             ) : records.length === 0 ? (
               <div className="p-8 text-center text-sm text-muted-foreground">No attendance records found for {getMonthName(month)} {year}.</div>
+            ) : isNightWatcher ? (
+              /* ── Night Watcher 13-punch table ── */
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-800 text-white">
+                      <th className="px-2 py-2 text-left font-semibold w-7">#</th>
+                      <th className="px-2 py-2 text-left font-semibold whitespace-nowrap">Date</th>
+                      <th className="px-2 py-2 text-left font-semibold">Status</th>
+                      <th className="px-2 py-2 text-center font-semibold text-amber-300 bg-amber-900/40" colSpan={6}>Evening Punches (P1 – P6)</th>
+                      <th className="px-2 py-2 text-center font-semibold text-sky-300 bg-sky-900/40" colSpan={7}>Morning Punches (P7 – P13)</th>
+                      <th className="px-2 py-2 text-right font-semibold text-orange-300">OT</th>
+                      <th className="px-2 py-2 text-left font-semibold text-rose-300">Absence</th>
+                    </tr>
+                    <tr className="bg-slate-700 text-slate-200 border-b-2 border-slate-500">
+                      <th className="px-2 py-1" colSpan={3}></th>
+                      {[1,2,3,4,5,6].map(n => (
+                        <th key={n} className="px-2 py-1 text-center text-[10px] font-medium text-amber-200 bg-amber-900/20 border-x border-amber-900/30">P{n}</th>
+                      ))}
+                      {[7,8,9,10,11,12,13].map(n => (
+                        <th key={n} className="px-2 py-1 text-center text-[10px] font-medium text-sky-200 bg-sky-900/20 border-x border-sky-900/30">P{n}</th>
+                      ))}
+                      <th className="px-2 py-1"></th>
+                      <th className="px-2 py-1"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {(() => {
+                      const recMap = new Map(records.map((r: any) => [r.date, r]));
+                      return Array.from({ length: daysInMonth }, (_, i) => {
+                        const d = i + 1;
+                        const dateStr = `${year}-${String(month).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+                        const dow = new Date(dateStr + "T00:00:00Z").getUTCDay();
+                        const dayName = DAY_NAMES[dow];
+                        const r = recMap.get(dateStr);
+                        const punches = nwPunchMap.get(dateStr);
+                        const evening = punches?.evening.slice().sort() ?? [];
+                        const morning = punches?.morning.slice().sort() ?? [];
+                        const ot = r ? (r.overtimeHours || 0) : 0;
+                        const isHol = r ? !!(r as any).holidayWorked : false;
+                        const isAbsent = !r || r.status === "absent";
+                        const isOff = r?.status === "off_day";
+                        const isHoliday = r?.status === "holiday";
+                        const hasActivity = evening.length > 0 || morning.length > 0;
+                        if (!hasActivity && !r) return null;
+                        const rowBg = isHol ? "bg-blue-50" : isOff ? "bg-violet-50/40" : isHoliday ? "bg-gray-50" : "hover:bg-muted/20";
+                        const absLabel = isAbsent && !isOff && !isHoliday
+                          ? <span className="text-red-600 font-semibold text-[10px]">ABSENT</span>
+                          : isOff ? <span className="text-violet-600 text-[10px]">DAY OFF</span>
+                          : isHoliday ? <span className="text-gray-500 text-[10px]">HOLIDAY</span>
+                          : isHol ? <span className="text-blue-600 text-[10px]">Holiday worked</span>
+                          : null;
+                        return (
+                          <tr key={dateStr} className={cn("transition-colors", rowBg)}>
+                            <td className="px-2 py-1.5 font-mono text-muted-foreground text-[10px]">{d}</td>
+                            <td className="px-2 py-1.5 font-mono whitespace-nowrap text-[10px]">
+                              {dateStr}<span className="ml-1 text-muted-foreground">{dayName}</span>
+                            </td>
+                            <td className="px-2 py-1.5">
+                              {r ? (
+                                <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-semibold", statusColor(r.status))}>
+                                  {fmtStatus(r.status)}
+                                </span>
+                              ) : <span className="text-muted-foreground text-[10px]">—</span>}
+                            </td>
+                            {[0,1,2,3,4,5].map(idx => (
+                              <td key={idx} className="px-2 py-1.5 font-mono text-center text-amber-700 bg-amber-50/30 border-x border-amber-100 text-[10px]">
+                                {evening[idx] ?? <span className="text-muted-foreground/40">—</span>}
+                              </td>
+                            ))}
+                            {[0,1,2,3,4,5,6].map(idx => (
+                              <td key={idx} className="px-2 py-1.5 font-mono text-center text-sky-700 bg-sky-50/30 border-x border-sky-100 text-[10px]">
+                                {morning[idx] ?? <span className="text-muted-foreground/40">—</span>}
+                              </td>
+                            ))}
+                            <td className="px-2 py-1.5 text-right font-mono text-[10px]">
+                              {ot > 0 ? <span className={isHol ? "text-blue-600 font-semibold" : "text-orange-600 font-semibold"}>{ot.toFixed(1)}h</span> : <span className="text-muted-foreground">—</span>}
+                            </td>
+                            <td className="px-2 py-1.5 text-[10px]">{absLabel}</td>
+                          </tr>
+                        );
+                      }).filter(Boolean);
+                    })()}
+                  </tbody>
+                </table>
+              </div>
             ) : (
+              /* ── Standard attendance table ── */
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-muted/50">

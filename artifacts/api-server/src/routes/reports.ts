@@ -351,9 +351,10 @@ router.get("/attendance", async (req, res) => {
     const holidayByDate = new Map<string, { type: "statutory" | "poya" | "public"; name: string }>();
     for (const h of allHolidays) {
       const t = (h.type as string)?.toLowerCase();
-      if (t === "statutory" || t === "poya" || t === "public") {
-        holidayByDate.set(h.date, { type: t as any, name: h.name });
-      }
+      const nt = t === "statutory" || t === "national" ? "statutory"
+               : t === "poya" || t === "religious"   ? "poya"
+               : t === "public"                       ? "public" : null;
+      if (nt) holidayByDate.set(h.date, { type: nt as any, name: h.name });
     }
 
     // Merge overnight (evening + morning) records for night-shift employees
@@ -745,9 +746,10 @@ router.get("/monthly", async (req, res) => {
     const holidayByDate = new Map<string, { type: "statutory" | "poya" | "public"; name: string }>();
     for (const h of monthHolidays) {
       const t = (h.type as string)?.toLowerCase();
-      if (t === "statutory" || t === "poya" || t === "public") {
-        holidayByDate.set(h.date, { type: t as any, name: h.name });
-      }
+      const nt = t === "statutory" || t === "national" ? "statutory"
+               : t === "poya" || t === "religious"   ? "poya"
+               : t === "public"                       ? "public" : null;
+      if (nt) holidayByDate.set(h.date, { type: nt as any, name: h.name });
     }
 
     const filtered = branchId ? allEmp.filter(r => r.emp.branchId === Number(branchId)) : allEmp;
@@ -883,9 +885,10 @@ router.get("/overtime", async (req, res) => {
     const holidayByDate = new Map<string, { type: "statutory" | "poya" | "public"; name: string }>();
     for (const h of allHolidaysData) {
       const t = (h.type as string)?.toLowerCase();
-      if (t === "statutory" || t === "poya" || t === "public") {
-        holidayByDate.set(h.date, { type: t as any, name: h.name });
-      }
+      const nt = t === "statutory" || t === "national" ? "statutory"
+               : t === "poya" || t === "religious"   ? "poya"
+               : t === "public"                       ? "public" : null;
+      if (nt) holidayByDate.set(h.date, { type: nt as any, name: h.name });
     }
     const MULTIPLIERS: Record<string, number> = { statutory: 2.0, poya: 1.5, public: 1.5 };
 
