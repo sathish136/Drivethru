@@ -456,20 +456,17 @@ export function calcNightWatcherOtFromAllPunches(
   options?: {
     otStartTime?: string;        // default "05:00"
     otEndTime?: string;          // default "08:00"
-    nearEndGraceMinutes?: number; // default 10 (≥07:50 = 3 h)
   },
 ): number {
   if (punchTimes.length === 0) return 0;
-  const otStart  = options?.otStartTime         ?? "05:00";
-  const otEnd    = options?.otEndTime            ?? "08:00";
-  const nearEndG = options?.nearEndGraceMinutes  ?? 10;
+  const otStart  = options?.otStartTime ?? "05:00";
+  const otEnd    = options?.otEndTime   ?? "08:00";
 
   const rawStart  = timeToMins(otStart);
   const rawEnd    = timeToMins(otEnd);
   // Night-normalise: times < noon are after midnight → add 24h so they sort after evening
   const normStart = rawStart < 12 * 60 ? rawStart + 24 * 60 : rawStart;
   const normEnd   = rawEnd   < 12 * 60 ? rawEnd   + 24 * 60 : rawEnd;
-  const nearEnd   = normEnd - nearEndG;
 
   const normMins = punchTimes.map(t => {
     const m = timeToMins(t);
@@ -477,11 +474,15 @@ export function calcNightWatcherOtFromAllPunches(
   });
   const lastMins = Math.max(...normMins);
 
+  // Each discrete OT hour is earned by entering that hour's window:
+  //   >= 07:00 (normStart+120) → 3 h,  >= 06:00 → 2 h,  >= 05:00 → 1 h
   let baseOt = 0;
-  if (lastMins >= nearEnd)              baseOt = 3;
-  else if (lastMins >= normStart + 120) baseOt = 2;
-  else if (lastMins >= normStart + 60)  baseOt = 1;
+  if (lastMins >= normStart + 120)     baseOt = 3;
+  else if (lastMins >= normStart + 60) baseOt = 2;
+  else if (lastMins >= normStart)      baseOt = 1;
   if (baseOt === 0) return 0;
+
+  void normEnd; // kept for reference only
 
   const checkpoints = [normStart, normStart + 60, normStart + 120];
   let missing = 0;
@@ -497,9 +498,9 @@ export function calcNightWatcherOtFromAllPunches(
  *
  * Rules:
  *  - OT window is 05:00 -> 08:00
- *  - Base OT is determined from final off punch in whole hours (1/2/3)
- *  - If final out is near/after 08:00 (default >= 07:50), base OT = 3
- *  - Validate hourly checkpoints 05:00, 06:00, 07:00
+ *  - Each discrete OT hour is earned by entering that hour's window:
+ *      final out >= 07:00 → 3 h,  >= 06:00 → 2 h,  >= 05:00 → 1 h
+ *  - Validate hourly checkpoints 05:xx, 06:xx, 07:xx
  *  - Deduct 1 hour per missing required checkpoint
  *  - Final OT is clamped to {0,1,2,3}
  */
@@ -511,30 +512,25 @@ export function calcNightWatcherPolicyOtHours(
     outTime2?: string | null;
   },
   options?: {
-    otStartTime?: string;          // default "05:00"
-    otEndTime?: string;            // default "08:00"
-    nearEndGraceMinutes?: number;  // default 10 (>= 07:50 treated as 08:00)
+    otStartTime?: string;  // default "05:00"
+    otEndTime?: string;    // default "08:00"
   },
 ): number {
   const otStart = options?.otStartTime ?? "05:00";
-  const otEnd = options?.otEndTime ?? "08:00";
-  const nearEndGraceMinutes = options?.nearEndGraceMinutes ?? 10;
 
   const finalOut = rec.outTime2 ?? rec.outTime1;
   if (!finalOut) return 0;
 
-  const startMins = timeToMins(otStart); // 05:00
-  const endMins = timeToMins(otEnd);     // 08:00
-  const nearEndCutoff = endMins - nearEndGraceMinutes;
+  const startMins = timeToMins(otStart); // 05:00 = 300
 
   let outMins = timeToMins(finalOut);
-  // Night-shift crossover for after-midnight times
+  // Night-shift crossover: after-midnight times are < startMins, push them past noon
   if (outMins < startMins) outMins += 24 * 60;
 
   let baseOt = 0;
-  if (outMins >= nearEndCutoff) baseOt = 3;
-  else if (outMins >= startMins + 120) baseOt = 2; // >= 07:00
-  else if (outMins >= startMins + 60)  baseOt = 1; // >= 06:00
+  if (outMins >= startMins + 120)     baseOt = 3; // >= 07:00
+  else if (outMins >= startMins + 60) baseOt = 2; // >= 06:00
+  else if (outMins >= startMins)      baseOt = 1; // >= 05:00
 
   if (baseOt <= 0) return 0;
 

@@ -178,7 +178,6 @@ function computeRecordOt(
     const baseOt = calcNightWatcherPolicyOtHours(rec, {
       otStartTime: "05:00",
       otEndTime: "08:00",
-      nearEndGraceMinutes: 10,
     });
     return baseOt;
   }
@@ -209,7 +208,6 @@ function computeRecordOt(
       return calcNightWatcherPolicyOtHours(rec, {
         otStartTime: "05:00",
         otEndTime: "08:00",
-        nearEndGraceMinutes: 10,
       });
     }
     return Math.round(ot * 100) / 100;
