@@ -183,14 +183,41 @@ export function nightShiftOt(rec: {
   inTime2?: string | null;
   outTime2?: string | null;
 }): { otHours: number; missedBlocks: number; deductedHours: number } {
-  // Night Watcher policy (revised):
-  //   • Any punches present → 3 OT hours (flat, no deduction).
-  //     The lunch/break gap between sessions must NOT be counted as missed time.
-  //     Holiday override (11 hrs) is applied in processSalaryRow.
-  //   • No punches → 0 OT hours.
+  // Night Watcher policy:
+  //   Shift = 20:00 → 05:00 (normal end).
+  //   Any time worked AFTER 05:00 AM (up to 08:00 AM max) counts as OT.
+  //   OT = (lastMorningOut − 05:00) in hours, rounded to 2 dp, capped at 3 h.
+  //   No punches at all → 0 OT.
+  //   Holiday override (11 hrs) is applied upstream in processSalaryRow.
+
   const hasPunches = !!(rec.inTime1 || rec.outTime1 || rec.inTime2 || rec.outTime2);
   if (!hasPunches) return { otHours: 0, missedBlocks: 0, deductedHours: 0 };
-  return { otHours: 3, missedBlocks: 0, deductedHours: 0 };
+
+  // Find the last morning check-out time (the final punch of the night shift).
+  // outTime2 > outTime1 > inTime2 > inTime1 in preference order.
+  const lastOut = rec.outTime2 ?? rec.outTime1 ?? rec.inTime2 ?? rec.inTime1;
+  if (!lastOut) return { otHours: 3, missedBlocks: 0, deductedHours: 0 };
+
+  const OT_START_MINS = 5 * 60;      // 05:00 AM = 300 min
+  const OT_CAP_MINS   = 3 * 60;      // 3 h cap (08:00 AM)
+
+  // Night shift crosses midnight: times < 12:00 are morning (next day), ≥ 12:00 are evening.
+  // Morning out-times (e.g. 06:30, 07:00) will be < 300 compared to OT_START=300 if we
+  // use raw timeToMins — which is correct because 06:30 = 390 min > 300 min. ✓
+  const outMins = timeToMins(lastOut);
+
+  // Only count OT if the last punch is in the morning window (00:00 – 12:00).
+  // Evening punches (>= 18:00 = 1080 min) mean they left before OT window.
+  if (outMins >= 12 * 60) {
+    // Punched out in the evening — no morning OT.
+    return { otHours: 0, missedBlocks: 0, deductedHours: 0 };
+  }
+
+  const overMins = Math.max(0, outMins - OT_START_MINS);
+  const cappedMins = Math.min(overMins, OT_CAP_MINS);
+  const otHours = Math.round((cappedMins / 60) * 100) / 100;
+
+  return { otHours, missedBlocks: 0, deductedHours: 0 };
 }
 
 /* ── Inputs the engine needs from the caller ──────────────────────────── */
