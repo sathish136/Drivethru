@@ -82,7 +82,7 @@ export default function Loans() {
   const [editLoan, setEditLoan] = useState<LoanRow | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
-  const [filterStatus, setFilterStatus] = useState("active");
+  const [filterStatus, setFilterStatus] = useState("");
   const [filterType, setFilterType] = useState("");
   const [search, setSearch] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<LoanRow | null>(null);
