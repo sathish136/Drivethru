@@ -13,10 +13,21 @@ function calcHours(t1: string, t2: string): number {
   return diff / 60;
 }
 
+export type WeekDaySchedule = {
+  startTime: string;
+  endTime: string;
+  lunchBreakMinutes: number;
+  isOff: boolean;
+  isHalfDay: boolean;
+} | null;
+
 function mapShift(s: any) {
   let totalHours = calcHours(s.startTime1, s.endTime1);
   if (s.startTime2 && s.endTime2) totalHours += calcHours(s.startTime2, s.endTime2);
-  return { ...s, totalHours, createdAt: s.createdAt.toISOString() };
+  const weeklySchedule: (WeekDaySchedule)[] | null = s.weeklySchedule
+    ? JSON.parse(s.weeklySchedule)
+    : null;
+  return { ...s, totalHours, weeklySchedule, createdAt: s.createdAt.toISOString() };
 }
 
 router.get("/", async (_req, res) => {
@@ -35,7 +46,11 @@ router.post("/", async (req, res) => {
 
 router.put("/:id", async (req, res) => {
   try {
-    const [shift] = await db.update(shifts).set(req.body).where(eq(shifts.id, Number(req.params.id))).returning();
+    const body = { ...req.body };
+    if ("weeklySchedule" in body && body.weeklySchedule !== undefined) {
+      body.weeklySchedule = body.weeklySchedule === null ? null : JSON.stringify(body.weeklySchedule);
+    }
+    const [shift] = await db.update(shifts).set(body).where(eq(shifts.id, Number(req.params.id))).returning();
     res.json(mapShift(shift));
   } catch (e) { res.status(500).json({ message: "Error", success: false }); }
 });

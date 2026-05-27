@@ -303,7 +303,11 @@ export function computeEffectiveStatus(
     inTime1?: string | null;
     totalHours?: number | null;
   },
-  empShift: { startTime1?: string | null; graceMinutes?: number | null } | null | undefined,
+  empShift: {
+    startTime1?: string | null;
+    graceMinutes?: number | null;
+    weeklySchedule?: string | null;
+  } | null | undefined,
   rule: DeptShiftRule,
   date: string,           // "YYYY-MM-DD"
 ): string {
@@ -313,13 +317,41 @@ export function computeEffectiveStatus(
   const isSaturday = dayOfWeek === 6;
   const isSunday   = dayOfWeek === 0;
 
+  /* ── Weekly schedule override (e.g. Kitchen shift differs by day) ── */
+  let weekDayStart: string | null = null;
+  let weekDayShiftHours: number | null = null;
+  let weekDayIsOff = false;
+  let weekDayIsHalfDay = false;
+  if (empShift?.weeklySchedule) {
+    try {
+      const ws: Array<{ startTime: string; endTime: string; lunchBreakMinutes: number; isOff: boolean; isHalfDay: boolean } | null> =
+        JSON.parse(empShift.weeklySchedule);
+      const dayRule = ws[dayOfWeek];
+      if (dayRule) {
+        weekDayIsOff = dayRule.isOff;
+        weekDayIsHalfDay = dayRule.isHalfDay;
+        weekDayStart = dayRule.startTime;
+        if (dayRule.startTime && dayRule.endTime) {
+          let mins = timeToMins(dayRule.endTime) - timeToMins(dayRule.startTime);
+          if (mins < 0) mins += 24 * 60;
+          const netMins = Math.max(0, mins - (dayRule.lunchBreakMinutes ?? 0));
+          weekDayShiftHours = netMins / 60;
+        }
+      }
+    } catch { /* ignore parse errors */ }
+  }
+
+  // Day-off via weekly schedule → absent (no need to evaluate further)
+  if (weekDayIsOff && (st === "present" || st === "late")) {
+    return "absent";
+  }
+
   // 1. Late check
   if (rule.flexible) {
     if (st === "late") st = "present";
   } else if ((st === "present" || st === "late") && rec.inTime1) {
-    const baseStart = (isSunday && rule.sundayStartTime)
-      ? rule.sundayStartTime
-      : empShift?.startTime1;
+    const baseStart = weekDayStart
+      ?? (isSunday && rule.sundayStartTime ? rule.sundayStartTime : empShift?.startTime1);
     const shiftStartMins = baseStart ? timeToMins(baseStart) : 8 * 60;
     const grace          = rule.lateGraceMinutes ?? (empShift?.graceMinutes ?? 15);
     const isLate         = timeToMins(rec.inTime1) > shiftStartMins + grace;
@@ -331,20 +363,29 @@ export function computeEffectiveStatus(
   if ((st === "present" || st === "late") && rec.totalHours != null) {
     const halfDayHrs    = rule.halfDayHours ?? 5;
     const minPresentHrs = rule.minPresentHours ?? 8;
-    // Night Watcher policy: apply only configured Late Grace (no extra +5 min checkout grace)
     const extraCheckoutGraceMinutes = rule.nightWatcherPayroll ? 0 : 5;
     const earlyExitGraceHrs =
       ((rule.earlyExitGraceMinutes ?? rule.lateGraceMinutes ?? 15) + extraCheckoutGraceMinutes) / 60;
 
-    const effectiveHalfDayHrs = (isSaturday && rule.saturdayShiftHours != null)
-      ? rule.saturdayShiftHours / 2
+    /* Weekly schedule shift hours take priority over saturdayShiftHours / minPresentHrs */
+    const effectiveShiftHrs = weekDayShiftHours
+      ?? (isSaturday && rule.saturdayShiftHours != null ? rule.saturdayShiftHours : null);
+
+    const effectiveHalfDayHrs = (effectiveShiftHrs != null)
+      ? effectiveShiftHrs / 2
       : halfDayHrs;
-    const presentThreshold = (isSaturday && rule.saturdayShiftHours != null)
-      ? Math.max(effectiveHalfDayHrs + 0.01, rule.saturdayShiftHours - earlyExitGraceHrs)
+    const presentThreshold = (effectiveShiftHrs != null)
+      ? Math.max(effectiveHalfDayHrs + 0.01, effectiveShiftHrs - earlyExitGraceHrs)
       : Math.max(halfDayHrs + 0.01, minPresentHrs - earlyExitGraceHrs);
 
-    if (rec.totalHours < effectiveHalfDayHrs) st = "absent";
-    else if (rec.totalHours < presentThreshold) st = "half_day";
+    if (weekDayIsHalfDay) {
+      /* Saturday kitchen = scheduled half-day, not a penalty */
+      if (rec.totalHours < effectiveHalfDayHrs / 2) st = "absent";
+      else st = "half_day";
+    } else {
+      if (rec.totalHours < effectiveHalfDayHrs) st = "absent";
+      else if (rec.totalHours < presentThreshold) st = "half_day";
+    }
   }
 
   return st;

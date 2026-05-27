@@ -1482,10 +1482,42 @@ const PAY_STATUS_STYLE: Record<string, string> = {
 };
 
 // ── Shift Details Tab ──────────────────────────────────────────────────────────
+type WeekDaySchedule = {
+  startTime: string;
+  endTime: string;
+  lunchBreakMinutes: number;
+  isOff: boolean;
+  isHalfDay: boolean;
+} | null;
+
 type ShiftRow = {
   id: number; name: string; type: string; startTime1: string; endTime1: string;
   graceMinutes: number; overtimeThreshold: number; category: string; isActive: boolean;
+  weeklySchedule?: WeekDaySchedule[] | null;
 };
+
+const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const DAY_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+function emptyWeekDay(startTime = "08:00", endTime = "17:00"): WeekDaySchedule {
+  return { startTime, endTime, lunchBreakMinutes: 0, isOff: false, isHalfDay: false };
+}
+
+function defaultWeeklySchedule(s: ShiftRow): WeekDaySchedule[] {
+  return Array.from({ length: 7 }, () => emptyWeekDay(s.startTime1, s.endTime1));
+}
+
+function calcShiftHours(start: string, end: string, lunchMins = 0): string {
+  if (!start || !end) return "—";
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  let mins = (eh * 60 + em) - (sh * 60 + sm);
+  if (mins < 0) mins += 24 * 60;
+  const net = Math.max(0, mins - lunchMins);
+  const h = Math.floor(net / 60);
+  const m = net % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
 
 function ShiftDetailsTab() {
   const qc = useQueryClient();
@@ -1514,8 +1546,43 @@ function ShiftDetailsTab() {
   const [manageShift, setManageShift] = useState<ShiftRow | null>(null);
   const [manageSaving, setManageSaving] = useState(false);
   const [manageSearch, setManageSearch] = useState("");
-  // local set of employee ids selected for the managed shift
   const [manageSelected, setManageSelected] = useState<Set<number>>(new Set());
+
+  // Weekly schedule modal
+  const [weeklyShift, setWeeklyShift] = useState<ShiftRow | null>(null);
+  const [weeklySched, setWeeklySched] = useState<WeekDaySchedule[]>([]);
+  const [weeklySaving, setWeeklySaving] = useState(false);
+
+  function openWeekly(s: ShiftRow) {
+    setWeeklyShift(s);
+    const existing = s.weeklySchedule;
+    if (existing && existing.length === 7) {
+      setWeeklySched(existing.map(d => d ? { ...d } : null));
+    } else {
+      setWeeklySched(defaultWeeklySchedule(s));
+    }
+  }
+
+  function patchWeekDay(dayIdx: number, field: keyof NonNullable<WeekDaySchedule>, value: any) {
+    setWeeklySched(prev => prev.map((d, i) => {
+      if (i !== dayIdx) return d;
+      const base = d ?? emptyWeekDay(weeklyShift?.startTime1, weeklyShift?.endTime1);
+      return { ...base, [field]: value };
+    }));
+  }
+
+  async function saveWeekly() {
+    if (!weeklyShift) return;
+    setWeeklySaving(true);
+    await fetch(apiUrl(`/shifts/${weeklyShift.id}`), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ weeklySchedule: weeklySched }),
+    });
+    setWeeklySaving(false);
+    setWeeklyShift(null);
+    qc.invalidateQueries({ queryKey: ["shifts-detail"] });
+  }
 
   function openManage(s: ShiftRow) {
     setManageShift(s);
@@ -1650,9 +1717,8 @@ function ShiftDetailsTab() {
                   const linked = empsByShift[s.id] || [];
                   const isExpanded = expandedId === s.id;
                   return (
-                    <>
+                    <React.Fragment key={s.id}>
                     <tr
-                      key={s.id}
                       className={cn(
                         "transition-colors",
                         isEditing ? "bg-primary/5 border-l-2 border-l-primary" :
@@ -1840,6 +1906,16 @@ function ShiftDetailsTab() {
                               <UserCheck className="w-3 h-3" /> Assign
                             </button>
                             <button
+                              onClick={() => openWeekly(s)}
+                              className={cn(
+                                "flex items-center gap-1 px-2 py-1 rounded text-xs font-medium",
+                                s.weeklySchedule ? "text-emerald-700 hover:bg-emerald-50" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                              )}
+                              title="Configure day-of-week schedule"
+                            >
+                              <Calendar className="w-3 h-3" /> Schedule
+                            </button>
+                            <button
                               onClick={() => setEditingId(s.id)}
                               className="flex items-center gap-1 px-2 py-1 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted"
                             >
@@ -1898,7 +1974,7 @@ function ShiftDetailsTab() {
                         </td>
                       </tr>
                     )}
-                    </>
+                    </React.Fragment>
                   );
                 })}
               </tbody>
@@ -2026,6 +2102,154 @@ function ShiftDetailsTab() {
                 <Save className="w-3 h-3" />
                 {manageSaving ? "Saving…" : "Save Assignments"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Weekly Schedule Modal ── */}
+      {weeklyShift && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setWeeklyShift(null)} />
+          <div className="relative bg-background border border-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+                  <Calendar className="w-4 h-4 text-emerald-700" />
+                </div>
+                <div>
+                  <p className="font-bold text-sm">Weekly Schedule — {weeklyShift.name}</p>
+                  <p className="text-[11px] text-muted-foreground">Set different start/end times per day of the week</p>
+                </div>
+              </div>
+              <button onClick={() => setWeeklyShift(null)} className="p-1.5 hover:bg-muted rounded-lg">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Default reminder */}
+            <div className="px-5 py-2.5 bg-blue-50 border-b border-blue-100 text-[11px] text-blue-700 flex items-center gap-2 shrink-0">
+              <Clock className="w-3.5 h-3.5 shrink-0" />
+              Default (no override): <span className="font-semibold">{weeklyShift.startTime1} – {weeklyShift.endTime1}</span>. Configure only days that differ.
+            </div>
+
+            {/* Day rows */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-2">
+              {weeklySched.map((day, idx) => {
+                const d = day ?? emptyWeekDay(weeklyShift.startTime1, weeklyShift.endTime1);
+                const isWeekend = idx === 0 || idx === 6;
+                return (
+                  <div key={idx} className={cn(
+                    "rounded-lg border p-3 transition-colors",
+                    d.isOff ? "bg-red-50 border-red-200 opacity-70" :
+                    d.isHalfDay ? "bg-amber-50 border-amber-200" :
+                    isWeekend ? "bg-blue-50/50 border-blue-100" :
+                    "bg-muted/20 border-border"
+                  )}>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {/* Day label */}
+                      <div className="w-20 shrink-0">
+                        <span className={cn(
+                          "text-xs font-bold",
+                          d.isOff ? "text-red-600" : d.isHalfDay ? "text-amber-700" : "text-foreground"
+                        )}>{DAY_NAMES[idx]}</span>
+                        {isWeekend && <span className="ml-1 text-[9px] text-muted-foreground">(Weekend)</span>}
+                      </div>
+
+                      {/* Is Off toggle */}
+                      <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={d.isOff}
+                          onChange={e => patchWeekDay(idx, "isOff", e.target.checked)}
+                          className="w-3.5 h-3.5 accent-red-600"
+                        />
+                        <span className="text-[11px] text-red-600 font-medium">Day Off</span>
+                      </label>
+
+                      {/* Is Half Day toggle */}
+                      {!d.isOff && (
+                        <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
+                          <input
+                            type="checkbox"
+                            checked={d.isHalfDay}
+                            onChange={e => patchWeekDay(idx, "isHalfDay", e.target.checked)}
+                            className="w-3.5 h-3.5 accent-amber-600"
+                          />
+                          <span className="text-[11px] text-amber-700 font-medium">Half Day</span>
+                        </label>
+                      )}
+
+                      {/* Times (hidden when day off) */}
+                      {!d.isOff && (
+                        <>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[11px] text-muted-foreground">In</span>
+                            <input
+                              type="time"
+                              value={d.startTime}
+                              onChange={e => patchWeekDay(idx, "startTime", e.target.value)}
+                              className="h-7 text-xs w-24 rounded border border-input bg-background px-2 focus:outline-none focus:ring-1 focus:ring-primary"
+                            />
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[11px] text-muted-foreground">Out</span>
+                            <input
+                              type="time"
+                              value={d.endTime}
+                              onChange={e => patchWeekDay(idx, "endTime", e.target.value)}
+                              className="h-7 text-xs w-24 rounded border border-input bg-background px-2 focus:outline-none focus:ring-1 focus:ring-primary"
+                            />
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[11px] text-muted-foreground">Lunch</span>
+                            <input
+                              type="number"
+                              min={0} max={180}
+                              value={d.lunchBreakMinutes}
+                              onChange={e => patchWeekDay(idx, "lunchBreakMinutes", Number(e.target.value))}
+                              className="h-7 text-xs w-16 rounded border border-input bg-background px-2 focus:outline-none focus:ring-1 focus:ring-primary"
+                            />
+                            <span className="text-[11px] text-muted-foreground">min</span>
+                          </div>
+                          {/* Computed net hours */}
+                          <span className="text-[11px] font-semibold text-primary ml-auto">
+                            = {calcShiftHours(d.startTime, d.endTime, d.lunchBreakMinutes)} net
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-t border-border shrink-0">
+              <button
+                onClick={() => setWeeklySched(defaultWeeklySchedule(weeklyShift))}
+                className="text-[11px] text-muted-foreground hover:text-foreground hover:underline"
+              >
+                Reset to defaults
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setWeeklyShift(null)}
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveWeekly}
+                  disabled={weeklySaving}
+                  className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 transition-colors"
+                >
+                  <Save className="w-3 h-3" />
+                  {weeklySaving ? "Saving…" : "Save Schedule"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

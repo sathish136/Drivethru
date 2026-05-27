@@ -14,6 +14,12 @@ export const shifts = pgTable("shifts", {
   overtimeThreshold: integer("overtime_threshold").notNull().default(60),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  /**
+   * JSON array of 7 day-of-week overrides (index 0=Sun … 6=Sat).
+   * Each entry: { startTime: "HH:mm", endTime: "HH:mm", lunchBreakMinutes: number, isOff: boolean, isHalfDay: boolean }
+   * null entries mean "use the shift defaults".
+   */
+  weeklySchedule: text("weekly_schedule"),
 });
 
 export const insertShiftSchema = createInsertSchema(shifts).omit({ id: true, createdAt: true });
