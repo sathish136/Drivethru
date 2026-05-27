@@ -2940,8 +2940,14 @@ ${nwOtTableHtml}
                         const dayName = DAY_NAMES[dow];
                         const r = recMap.get(dateStr);
                         const punches = nwPunchMap.get(dateStr);
-                        const evening = punches?.evening.slice().sort() ?? [];
-                        const morning = punches?.morning.slice().sort() ?? [];
+                        // Fall back to rawPunches from the attendance record when bio logs have no data
+                        const fallbackRaw: string[] = (!punches && r?.rawPunches?.length)
+                          ? (r.rawPunches as string[])
+                          : [];
+                        const fallbackEvening = fallbackRaw.filter((t: string) => { const [h] = t.split(":").map(Number); return h >= 18; });
+                        const fallbackMorning = fallbackRaw.filter((t: string) => { const [h] = t.split(":").map(Number); return h < 9; });
+                        const evening = punches?.evening.slice().sort() ?? fallbackEvening;
+                        const morning = punches?.morning.slice().sort() ?? fallbackMorning;
                         const ot = r ? (r.overtimeHours || 0) : 0;
                         const isHol = r ? !!(r as any).holidayWorked : false;
                         const isAbsent = !r || r.status === "absent";
