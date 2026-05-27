@@ -638,8 +638,16 @@ router.get("/attendance", async (req, res) => {
                  are the overnight tail of *this* shift */
             const eveningBio  = allShiftDateBio.filter(t => timeToMins(t) >= 18 * 60);
             const nd          = nextDate(shiftDate);
+            // Tighten the morning cutoff based on the shift's end time + OT window.
+            // For Night Watcher (endTime1=05:00): cutoff = 05:00 + 4h = 09:00.
+            // This prevents stale SL-as-UTC punches (shifted by +5:30) that fall
+            // in the 09:00–11:59 range from polluting the punch sequence.
+            const nightEndMins = empShift?.endTime1 ? timeToMins(empShift.endTime1) : 5 * 60;
+            const morningCutoff = nightEndMins < 12 * 60
+              ? Math.min(12 * 60, nightEndMins + 4 * 60)   // end + 4 h covers OT window + grace
+              : 12 * 60;
             const nextMorning = (bioPunchesByEmpDate.get(`${empId}:${nd}`) ?? [])
-              .filter(t => timeToMins(t) < 12 * 60);
+              .filter(t => timeToMins(t) < morningCutoff);
             // Seed with stored evening punch if bio doesn't have it
             const storedEvening = storedPunches.filter(t => timeToMins(t) >= 18 * 60);
             const combined = [...new Set([...storedEvening, ...eveningBio, ...nextMorning])];

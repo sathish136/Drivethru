@@ -8,7 +8,7 @@ import { db } from "@workspace/db";
 import {
   biometricDevices, biometricLogs, branches, employees, attendanceRecords, shifts,
 } from "@workspace/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, gte, lte } from "drizzle-orm";
 import { loadDeptRules, findRule, timeToMins, calcOtHours, isNightShiftRecord } from "../lib/hr-rules.js";
 import { zkAdmsRunning } from "../lib/adms-state.js";
 
@@ -332,7 +332,7 @@ export async function processAttRows(rows: AttRow[]) {
   const grouped = new Map<string, Map<string, DayLog[]>>();
 
   // Collect raw punches for biometric_logs
-  type RawPunch = { sn: string; pin: string; punchTime: Date; punchType: "in" | "out" };
+  type RawPunch = { sn: string; pin: string; punchTime: Date; punchType: "in" | "out"; workDate?: string };
   const rawPunches: RawPunch[] = [];
 
   for (const row of rows) {
@@ -352,7 +352,11 @@ export async function processAttRows(rows: AttRow[]) {
     // Appending "+05:30" makes the Date parser correctly interpret the
     // timestamp as SL local time and convert it to UTC for DB storage.
     const punchTimeUtc = new Date(timeStr.replace(" ", "T") + "+05:30");
-    rawPunches.push({ sn: (row.sn || "").trim(), pin, punchTime: punchTimeUtc, punchType });
+    // For night-shift employees store the work-date so deduplication can use
+    // a UTC time-range (instead of UTC date) to also sweep out any legacy
+    // stale rows that were previously stored without the +05:30 conversion.
+    const punchWorkDate = nightShiftPins.has(pin) ? nightWorkDate(calendarDate, timePart) : undefined;
+    rawPunches.push({ sn: (row.sn || "").trim(), pin, punchTime: punchTimeUtc, punchType, workDate: punchWorkDate });
 
     // For night-shift employees: punches before noon belong to the previous shift's work date
     const workDate = nightShiftPins.has(pin)
@@ -548,8 +552,9 @@ export async function processAttRows(rows: AttRow[]) {
       }
     }
 
-    // Build insert list
+    // Build insert list + track night-shift work dates per employee
     const logInserts: (typeof biometricLogs.$inferInsert)[] = [];
+    const nightEmpWorkDates = new Map<number, Set<string>>();
     for (const punch of rawPunches) {
       const snKey = punch.sn || "SYSTEM-IMPORT";
       const deviceId = snToDeviceId.get(snKey);
@@ -563,14 +568,43 @@ export async function processAttRows(rows: AttRow[]) {
         punchType: punch.punchType,
         processed: true,
       });
+      if (punch.workDate && emp?.id) {
+        if (!nightEmpWorkDates.has(emp.id)) nightEmpWorkDates.set(emp.id, new Set());
+        nightEmpWorkDates.get(emp.id)!.add(punch.workDate);
+      }
     }
 
     console.log(`[processAttRows] logInserts ready: ${logInserts.length} (skipped: ${rawPunches.length - logInserts.length})`);
     if (logInserts.length > 0) {
-      // Deduplicate: delete existing biometric_logs for each employee+date in this import
+      // ── Phase 1: Night-shift employees — delete by full shift UTC range ───────
+      // Range [workDate T10:00Z, (workDate+1) T10:00Z] covers:
+      //   • Correctly stored punches (UTC 14:30–02:30 across the shift window)
+      //   • Legacy stale punches stored as SL-time-as-UTC (UTC 18:00–09:00 next day)
+      // This ensures a re-import completely replaces all old data regardless of
+      // which path originally stored it.
+      const seenNightRanges = new Set<string>();
+      for (const [empId, workDates] of nightEmpWorkDates) {
+        for (const workDate of workDates) {
+          const key = `${empId}|${workDate}`;
+          if (seenNightRanges.has(key)) continue;
+          seenNightRanges.add(key);
+          const rangeStart = new Date(workDate + "T10:00:00Z");
+          const rangeEnd   = new Date(new Date(workDate + "T10:00:00Z").getTime() + 24 * 3_600_000);
+          await db.delete(biometricLogs).where(
+            and(
+              eq(biometricLogs.employeeId, empId),
+              gte(biometricLogs.punchTime, rangeStart),
+              lte(biometricLogs.punchTime, rangeEnd),
+            )
+          );
+        }
+      }
+
+      // ── Phase 2: Regular employees — delete by UTC date (existing behaviour) ──
       const seen = new Set<string>();
       for (const ins of logInserts) {
         if (!ins.employeeId) continue;
+        if (nightEmpWorkDates.has(ins.employeeId as number)) continue; // already handled above
         const dateStr = (ins.punchTime instanceof Date ? ins.punchTime : new Date(ins.punchTime as string))
           .toISOString().slice(0, 10);
         const key = `${ins.employeeId}|${dateStr}`;
