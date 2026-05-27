@@ -539,7 +539,9 @@ router.post("/generate", async (req, res) => {
           const ot = salaryRowFor(rec).otHours;
           if (ot > 0) {
             regularOtHours += ot;
-            regularOtPay   += Math.round(ot * hourlyRate * ruleOtMult);
+            // Night Watcher OT is paid at ×2 (evening→morning cross-midnight shift)
+            const effectiveOtMult = isNightWatcherPayroll ? 2.0 : ruleOtMult;
+            regularOtPay   += Math.round(ot * hourlyRate * effectiveOtMult);
           }
         }
       }
