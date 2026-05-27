@@ -52,6 +52,7 @@ interface PayrollRow {
   netSalary: number;
   status: string;
   activeLoanInstallment?: number;
+  computedLunchIncentive?: number;
   reqHoursPerDay?: number | null;
   lateMinutes?: number | null;
   lunchLateMinutes?: number | null;
@@ -119,7 +120,7 @@ export default function PayslipPage() {
   const epfNo = row.employee.epfNumber || row.employee.employeeId;
 
   const transport    = row.transportAllowance || 0;
-  const lunch        = row.lunchIncentive || 0;
+  const lunch        = row.lunchIncentive || row.computedLunchIncentive || 0;
   const housing      = row.housingAllowance || 0;
   const otherAllow   = row.otherAllowances || 0;
   const allowances   = transport + lunch + housing + otherAllow;

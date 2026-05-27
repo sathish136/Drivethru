@@ -771,7 +771,7 @@ router.post("/generate", async (req, res) => {
         overtimeHours: Math.round(regularOtHours * 100) / 100,
         basicSalary,
         transportAllowance: isNightWatcherPayroll ? 0 : transportAllowance,
-        lunchIncentive: isNightWatcherPayroll ? 0 : lunchIncentive,
+        lunchIncentive,
         housingAllowance: isNightWatcherPayroll ? 0 : housingAllowance,
         otherAllowances: isNightWatcherPayroll ? 0 : otherAllowances,
         overtimePay,
@@ -877,7 +877,14 @@ router.get("/:id", async (req, res) => {
       return sum + Math.min(loan.monthlyInstallment, loan.remainingBalance);
     }, 0));
 
-    res.json({ ...r.payroll, employee: r.emp, activeLoanInstallment: liveInstallment });
+    /* Compute live lunch incentive if the stored record has none (e.g. generated before the fix) */
+    const [psRow] = await db.select().from(payrollSettings);
+    const lunchPerDay = psRow?.lunchIncentivePerDay ?? 125;
+    const computedLunch = r.payroll.lunchIncentive && r.payroll.lunchIncentive > 0
+      ? 0
+      : Math.round(lunchPerDay * ((r.payroll.presentDays || 0) + (r.payroll.halfDays || 0) * 0.5));
+
+    res.json({ ...r.payroll, employee: r.emp, activeLoanInstallment: liveInstallment, computedLunchIncentive: computedLunch });
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: "Failed to fetch payslip" });
