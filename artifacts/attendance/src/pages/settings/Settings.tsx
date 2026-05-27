@@ -82,8 +82,27 @@ export default function Settings() {
   const [restoring, setRestoring] = useState(false);
   const [restoreMsg, setRestoreMsg] = useState<{ type: "success" | "error"; text: string; log?: string[] } | null>(null);
   const restoreInputRef = useRef<HTMLInputElement>(null);
+  const [deleteAttMsg, setDeleteAttMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [deletingAtt, setDeletingAtt] = useState(false);
+
   const [checkinMsg, setCheckinMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const checkinInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleDeleteAllAttendance() {
+    if (!confirm("WARNING: This will permanently delete ALL attendance records from the database. This action cannot be undone. Are you absolutely sure?")) return;
+    setDeletingAtt(true); setDeleteAttMsg(null);
+    try {
+      const r = await fetch(apiUrl("/backup/attendance"), { method: "DELETE" });
+      const d = await r.json();
+      if (r.ok) {
+        setDeleteAttMsg({ type: "success", text: d.message });
+        loadDbStats();
+      } else {
+        setDeleteAttMsg({ type: "error", text: d.error || "Delete failed" });
+      }
+    } catch { setDeleteAttMsg({ type: "error", text: "Request failed. Check server connection." }); }
+    setDeletingAtt(false);
+  }
 
   async function handleCheckinImport() {
     if (!checkinFile) return;
@@ -968,6 +987,43 @@ export default function Settings() {
                   </Button>
                 </div>
               </div>
+            </Card>
+
+            {/* Delete All Attendance Records */}
+            <Card className="p-5 border-red-200 bg-red-50/20">
+              <div className="flex items-center gap-2 mb-1">
+                <Trash2 className="w-4 h-4 text-red-600" />
+                <span className="text-sm font-bold text-foreground">Delete All Attendance Records</span>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Permanently removes every attendance record from the database.
+                <strong className="text-red-700"> This cannot be undone.</strong> Export a backup first if you need to preserve the data.
+              </p>
+
+              {deleteAttMsg && (
+                <div className={`flex items-start gap-2 p-3 rounded-xl mb-4 text-xs ${
+                  deleteAttMsg.type === "success"
+                    ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
+                    : "bg-red-50 border border-red-200 text-red-800"
+                }`}>
+                  {deleteAttMsg.type === "success"
+                    ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+                    : <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />}
+                  <p className="flex-1 font-medium">{deleteAttMsg.text}</p>
+                  <button onClick={() => setDeleteAttMsg(null)} className="shrink-0 opacity-50 hover:opacity-100">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              <Button
+                className="flex items-center gap-2 text-sm bg-red-600 hover:bg-red-700 text-white"
+                onClick={handleDeleteAllAttendance}
+                disabled={deletingAtt}
+              >
+                <Trash2 className="w-4 h-4" />
+                {deletingAtt ? "Deleting..." : "Delete All Attendance Records"}
+              </Button>
             </Card>
 
             {/* Warning */}

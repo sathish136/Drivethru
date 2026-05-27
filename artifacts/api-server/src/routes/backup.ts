@@ -154,4 +154,15 @@ router.post("/restore", upload.single("backup"), async (req, res) => {
   }
 });
 
+/* ── DELETE /backup/attendance ── wipe all attendance records */
+router.delete("/attendance", async (_req, res) => {
+  try {
+    const result = await db.delete(attendanceRecords);
+    res.json({ success: true, message: "All attendance records deleted successfully" });
+  } catch (err: any) {
+    console.error("Delete attendance error:", err);
+    res.status(500).json({ error: "Failed to delete attendance records: " + (err?.message ?? "Unknown error") });
+  }
+});
+
 export default router;
