@@ -1755,23 +1755,16 @@ function SeasonBadge({ month, year }: { month: number; year?: number }) {
   const isOff = useOffSeasonStatus(month, year);
   if (!isOff) {
     return (
-      <div className="flex items-center gap-2 px-4 py-2 border rounded-lg text-sm bg-green-50 border-green-200 text-green-800">
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold bg-green-50 border border-green-200 text-green-800 w-fit">
         <span>🌿</span>
-        <span className="font-semibold">Main Season</span>
-        <span className="text-xs opacity-75">— Full policy: OT pay, late deductions and incomplete hours deductions apply</span>
+        <span>Main Season</span>
       </div>
     );
   }
   return (
-    <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-2 rounded-lg text-sm bg-blue-50 border-blue-300">
-      <span className="text-base">⛅</span>
-      <span className="font-bold text-blue-900">Off Season</span>
-      <span className="text-blue-700 text-xs">—</span>
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">✗ No overtime pay</span>
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">✗ No late deductions</span>
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">✗ No incomplete hours deduction</span>
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-xs font-bold">✔ Full salary — even without punch records</span>
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 text-xs font-semibold">Night Watcher: full policy year-round (unaffected)</span>
+    <div className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold bg-blue-50 border border-blue-300 text-blue-900 w-fit">
+      <span>⛅</span>
+      <span>Off Season</span>
     </div>
   );
 }
