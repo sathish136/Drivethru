@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Gift, Plus, Search, Pencil, Trash2, CheckCircle2, Clock, Banknote,
-  X, TrendingUp,
+  X, TrendingUp, Download, FileSpreadsheet,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -170,6 +170,131 @@ export default function Incentives() {
       r.reason?.toLowerCase().includes(q)
     );
   }, [rows, search]);
+
+  const filteredTotal = useMemo(
+    () => filtered.reduce((sum, r) => sum + r.amount, 0),
+    [filtered]
+  );
+
+  const exportExcel = () => {
+    const periodLabel = [
+      filterMonth ? MONTHS[Number(filterMonth) - 1] : "All Months",
+      filterYear  || "All Years",
+    ].join(" ");
+    const headers = ["#","Employee ID","Name","Department","Designation","Period","Type","Amount (Rs.)","Reason","Status"];
+    const dataRows = filtered.map((r, i) => [
+      i + 1,
+      r.employeeCode,
+      r.employeeName,
+      r.department,
+      r.designation,
+      `${MONTHS[r.month - 1]} ${r.year}`,
+      INCENTIVE_TYPES.find(t => t.value === r.type)?.label ?? r.type,
+      r.amount.toFixed(2),
+      r.reason ?? "",
+      r.status,
+    ]);
+    const totalRow = ["", "", "TOTAL", "", "", "", "", filteredTotal.toFixed(2), "", ""];
+    const csv = [headers, ...dataRows, totalRow].map(row => row.map(v => `"${v}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = `Incentives_${periodLabel.replace(/ /g,"_")}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportPDF = () => {
+    const periodLabel = [
+      filterMonth ? MONTHS[Number(filterMonth) - 1] : "All Months",
+      filterYear  || "All Years",
+    ].join(" ");
+    const fmtAmt = (v: number) =>
+      v.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const statusColor: Record<IncentiveStatus, string> = {
+      pending:  "#b45309",
+      approved: "#15803d",
+      paid:     "#1e3a8a",
+    };
+    const typeLabel = (t: IncentiveType) =>
+      INCENTIVE_TYPES.find(x => x.value === t)?.label ?? t;
+
+    const rows2 = filtered.map((r, i) => `<tr class="${i % 2 === 0 ? "" : "alt"}">
+      <td class="l sm">${i + 1}</td>
+      <td class="l">${r.employeeCode}</td>
+      <td class="l name">${r.employeeName}</td>
+      <td class="l sm">${r.department}</td>
+      <td class="l sm">${r.designation ?? "-"}</td>
+      <td class="l sm">${MONTHS[r.month - 1]?.slice(0, 3)} ${r.year}</td>
+      <td class="l sm">${typeLabel(r.type)}</td>
+      <td class="b">${fmtAmt(r.amount)}</td>
+      <td class="l sm">${r.reason ?? "-"}</td>
+      <td class="l sm" style="color:${statusColor[r.status]};font-weight:600">${r.status.charAt(0).toUpperCase() + r.status.slice(1)}</td>
+    </tr>`).join("");
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+      <title>Incentives Report — ${periodLabel}</title>
+      <style>
+        @page { size: A3 landscape; margin: 10mm; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        body { background: #fff; color: #1e293b; font-size: 10px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; padding: 12px 16px 10px; border-bottom: 2px solid #1e3a8a; margin-bottom: 10px; }
+        .company { font-size: 14px; font-weight: 700; color: #0f172a; }
+        .sub { font-size: 10px; color: #64748b; margin-top: 2px; }
+        .summary { display: flex; gap: 16px; margin-bottom: 10px; }
+        .scard { flex: 1; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; }
+        .scard .label { font-size: 8px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+        .scard .val { font-size: 14px; font-weight: 800; color: #1e3a8a; margin-top: 2px; }
+        .scard .count { font-size: 8px; color: #94a3b8; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #1e293b; color: #fff; padding: 5px 4px; text-align: right; font-size: 8px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+        th.l { text-align: left; }
+        td { padding: 4px 4px; text-align: right; white-space: nowrap; border-bottom: 1px solid #e2e8f0; font-size: 9.5px; }
+        td.l { text-align: left; }
+        td.name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+        td.sm { font-size: 8.5px; color: #475569; }
+        td.b { font-weight: 700; color: #1e3a8a; }
+        tr.alt td { background: #f8fafc; }
+        tr.tot td { background: #1e293b; color: #fff; font-weight: 700; font-size: 9.5px; border-top: 2px solid #475569; padding: 5px 4px; }
+        .footer { display: flex; justify-content: space-between; margin-top: 10px; padding: 6px 0; border-top: 1px solid #e2e8f0; font-size: 8.5px; color: #94a3b8; }
+      </style>
+    </head><body>
+      <div class="header">
+        <div>
+          <div class="company">Drivethru (Pvt) Ltd</div>
+          <div class="sub">Incentives Report — ${periodLabel}${filterType ? ` · ${typeLabel(filterType as IncentiveType)}` : ""}${filterStatus ? ` · ${filterStatus.charAt(0).toUpperCase() + filterStatus.slice(1)}` : ""}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:8px;color:#64748b">Total Records / Total Amount</div>
+          <div style="font-size:20px;font-weight:800;color:#1e3a8a">${filtered.length} &nbsp;·&nbsp; Rs. ${fmtAmt(filteredTotal)}</div>
+        </div>
+      </div>
+      <table>
+        <thead><tr>
+          <th class="l">#</th><th class="l">ID</th><th class="l">Name</th>
+          <th class="l">Department</th><th class="l">Designation</th>
+          <th class="l">Period</th><th class="l">Type</th>
+          <th>Amount (Rs.)</th><th class="l">Reason</th><th class="l">Status</th>
+        </tr></thead>
+        <tbody>${rows2}</tbody>
+        <tfoot><tr class="tot">
+          <td class="l" colspan="7">Total (${filtered.length} records)</td>
+          <td>${fmtAmt(filteredTotal)}</td>
+          <td colspan="2"></td>
+        </tr></tfoot>
+      </table>
+      <div class="footer">
+        <span>Generated: ${new Date().toLocaleString("en-LK")}</span>
+        <span>Drivethru Attendance Management System</span>
+      </div>
+    </body></html>`;
+
+    const win = window.open("", "_blank", "width=1200,height=800");
+    if (!win) { alert("Please allow pop-ups to export PDF."); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 600);
+  };
 
   const filteredEmps = useMemo(() => {
     if (!empSearch.trim()) return employees.slice(0, 50);
@@ -429,6 +554,16 @@ export default function Incentives() {
           <span className="text-sm text-muted-foreground whitespace-nowrap">
             {filtered.length} record{filtered.length !== 1 ? "s" : ""}
           </span>
+          <div className="flex items-center gap-2 ml-auto">
+            <button onClick={exportExcel}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold">
+              <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
+            </button>
+            <button onClick={exportPDF}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold">
+              <Download className="w-3.5 h-3.5" /> PDF
+            </button>
+          </div>
         </div>
 
         {/* ── Table ── */}
@@ -516,6 +651,17 @@ export default function Incentives() {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr className="bg-slate-800 text-white">
+                    <td colSpan={3} className="px-4 py-2.5 text-xs font-bold uppercase tracking-wide">
+                      Total — {filtered.length} record{filtered.length !== 1 ? "s" : ""}
+                    </td>
+                    <td className="px-4 py-2.5 text-sm font-bold text-emerald-300 whitespace-nowrap">
+                      Rs. {filteredTotal.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td colSpan={3} />
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>
