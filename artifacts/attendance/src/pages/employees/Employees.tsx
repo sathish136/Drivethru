@@ -2680,7 +2680,7 @@ function parseCSV(text: string): Record<string, string>[] {
 function downloadTemplate() {
   const sample = [
     IMPORT_HEADERS,
-    ["EMP001","BIO-001","Kamal","Perera","male","Kitchen","Head Office - Colombo","Morning Shift","permanent","active","+94-71-1234567","kamal@slpost.lk","123456789V","","45000","EPF001","ETF001","2023-01-15"],
+    ["EMP001","BIO-001","Kamal","Perera","male","Kitchen","Head Office","Morning Shift","permanent","active","+94-71-1234567","kamal@drivethru.lk","123456789V","","45000","EPF001","ETF001","2023-01-15"],
   ];
   const csv = sample.map(r => r.map(c => `"${c}"`).join(",")).join("\n");
   const a = document.createElement("a");

@@ -128,8 +128,8 @@ async function sendBackupEmail(cfg: SmtpConfig, triggerLabel: string): Promise<v
   await transporter.sendMail({
     from: `"Post Office HRMS" <${cfg.user}>`,
     to: cfg.recipient,
-    subject: `[Sri Lanka Post] DB Backup — ${triggerLabel} — ${new Date().toUTCString()}`,
-    text: `Automated database backup attached.\n\nGenerated: ${new Date().toUTCString()}\nFile: ${filename}\nSize: ${sizeKb} KB\nTrigger: ${triggerLabel}\n\nThis is an automated email from Sri Lanka Post Attendance Management System.`,
+    subject: `[Drivethru] DB Backup — ${triggerLabel} — ${new Date().toUTCString()}`,
+    text: `Automated database backup attached.\n\nGenerated: ${new Date().toUTCString()}\nFile: ${filename}\nSize: ${sizeKb} KB\nTrigger: ${triggerLabel}\n\nThis is an automated email from Drivethru Attendance Management System.`,
     attachments: [{ filename, content: buf, contentType: "application/octet-stream" }],
   });
 
