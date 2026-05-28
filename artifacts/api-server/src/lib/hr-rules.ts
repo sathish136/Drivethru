@@ -138,9 +138,9 @@ export function applyShiftDefaults(rule: DeptShiftRule, shiftName?: string | nul
   if (isNightWatcher) {
     return {
       ...rule,
-      nightWatcherPayroll: rule.nightWatcherPayroll !== false,
+      nightWatcherPayroll: true,
       otStartTime: rule.otStartTime ?? "05:00",
-      otEligible: rule.otEligible !== false,
+      otEligible: true,
       lateGraceMinutes: rule.lateGraceMinutes ?? 10,
       minHours: rule.minHours && rule.minHours > 0 ? rule.minHours : 9,
       halfDayHours: rule.halfDayHours ?? 5,

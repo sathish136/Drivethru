@@ -2832,7 +2832,6 @@ export default function Employees() {
 
   const params: any = { limit: 500 };
   if (filterStatus) params.status = filterStatus;
-  if (filterDept) params.department = filterDept;
   if (filterType) params.employeeType = filterType;
 
   const { data, isLoading, refetch } = useListEmployees(params);
@@ -2840,10 +2839,18 @@ export default function Employees() {
 
   const allEmployees = data?.employees || [];
 
+  const availableDepts = useMemo(() => {
+    const depts = Array.from(new Set(allEmployees.map((e: any) => e.department).filter(Boolean))) as string[];
+    return depts.sort();
+  }, [allEmployees]);
+
   const employees = useMemo(() => {
     let list = allEmployees;
     if (filterBranchId) {
       list = list.filter((e: any) => e.branchId === Number(filterBranchId));
+    }
+    if (filterDept) {
+      list = list.filter((e: any) => e.department === filterDept);
     }
     if (!search) return list;
     const s = search.toLowerCase();
@@ -2854,7 +2861,7 @@ export default function Employees() {
       (e.panNumber || "").toLowerCase().includes(s) ||
       (e.email || "").toLowerCase().includes(s)
     );
-  }, [allEmployees, search, filterBranchId]);
+  }, [allEmployees, search, filterBranchId, filterDept]);
 
   function exportCSV() {
     const headers = ["Employee ID","Biometric ID","First Name","Last Name","Gender","Department","Branch","Type","Status","Phone","Email","NIC Number","Passport No.","Basic Salary (LKR)","EPF No.","ETF No.","Joining Date"];
@@ -2958,7 +2965,7 @@ export default function Employees() {
             </Select>
             <Select value={filterDept} onChange={e => setFilterDept(e.target.value)} className="h-8 text-xs w-40 border-slate-300 text-slate-600">
               <option value="">All Departments</option>
-              {(allDeptNames.length > 0 ? allDeptNames : DEPT_LIST).map(d => (
+              {availableDepts.map(d => (
                 <option key={d} value={d}>{d}</option>
               ))}
             </Select>
