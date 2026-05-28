@@ -1905,16 +1905,15 @@ function ShiftDetailsTab() {
                             >
                               <UserCheck className="w-3 h-3" /> Assign
                             </button>
-                            <button
-                              onClick={() => openWeekly(s)}
-                              className={cn(
-                                "flex items-center gap-1 px-2 py-1 rounded text-xs font-medium",
-                                s.weeklySchedule ? "text-emerald-700 hover:bg-emerald-50" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                              )}
-                              title="Configure day-of-week schedule"
-                            >
-                              <Calendar className="w-3 h-3" /> Schedule
-                            </button>
+                            {s.weeklySchedule && (
+                              <button
+                                onClick={() => openWeekly(s)}
+                                className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                                title="View/edit day-of-week schedule"
+                              >
+                                <Calendar className="w-3 h-3" /> Schedule
+                              </button>
+                            )}
                             <button
                               onClick={() => setEditingId(s.id)}
                               className="flex items-center gap-1 px-2 py-1 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted"
