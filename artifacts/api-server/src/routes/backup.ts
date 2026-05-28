@@ -89,8 +89,11 @@ function addHistory(entry: Omit<BackupEntry, "id">): void {
 
 /* ── Helpers ── */
 function getDatabaseUrl(): string {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL environment variable is not set");
+  const url =
+    process.env.APP_DATABASE_URL ||
+    process.env.DATABASE_URL ||
+    process.env.COLOMBO_DB_URL;
+  if (!url) throw new Error("No database URL set (APP_DATABASE_URL / DATABASE_URL / COLOMBO_DB_URL)");
   return url;
 }
 
