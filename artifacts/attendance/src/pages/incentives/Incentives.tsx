@@ -300,7 +300,6 @@ export default function Incentives() {
               <span className="text-lg">🍽️</span>
               <div>
                 <p className="text-sm font-semibold text-yellow-900">Auto-Generate Lunch Incentives</p>
-                <p className="text-xs text-yellow-700">Calculates from attendance punches (present + late + single-punch days)</p>
               </div>
             </div>
             <div className="flex items-center gap-2 ml-auto flex-wrap">
