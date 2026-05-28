@@ -2628,6 +2628,43 @@ function PayrollTab() {
   );
 }
 
+// ── CSV Import helpers ──────────────────────────────────────────────────────────
+const IMPORT_HEADERS = [
+  "Employee ID","Biometric ID","First Name","Last Name","Gender",
+  "Department","Branch","Employee Type","Status","Phone","Email",
+  "NIC Number","Passport No.","Basic Salary","EPF No.","ETF No.","Joining Date",
+];
+
+function parseCSV(text: string): Record<string, string>[] {
+  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter(l => l.trim());
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim());
+  return lines.slice(1).map(line => {
+    const vals: string[] = [];
+    let cur = "", inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      if (line[i] === '"') { inQ = !inQ; }
+      else if (line[i] === ',' && !inQ) { vals.push(cur.trim()); cur = ""; }
+      else cur += line[i];
+    }
+    vals.push(cur.trim());
+    const row: Record<string, string> = {};
+    headers.forEach((h, i) => { row[h] = (vals[i] || "").replace(/^"|"$/g, "").trim(); });
+    return row;
+  });
+}
+
+function downloadTemplate() {
+  const sample = [
+    IMPORT_HEADERS,
+    ["EMP001","BIO-001","Kamal","Perera","male","Kitchen","Head Office - Colombo","permanent","active","+94-71-1234567","kamal@slpost.lk","123456789V","","45000","EPF001","ETF001","2023-01-15"],
+  ];
+  const csv = sample.map(r => r.map(c => `"${c}"`).join(",")).join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = "employees_import_template.csv"; a.click();
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function Employees() {
   const [activeTab, setActiveTab] = useState<Tab>("Employee List");
@@ -2638,6 +2675,14 @@ export default function Employees() {
   const [filterBranchId, setFilterBranchId] = useState("");
   const [drawerEmp, setDrawerEmp] = useState<any | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Import state
+  const [importOpen, setImportOpen] = useState(false);
+  const [importStage, setImportStage] = useState<"upload"|"preview"|"done">("upload");
+  const [importRows, setImportRows] = useState<{ raw: Record<string,string>; error?: string }[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importResults, setImportResults] = useState<{ ok: number; failed: { row: number; name: string; error: string }[] }>({ ok: 0, failed: [] });
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   const qc = useQueryClient();
   const { data: branchRes } = useListBranches();
@@ -2655,6 +2700,90 @@ export default function Employees() {
     });
     qc.invalidateQueries({ queryKey: ["employees"] });
     refetch();
+  }
+
+  function openImport() {
+    setImportOpen(true);
+    setImportStage("upload");
+    setImportRows([]);
+    setImportResults({ ok: 0, failed: [] });
+  }
+
+  function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const parsed = parseCSV(text);
+      const validated = parsed.filter(r => Object.values(r).some(v => v)).map(raw => {
+        const errors: string[] = [];
+        if (!raw["First Name"] && !raw["Last Name"]) errors.push("Name required");
+        if (!raw["Employee ID"]) errors.push("Employee ID required");
+        if (!raw["Branch"]) errors.push("Branch required");
+        const branchMatch = branches.find((b: any) =>
+          b.name.toLowerCase().trim() === (raw["Branch"] || "").toLowerCase().trim()
+        );
+        if (raw["Branch"] && !branchMatch) errors.push(`Branch "${raw["Branch"]}" not found`);
+        return { raw, error: errors.length ? errors.join("; ") : undefined };
+      });
+      setImportRows(validated);
+      setImportStage("preview");
+      if (importFileRef.current) importFileRef.current.value = "";
+    };
+    reader.readAsText(file);
+  }
+
+  async function runImport() {
+    setImporting(true);
+    let ok = 0;
+    const failed: { row: number; name: string; error: string }[] = [];
+    const validRows = importRows.filter(r => !r.error);
+    for (let i = 0; i < validRows.length; i++) {
+      const { raw } = validRows[i];
+      const branchMatch = branches.find((b: any) =>
+        b.name.toLowerCase().trim() === (raw["Branch"] || "").toLowerCase().trim()
+      );
+      const body: Record<string, any> = {
+        employeeId: raw["Employee ID"],
+        biometricId: raw["Biometric ID"] || null,
+        firstName: raw["First Name"] || null,
+        lastName: raw["Last Name"] || null,
+        fullName: [raw["First Name"], raw["Last Name"]].filter(Boolean).join(" ") || raw["First Name"] || raw["Last Name"],
+        gender: raw["Gender"] || "male",
+        department: raw["Department"] || null,
+        branchId: branchMatch?.id,
+        employeeType: raw["Employee Type"] || "permanent",
+        status: raw["Status"] || "active",
+        phone: raw["Phone"] || null,
+        email: raw["Email"] || null,
+        nicNumber: raw["NIC Number"] || null,
+        panNumber: raw["Passport No."] || null,
+        basicSalary: raw["Basic Salary"] ? Number(raw["Basic Salary"]) : null,
+        epfNumber: raw["EPF No."] || null,
+        etfNumber: raw["ETF No."] || null,
+        joiningDate: raw["Joining Date"] || null,
+      };
+      try {
+        const resp = await fetch(apiUrl("/employees"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (resp.ok) {
+          ok++;
+        } else {
+          const err = await resp.json().catch(() => ({ message: resp.statusText }));
+          failed.push({ row: i + 1, name: body.fullName || body.employeeId, error: err.message || "Failed" });
+        }
+      } catch (err: any) {
+        failed.push({ row: i + 1, name: body.fullName || body.employeeId, error: err.message || "Network error" });
+      }
+    }
+    setImportResults({ ok, failed });
+    setImportStage("done");
+    setImporting(false);
+    if (ok > 0) { refetch(); qc.invalidateQueries({ queryKey: ["employees"] }); }
   }
 
   const params: any = { limit: 500 };
@@ -2747,6 +2876,9 @@ export default function Employees() {
             <>
               <Button variant="outline" onClick={exportCSV} className="text-xs h-8 px-3 flex items-center gap-1.5">
                 <Download className="w-3.5 h-3.5" /> Export CSV
+              </Button>
+              <Button variant="outline" onClick={openImport} className="text-xs h-8 px-3 flex items-center gap-1.5">
+                <Upload className="w-3.5 h-3.5" /> Import CSV
               </Button>
               <Button onClick={() => { setDrawerEmp(null); setDrawerOpen(true); }} className="text-xs h-8 px-3 flex items-center gap-1.5">
                 <Plus className="w-3.5 h-3.5" /> Add Employee
@@ -2886,6 +3018,227 @@ export default function Employees() {
       {activeTab === "Designations" && <DesignationsTab />}
       {activeTab === "Shift Details" && <ShiftDetailsTab />}
       {activeTab === "Payroll" && <PayrollTab />}
+
+      {/* ── Import CSV Modal ── */}
+      {importOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !importing && setImportOpen(false)} />
+          <div className="relative bg-background border border-border rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Upload className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <p className="font-bold text-sm">Import Employees from CSV</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {importStage === "upload" && "Upload a CSV file to bulk-add employees"}
+                    {importStage === "preview" && `${importRows.length} rows found — review before importing`}
+                    {importStage === "done" && "Import complete"}
+                  </p>
+                </div>
+              </div>
+              {!importing && (
+                <button onClick={() => setImportOpen(false)} className="p-1.5 hover:bg-muted rounded-lg">
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Stage: Upload */}
+            {importStage === "upload" && (
+              <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                {/* Template download */}
+                <div className="rounded-lg border border-dashed border-border bg-muted/20 p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold">Step 1 — Download the template</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Fill in the CSV template with your employee data, then upload it below.</p>
+                  </div>
+                  <button
+                    onClick={downloadTemplate}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-border bg-white hover:bg-muted transition-colors shrink-0"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Download Template
+                  </button>
+                </div>
+
+                {/* Column guide */}
+                <div>
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Required columns</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {["Employee ID","First Name","Last Name","Branch"].map(h => (
+                      <span key={h} className="px-2 py-0.5 rounded bg-red-50 text-red-700 text-[10px] font-semibold border border-red-100">{h} *</span>
+                    ))}
+                    {IMPORT_HEADERS.filter(h => !["Employee ID","First Name","Last Name","Branch"].includes(h)).map(h => (
+                      <span key={h} className="px-2 py-0.5 rounded bg-muted text-muted-foreground text-[10px] border border-border">{h}</span>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-2">Branch must match an existing branch name exactly. Gender: male/female/other. Employee Type: permanent/contract/casual. Status: active/on_leave/resigned/terminated.</p>
+                </div>
+
+                {/* File input */}
+                <div>
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Step 2 — Upload your CSV file</p>
+                  <label className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer p-8">
+                    <FileText className="w-8 h-8 text-primary/40" />
+                    <span className="text-xs font-semibold text-primary">Click to select CSV file</span>
+                    <span className="text-[11px] text-muted-foreground">Supports .csv files up to 5MB</span>
+                    <input
+                      ref={importFileRef}
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="hidden"
+                      onChange={handleImportFile}
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* Stage: Preview */}
+            {importStage === "preview" && (
+              <>
+                <div className="flex-1 overflow-y-auto">
+                  {/* Summary bar */}
+                  <div className="flex items-center gap-4 px-5 py-2.5 bg-slate-50 border-b border-border text-xs shrink-0">
+                    <span className="flex items-center gap-1 text-emerald-700 font-semibold">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      {importRows.filter(r => !r.error).length} ready to import
+                    </span>
+                    {importRows.filter(r => r.error).length > 0 && (
+                      <span className="flex items-center gap-1 text-red-600 font-semibold">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        {importRows.filter(r => r.error).length} rows have errors (will be skipped)
+                      </span>
+                    )}
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[11px]">
+                      <thead className="bg-slate-50 border-b border-border sticky top-0">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-semibold text-muted-foreground w-8">#</th>
+                          <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Status</th>
+                          <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Emp ID</th>
+                          <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Name</th>
+                          <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Department</th>
+                          <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Branch</th>
+                          <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Type</th>
+                          <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Bio ID</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {importRows.map((row, i) => (
+                          <tr key={i} className={cn(row.error ? "bg-red-50/60" : "hover:bg-muted/20")}>
+                            <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
+                            <td className="px-3 py-2">
+                              {row.error ? (
+                                <span className="flex items-center gap-1 text-red-600 font-medium">
+                                  <AlertCircle className="w-3 h-3 shrink-0" />
+                                  <span className="truncate max-w-[160px]" title={row.error}>{row.error}</span>
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1 text-emerald-600 font-medium">
+                                  <CheckCircle2 className="w-3 h-3" /> OK
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 font-mono font-semibold text-primary">{row.raw["Employee ID"] || "—"}</td>
+                            <td className="px-3 py-2 font-medium whitespace-nowrap">{[row.raw["First Name"], row.raw["Last Name"]].filter(Boolean).join(" ") || "—"}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{row.raw["Department"] || "—"}</td>
+                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{row.raw["Branch"] || "—"}</td>
+                            <td className="px-3 py-2 text-muted-foreground capitalize">{row.raw["Employee Type"] || "permanent"}</td>
+                            <td className="px-3 py-2 font-mono text-muted-foreground">{row.raw["Biometric ID"] || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-t border-border shrink-0">
+                  <button
+                    onClick={() => setImportStage("upload")}
+                    className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                  >
+                    ← Choose different file
+                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={() => setImportOpen(false)} className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-muted">Cancel</button>
+                    <button
+                      onClick={runImport}
+                      disabled={importRows.filter(r => !r.error).length === 0}
+                      className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      <Upload className="w-3 h-3" />
+                      Import {importRows.filter(r => !r.error).length} Employee{importRows.filter(r => !r.error).length !== 1 ? "s" : ""}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Stage: Importing progress */}
+            {importing && (
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 py-12">
+                <RefreshCw className="w-8 h-8 text-primary animate-spin" />
+                <p className="text-sm font-semibold">Importing employees…</p>
+                <p className="text-xs text-muted-foreground">Please wait, do not close this window.</p>
+              </div>
+            )}
+
+            {/* Stage: Done */}
+            {importStage === "done" && !importing && (
+              <>
+                <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                  {/* Summary */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center">
+                      <p className="text-2xl font-bold text-emerald-700">{importResults.ok}</p>
+                      <p className="text-xs font-semibold text-emerald-600 mt-1">Successfully Imported</p>
+                    </div>
+                    <div className={cn("rounded-xl border p-4 text-center", importResults.failed.length > 0 ? "border-red-200 bg-red-50" : "border-slate-200 bg-slate-50")}>
+                      <p className={cn("text-2xl font-bold", importResults.failed.length > 0 ? "text-red-600" : "text-slate-400")}>{importResults.failed.length}</p>
+                      <p className={cn("text-xs font-semibold mt-1", importResults.failed.length > 0 ? "text-red-500" : "text-slate-400")}>Failed</p>
+                    </div>
+                  </div>
+
+                  {/* Failed rows detail */}
+                  {importResults.failed.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Failed rows</p>
+                      <div className="space-y-1.5">
+                        {importResults.failed.map((f, i) => (
+                          <div key={i} className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2">
+                            <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />
+                            <div>
+                              <span className="text-xs font-semibold text-red-700">Row {f.row} — {f.name}</span>
+                              <p className="text-[11px] text-red-600">{f.error}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-border shrink-0">
+                  {importResults.failed.length > 0 && (
+                    <button onClick={() => setImportStage("upload")} className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-muted">
+                      Import more
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setImportOpen(false)}
+                    className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-primary text-white hover:bg-primary/90"
+                  >
+                    {importResults.ok > 0 ? "Done" : "Close"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
     </div>
   );
