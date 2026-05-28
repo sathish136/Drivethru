@@ -2676,6 +2676,10 @@ export default function Employees() {
   const [drawerEmp, setDrawerEmp] = useState<any | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
   // Import state
   const [importOpen, setImportOpen] = useState(false);
   const [importStage, setImportStage] = useState<"upload"|"preview"|"done">("upload");
@@ -2700,6 +2704,19 @@ export default function Employees() {
     });
     qc.invalidateQueries({ queryKey: ["employees"] });
     refetch();
+  }
+
+  async function bulkDelete() {
+    if (!selectedIds.size) return;
+    if (!confirm(`Delete ${selectedIds.size} selected employee${selectedIds.size !== 1 ? "s" : ""}? This cannot be undone.`)) return;
+    setBulkDeleting(true);
+    for (const id of Array.from(selectedIds)) {
+      await fetch(apiUrl(`/employees/${id}`), { method: "DELETE" }).catch(() => {});
+    }
+    setBulkDeleting(false);
+    setSelectedIds(new Set());
+    refetch();
+    qc.invalidateQueries({ queryKey: ["employees"] });
   }
 
   function openImport() {
@@ -2939,6 +2956,26 @@ export default function Employees() {
             <span className="ml-auto text-xs font-semibold text-slate-500">{employees.length} employee{employees.length !== 1 ? "s" : ""}</span>
           </Card>
 
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2.5 bg-primary/5 border border-primary/20 rounded-lg text-xs">
+              <span className="font-semibold text-primary">{selectedIds.size} selected</span>
+              <button
+                onClick={bulkDelete}
+                disabled={bulkDeleting}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-60"
+              >
+                <Trash2 className="w-3 h-3" />
+                {bulkDeleting ? "Deleting…" : `Delete ${selectedIds.size}`}
+              </button>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-xs text-slate-500 hover:text-slate-700 hover:underline ml-auto"
+              >
+                Clear selection
+              </button>
+            </div>
+          )}
+
           <Card className="overflow-hidden">
             {isLoading ? (
               <p className="text-center py-10 text-sm text-muted-foreground">Loading employees...</p>
@@ -2947,6 +2984,17 @@ export default function Employees() {
                 <table className="w-full text-xs">
                   <thead className="bg-slate-50 sticky top-0 border-b border-slate-200">
                     <tr>
+                      <th className="px-3 py-3 w-8">
+                        <input
+                          type="checkbox"
+                          className="w-3.5 h-3.5 rounded border-slate-300 accent-primary cursor-pointer"
+                          checked={employees.length > 0 && employees.every((e: any) => selectedIds.has(e.id))}
+                          onChange={e => {
+                            if (e.target.checked) setSelectedIds(new Set(employees.map((emp: any) => emp.id)));
+                            else setSelectedIds(new Set());
+                          }}
+                        />
+                      </th>
                       {["Emp ID","Bio ID","Name","Department","Branch","Shift","Status","Actions"].map(h => (
                         <th key={h} className="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">{h}</th>
                       ))}
@@ -2957,8 +3005,23 @@ export default function Employees() {
                       const initial = (emp.firstName?.[0] || emp.fullName?.[0] || "E").toUpperCase();
                       const avatarColors = ["bg-violet-100 text-violet-700","bg-sky-100 text-sky-700","bg-amber-100 text-amber-700","bg-emerald-100 text-emerald-700","bg-rose-100 text-rose-700","bg-indigo-100 text-indigo-700"];
                       const avatarColor = avatarColors[(emp.id || 0) % avatarColors.length];
+                      const isSelected = selectedIds.has(emp.id);
                       return (
-                      <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors group">
+                      <tr key={emp.id} className={cn("hover:bg-slate-50/80 transition-colors group", isSelected && "bg-primary/5")}>
+                        <td className="px-3 py-3">
+                          <input
+                            type="checkbox"
+                            className="w-3.5 h-3.5 rounded border-slate-300 accent-primary cursor-pointer"
+                            checked={isSelected}
+                            onChange={e => {
+                              setSelectedIds(prev => {
+                                const next = new Set(prev);
+                                if (e.target.checked) next.add(emp.id); else next.delete(emp.id);
+                                return next;
+                              });
+                            }}
+                          />
+                        </td>
                         <td className="px-4 py-3">
                           <span className="text-xs font-semibold text-primary tabular-nums">{shortEmpId(emp.employeeId)}</span>
                         </td>
@@ -3010,6 +3073,7 @@ export default function Employees() {
                     {!employees.length && (
                       <tr><td colSpan={9} className="text-center py-12 text-slate-400 font-medium">No employees found.</td></tr>
                     )}
+
                   </tbody>
                 </table>
               </div>
