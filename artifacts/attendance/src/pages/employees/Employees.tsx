@@ -2271,6 +2271,20 @@ function PayrollTab() {
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [payrollMap, setPayrollMap] = useState<Record<number, any>>({});
   const [loadingPayroll, setLoadingPayroll] = useState(false);
+  const [isOffSeason, setIsOffSeason] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch(apiUrl("/payroll-settings"))
+      .then(r => r.json())
+      .then(d => {
+        if (!d.offSeasonEnabled) { setIsOffSeason(false); return; }
+        let months: number[] = [5, 6, 7, 8, 9];
+        if (Array.isArray(d.offSeasonMonths)) months = d.offSeasonMonths;
+        else try { months = JSON.parse(d.offSeasonMonths ?? "[5,6,7,8,9]"); } catch {}
+        setIsOffSeason(months.includes(month));
+      })
+      .catch(() => setIsOffSeason(false));
+  }, [month, year]);
 
   const { data } = useListEmployees({ limit: 500 });
   const allEmployees: any[] = (data?.employees || []).filter((e: any) => e.status === "active");
@@ -2397,6 +2411,15 @@ function PayrollTab() {
           <button onClick={loadPayrollStatus} className="p-1.5 rounded-lg border border-border hover:bg-muted transition-colors" title="Refresh payroll status">
             <RefreshCw className={cn("w-3.5 h-3.5 text-muted-foreground", loadingPayroll && "animate-spin")} />
           </button>
+          {isOffSeason !== null && (
+            <div className={cn(
+              "flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold border",
+              isOffSeason ? "bg-blue-50 border-blue-200 text-blue-800" : "bg-green-50 border-green-200 text-green-800"
+            )}>
+              <span>{isOffSeason ? "⛅" : "🌿"}</span>
+              <span>{isOffSeason ? "Off Season" : "Main Season"}</span>
+            </div>
+          )}
         </div>
         <div className="flex gap-2 ml-auto flex-wrap">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 border border-border rounded-lg px-3 py-1.5">

@@ -980,6 +980,20 @@ export default function Payroll() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [isOffSeason, setIsOffSeason] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch(apiUrl("/payroll-settings"))
+      .then(r => r.json())
+      .then(d => {
+        if (!d.offSeasonEnabled) { setIsOffSeason(false); return; }
+        let months: number[] = [5, 6, 7, 8, 9];
+        if (Array.isArray(d.offSeasonMonths)) months = d.offSeasonMonths;
+        else try { months = JSON.parse(d.offSeasonMonths ?? "[5,6,7,8,9]"); } catch {}
+        setIsOffSeason(months.includes(month));
+      })
+      .catch(() => setIsOffSeason(false));
+  }, [month, year]);
 
   const toggleExpand = (id: number) => {
     setExpandedRows(prev => {
@@ -1120,6 +1134,15 @@ export default function Payroll() {
               {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
             </Select>
           </div>
+          {isOffSeason !== null && (
+            <div className={cn(
+              "flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold border",
+              isOffSeason ? "bg-blue-50 border-blue-200 text-blue-800" : "bg-green-50 border-green-200 text-green-800"
+            )}>
+              <span>{isOffSeason ? "⛅" : "🌿"}</span>
+              <span>{isOffSeason ? "Off Season" : "Main Season"}</span>
+            </div>
+          )}
           <Button
             onClick={fetchPayroll}
             disabled={loading}
