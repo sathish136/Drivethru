@@ -269,41 +269,6 @@ export default function PayrollSettings() {
                 <p className="text-[10px] text-muted-foreground mt-1">Miscellaneous fixed allowances</p>
               </div>
             </div>
-            <div className="mt-5">
-              <p className="text-xs font-semibold mb-1">Housing Allowance — Salary-Based Tiers</p>
-              <p className="text-[10px] text-muted-foreground mb-3">Each employee is placed in a tier based on their basic salary.</p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="border border-border rounded-xl p-4 bg-muted/20">
-                  <p className="text-xs font-bold text-muted-foreground mb-3 uppercase tracking-wide">Low Tier</p>
-                  <Label className="text-[10px]">Allowance Amount (Rs.)</Label>
-                  <Input type="number" min="0" value={cfg.housingAllowanceLow}
-                    onChange={e => set("housingAllowanceLow", parseInt(e.target.value))} className="mt-1 h-8 text-sm" />
-                  <p className="text-[10px] text-muted-foreground mt-2">For basic below Rs. {cfg.housingMidThreshold.toLocaleString()}</p>
-                </div>
-                <div className="border border-blue-200 rounded-xl p-4 bg-blue-50/30">
-                  <p className="text-xs font-bold text-blue-600 mb-3 uppercase tracking-wide">Mid Tier</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div><Label className="text-[10px]">Allowance (Rs.)</Label>
-                      <Input type="number" min="0" value={cfg.housingAllowanceMid}
-                        onChange={e => set("housingAllowanceMid", parseInt(e.target.value))} className="mt-1 h-8 text-sm" /></div>
-                    <div><Label className="text-[10px]">Min. Basic (Rs.)</Label>
-                      <Input type="number" min="0" value={cfg.housingMidThreshold}
-                        onChange={e => set("housingMidThreshold", parseInt(e.target.value))} className="mt-1 h-8 text-sm" /></div>
-                  </div>
-                </div>
-                <div className="border border-amber-200 rounded-xl p-4 bg-amber-50/30">
-                  <p className="text-xs font-bold text-amber-600 mb-3 uppercase tracking-wide">High Tier</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div><Label className="text-[10px]">Allowance (Rs.)</Label>
-                      <Input type="number" min="0" value={cfg.housingAllowanceHigh}
-                        onChange={e => set("housingAllowanceHigh", parseInt(e.target.value))} className="mt-1 h-8 text-sm" /></div>
-                    <div><Label className="text-[10px]">Min. Basic (Rs.)</Label>
-                      <Input type="number" min="0" value={cfg.housingHighThreshold}
-                        onChange={e => set("housingHighThreshold", parseInt(e.target.value))} className="mt-1 h-8 text-sm" /></div>
-                  </div>
-                </div>
-              </div>
-            </div>
           </Card>
 
           {/* Deduction Rules */}
