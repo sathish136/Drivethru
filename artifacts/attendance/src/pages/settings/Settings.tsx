@@ -75,8 +75,8 @@ export default function Settings() {
   const [checkinImporting, setCheckinImporting] = useState(false);
 
   // Database backup/restore state
-  const [dbStats, setDbStats] = useState<Record<string, number> | null>(null);
-  const [dbStatsLoading, setDbStatsLoading] = useState(false);
+  const [backupHistory, setBackupHistory] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [backupDownloading, setBackupDownloading] = useState(false);
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [restoring, setRestoring] = useState(false);
@@ -161,14 +161,14 @@ export default function Settings() {
     setMockClearing(false);
   }
 
-  async function loadDbStats() {
-    setDbStatsLoading(true);
+  async function loadBackupHistory() {
+    setHistoryLoading(true);
     try {
-      const r = await fetch(apiUrl("/backup/stats"));
+      const r = await fetch(apiUrl("/backup/history"));
       const d = await r.json();
-      setDbStats(d);
-    } catch { setDbStats(null); }
-    setDbStatsLoading(false);
+      setBackupHistory(Array.isArray(d) ? d : []);
+    } catch { setBackupHistory([]); }
+    setHistoryLoading(false);
   }
 
   async function loadSmtpSettings() {
@@ -257,9 +257,10 @@ export default function Settings() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `attendance-backup-${new Date().toISOString().slice(0, 10)}.sql`;
+      a.download = `db-full-backup-${new Date().toISOString().slice(0, 10)}.sql`;
       a.click();
       URL.revokeObjectURL(url);
+      setTimeout(loadBackupHistory, 800);
     } catch { alert("Backup export failed. Please check server connection."); }
     setBackupDownloading(false);
   }
@@ -277,7 +278,7 @@ export default function Settings() {
         setRestoreMsg({ type: "success", text: d.message, log: d.log });
         setRestoreFile(null);
         if (restoreInputRef.current) restoreInputRef.current.value = "";
-        loadDbStats();
+        loadBackupHistory();
       } else {
         setRestoreMsg({ type: "error", text: d.error || "Restore failed", log: d.log });
       }
@@ -385,7 +386,7 @@ export default function Settings() {
   function setER<K extends keyof DeptShiftRule>(k: K, v: DeptShiftRule[K]) { setEditingRule(s => ({ ...s, [k]: v })); }
 
   useEffect(() => {
-    if (activeTab === "database") { loadDbStats(); loadSmtpSettings(); }
+    if (activeTab === "database") { loadBackupHistory(); loadSmtpSettings(); }
   }, [activeTab]);
 
   const serverUrl = `${window.location.origin}/api/biometric/push`;
@@ -903,391 +904,374 @@ export default function Settings() {
         {/* ─── Database Backup & Restore ─── */}
         {activeTab === "database" && (
           <>
+            {/* ── Top action row ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-            {/* Backup Export */}
-            <Card className="p-5">
-              <div className="flex items-center gap-2 mb-1">
-                <Download className="w-4 h-4 text-teal-600" />
-                <span className="text-sm font-bold text-foreground">Export Backup</span>
-              </div>
-              <p className="text-xs text-muted-foreground mb-4">
-                Downloads a complete SQL dump of every table in the database using <code className="bg-muted px-1 rounded text-[11px]">pg_dump</code>.
-                Store this file safely — it can be used to fully restore the system at any time.
-              </p>
-              <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 flex items-start gap-3 mb-4">
-                <div className="w-8 h-8 bg-teal-100 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
-                  <Database className="w-4 h-4 text-teal-700" />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-teal-800">What's included in the backup:</p>
-                  <ul className="text-xs text-teal-700 mt-1 space-y-0.5 list-disc list-inside">
-                    <li>All tables — branches, employees, attendance, shifts</li>
-                    <li>Payroll records, settings, loans, incentives</li>
-                    <li>Leave balances, holidays, biometric devices &amp; logs</li>
-                    <li>HR settings, weekoffs, system users</li>
-                    <li>Complete schema structure (CREATE TABLE statements)</li>
-                  </ul>
-                </div>
-              </div>
-              <Button
-                className="flex items-center gap-2 text-sm bg-teal-600 hover:bg-teal-700 text-white"
-                onClick={handleBackupDownload}
-                disabled={backupDownloading}
-              >
-                <Download className="w-4 h-4" />
-                {backupDownloading ? "Preparing download..." : "Download Backup (.sql)"}
-              </Button>
-            </Card>
-
-            {/* Restore */}
-            <Card className="p-5 border-amber-200 bg-amber-50/20">
-              <div className="flex items-center gap-2 mb-1">
-                <Upload className="w-4 h-4 text-amber-600" />
-                <span className="text-sm font-bold text-foreground">Restore from Backup</span>
-              </div>
-              <p className="text-xs text-muted-foreground mb-4">
-                Upload a previously downloaded backup file to restore your data.
-                <strong className="text-amber-700"> This will replace all existing records</strong> with the data from the backup file.
-              </p>
-
-              {restoreMsg && (
-                <div className={`flex items-start gap-2 p-3 rounded-xl mb-4 text-xs ${
-                  restoreMsg.type === "success"
-                    ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
-                    : "bg-red-50 border border-red-200 text-red-800"
-                }`}>
-                  {restoreMsg.type === "success"
-                    ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
-                    : <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />}
-                  <div className="flex-1">
-                    <p className="font-medium">{restoreMsg.text}</p>
-                    {restoreMsg.log && restoreMsg.log.length > 0 && (
-                      <ul className="mt-2 space-y-0.5 opacity-80">
-                        {restoreMsg.log.map((l, i) => <li key={i}>✓ {l}</li>)}
-                      </ul>
-                    )}
+              {/* Export Backup */}
+              <Card className="p-5 flex flex-col">
+                <div className="flex items-center gap-2.5 mb-3">
+                  <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                    <Download className="w-4.5 h-4.5 text-primary" />
                   </div>
-                  <button onClick={() => setRestoreMsg(null)} className="shrink-0 opacity-50 hover:opacity-100">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+                  <div>
+                    <p className="text-sm font-bold leading-tight">Download Backup</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Full SQL dump of all tables</p>
+                  </div>
                 </div>
-              )}
+                <div className="flex-1 space-y-2 mb-4">
+                  {[
+                    "Branches, employees, departments, shifts",
+                    "Attendance records, leave balances",
+                    "Payroll, loans, incentives, holidays",
+                    "Biometric devices, users, HR settings",
+                    "Complete schema (CREATE TABLE statements)",
+                  ].map(item => (
+                    <div key={item} className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary/40 shrink-0" />
+                      {item}
+                    </div>
+                  ))}
+                </div>
+                <Button
+                  className="flex items-center justify-center gap-2 text-xs w-full"
+                  onClick={handleBackupDownload}
+                  disabled={backupDownloading}
+                >
+                  {backupDownloading
+                    ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Preparing…</>
+                    : <><Download className="w-3.5 h-3.5" />Download .sql Backup</>}
+                </Button>
+              </Card>
 
-              <div className="flex flex-col sm:flex-row items-start gap-3">
+              {/* Restore */}
+              <Card className="p-5 flex flex-col border-amber-200">
+                <div className="flex items-center gap-2.5 mb-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+                    <Upload className="w-4.5 h-4.5 text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold leading-tight">Restore from Backup</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Upload a .sql file to restore</p>
+                  </div>
+                </div>
+
+                {restoreMsg && (
+                  <div className={cn(
+                    "flex items-start gap-2 p-3 rounded-lg mb-3 text-xs",
+                    restoreMsg.type === "success"
+                      ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
+                      : "bg-red-50 border border-red-200 text-red-800"
+                  )}>
+                    {restoreMsg.type === "success"
+                      ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600" />
+                      : <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-red-600" />}
+                    <p className="flex-1">{restoreMsg.text}</p>
+                    <button onClick={() => setRestoreMsg(null)}><X className="w-3 h-3 opacity-50 hover:opacity-100" /></button>
+                  </div>
+                )}
+
                 <div
-                  className="flex-1 border-2 border-dashed border-amber-300 rounded-xl px-4 py-3 text-xs text-muted-foreground cursor-pointer hover:border-amber-400 hover:bg-amber-50 transition-colors"
+                  className={cn(
+                    "flex-1 border-2 border-dashed rounded-xl px-4 py-5 text-xs text-center cursor-pointer transition-colors mb-3",
+                    restoreFile
+                      ? "border-amber-400 bg-amber-50/60 text-amber-800"
+                      : "border-border hover:border-amber-300 hover:bg-amber-50/40 text-muted-foreground"
+                  )}
                   onClick={() => restoreInputRef.current?.click()}
                 >
-                  <input
-                    ref={restoreInputRef}
-                    type="file"
-                    accept=".sql"
-                    className="hidden"
-                    onChange={e => { setRestoreFile(e.target.files?.[0] ?? null); setRestoreMsg(null); }}
-                  />
-                  {restoreFile
-                    ? <span className="flex items-center gap-2 font-medium text-foreground">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />{restoreFile.name}
-                        <span className="text-muted-foreground font-normal">({(restoreFile.size / 1024).toFixed(1)} KB)</span>
-                      </span>
-                    : <span>Click to select a backup file (.sql)…</span>
-                  }
+                  <input ref={restoreInputRef} type="file" accept=".sql" className="hidden"
+                    onChange={e => { setRestoreFile(e.target.files?.[0] ?? null); setRestoreMsg(null); }} />
+                  {restoreFile ? (
+                    <div className="flex flex-col items-center gap-1">
+                      <CheckCircle2 className="w-5 h-5 text-amber-600 mb-1" />
+                      <span className="font-medium">{restoreFile.name}</span>
+                      <span className="text-muted-foreground">{(restoreFile.size / 1024).toFixed(1)} KB</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1">
+                      <Upload className="w-5 h-5 mb-1 opacity-40" />
+                      <span>Click to select backup file</span>
+                      <span className="text-[10px] opacity-60">.sql format only</span>
+                    </div>
+                  )}
                 </div>
-                <div className="flex gap-2 shrink-0">
+                <div className="flex gap-2">
                   {restoreFile && (
-                    <Button
-                      variant="outline"
-                      className="text-xs h-9 px-3"
-                      onClick={() => { setRestoreFile(null); setRestoreMsg(null); if (restoreInputRef.current) restoreInputRef.current.value = ""; }}
-                    >
+                    <Button variant="outline" className="text-xs h-9 px-3 shrink-0"
+                      onClick={() => { setRestoreFile(null); setRestoreMsg(null); if (restoreInputRef.current) restoreInputRef.current.value = ""; }}>
                       <X className="w-3.5 h-3.5" />
                     </Button>
                   )}
                   <Button
-                    className="flex items-center gap-2 text-xs h-9 bg-amber-600 hover:bg-amber-700 text-white"
-                    onClick={handleRestore}
-                    disabled={!restoreFile || restoring}
+                    className="flex items-center justify-center gap-2 text-xs h-9 bg-amber-600 hover:bg-amber-700 text-white flex-1"
+                    onClick={handleRestore} disabled={!restoreFile || restoring}
                   >
-                    <Upload className="w-3.5 h-3.5" />
-                    {restoring ? "Restoring..." : "Restore"}
+                    {restoring ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Restoring…</> : <><Upload className="w-3.5 h-3.5" />Restore Database</>}
                   </Button>
                 </div>
-              </div>
-            </Card>
+                <p className="text-[10px] text-red-500 mt-2 leading-relaxed">
+                  This replaces ALL current data. Export a fresh backup first.
+                </p>
+              </Card>
+            </div>
 
-            {/* Email Backup Settings */}
-            <Card className="p-5 border-blue-200 bg-blue-50/20">
-              <div className="flex items-center gap-2 mb-1">
-                <Mail className="w-4 h-4 text-blue-600" />
-                <span className="text-sm font-bold text-foreground">Email Backup (SMTP)</span>
+            {/* ── Email / SMTP ── */}
+            <Card className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                    <Mail className="w-4.5 h-4.5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold leading-tight">Email Backup (SMTP)</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Auto-send backup to email on schedule</p>
+                  </div>
+                </div>
                 <span className={cn(
-                  "ml-auto text-[10px] px-2 py-0.5 rounded font-mono font-bold",
+                  "text-[10px] px-2.5 py-1 rounded-full font-semibold border",
                   schedulerStatus?.running
-                    ? "bg-green-100 text-green-700"
-                    : "bg-gray-100 text-gray-500"
+                    ? "bg-green-50 text-green-700 border-green-200"
+                    : "bg-gray-50 text-gray-400 border-gray-200"
                 )}>
-                  {schedulerStatus?.running ? "Scheduler Active" : "Scheduler Off"}
+                  {schedulerStatus?.running ? "● Scheduler On" : "○ Scheduler Off"}
                 </span>
               </div>
-              <p className="text-xs text-muted-foreground mb-4">
-                Configure SMTP to automatically email a full database backup every day. The scheduler runs backups at the configured times and sends the <code className="bg-muted px-1 rounded text-[11px]">.sql</code> file as an attachment.
-              </p>
 
-              {smtpMsg && (
-                <div className={cn(
-                  "flex items-start gap-2 p-3 rounded-xl mb-4 text-xs",
-                  smtpMsg.type === "success"
-                    ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
-                    : "bg-red-50 border border-red-200 text-red-800"
-                )}>
-                  {smtpMsg.type === "success"
-                    ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
-                    : <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />}
-                  <p className="flex-1 font-medium">{smtpMsg.text}</p>
-                  <button onClick={() => setSmtpMsg(null)} className="shrink-0 opacity-50 hover:opacity-100"><X className="w-3.5 h-3.5" /></button>
+              {/* Scheduler status strip */}
+              {schedulerStatus && (
+                <div className="grid grid-cols-3 gap-3 mb-4 p-3 bg-muted/40 rounded-xl border border-border">
+                  <div>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Last Email Sent</p>
+                    <p className="text-xs font-medium text-foreground">
+                      {schedulerStatus.lastRun ? new Date(schedulerStatus.lastRun).toLocaleString() : <span className="text-muted-foreground italic">Never</span>}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Next Scheduled</p>
+                    <p className="text-xs font-medium text-foreground">
+                      {schedulerStatus.nextRun ? new Date(schedulerStatus.nextRun).toLocaleString() : <span className="text-muted-foreground">—</span>}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Last Error</p>
+                    <p className="text-xs text-red-500 truncate">{schedulerStatus.error ?? <span className="text-green-600">None</span>}</p>
+                  </div>
                 </div>
               )}
 
-              {/* Scheduler status */}
-              {schedulerStatus && (
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div>
-                    <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider">Status</p>
-                    <p className={cn("text-xs font-bold mt-0.5", schedulerStatus.running ? "text-green-600" : "text-gray-400")}>
-                      {schedulerStatus.running ? "Running" : "Stopped"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider">Last Run</p>
-                    <p className="text-xs mt-0.5 text-foreground">
-                      {schedulerStatus.lastRun
-                        ? new Date(schedulerStatus.lastRun).toLocaleString()
-                        : <span className="text-muted-foreground">Not yet run</span>}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider">Next Run</p>
-                    <p className="text-xs mt-0.5 text-foreground">
-                      {schedulerStatus.nextRun
-                        ? new Date(schedulerStatus.nextRun).toLocaleString()
-                        : <span className="text-muted-foreground">—</span>}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider">Last Error</p>
-                    <p className="text-xs mt-0.5 text-red-600 truncate">{schedulerStatus.error ?? "—"}</p>
-                  </div>
+              {smtpMsg && (
+                <div className={cn(
+                  "flex items-start gap-2 p-3 rounded-lg mb-4 text-xs",
+                  smtpMsg.type === "success" ? "bg-emerald-50 border border-emerald-200 text-emerald-800" : "bg-red-50 border border-red-200 text-red-800"
+                )}>
+                  {smtpMsg.type === "success" ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600" /> : <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-red-600" />}
+                  <p className="flex-1 font-medium">{smtpMsg.text}</p>
+                  <button onClick={() => setSmtpMsg(null)}><X className="w-3 h-3 opacity-50 hover:opacity-100" /></button>
                 </div>
               )}
 
               {smtpLoading ? (
-                <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading SMTP settings…
+                <div className="flex items-center gap-2 py-6 text-xs text-muted-foreground justify-center">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading settings…
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {/* SMTP server fields */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="sm:col-span-2">
                       <Label className="text-xs">SMTP Host</Label>
-                      <Input
-                        value={smtpConfig.host}
-                        onChange={e => setSmtpConfig(p => ({ ...p, host: e.target.value }))}
-                        placeholder="smtp.gmail.com"
-                      />
+                      <Input value={smtpConfig.host} onChange={e => setSmtpConfig(p => ({ ...p, host: e.target.value }))} placeholder="smtp.gmail.com" />
                     </div>
                     <div>
                       <Label className="text-xs">Port</Label>
-                      <Input
-                        type="number"
-                        value={smtpConfig.port}
-                        onChange={e => setSmtpConfig(p => ({ ...p, port: Number(e.target.value) }))}
-                        placeholder="587"
-                      />
+                      <Input type="number" value={smtpConfig.port} onChange={e => setSmtpConfig(p => ({ ...p, port: Number(e.target.value) }))} placeholder="587" />
                     </div>
                     <div>
-                      <Label className="text-xs">Username / Email</Label>
-                      <Input
-                        value={smtpConfig.user}
-                        onChange={e => setSmtpConfig(p => ({ ...p, user: e.target.value }))}
-                        placeholder="you@gmail.com"
-                      />
+                      <Label className="text-xs">Gmail / Username</Label>
+                      <Input value={smtpConfig.user} onChange={e => setSmtpConfig(p => ({ ...p, user: e.target.value }))} placeholder="you@gmail.com" />
                     </div>
-                    <div className="relative">
+                    <div>
                       <Label className="text-xs">App Password</Label>
                       <div className="relative">
-                        <Input
-                          type={showSmtpPass ? "text" : "password"}
-                          value={smtpConfig.pass}
+                        <Input type={showSmtpPass ? "text" : "password"} value={smtpConfig.pass}
                           onChange={e => setSmtpConfig(p => ({ ...p, pass: e.target.value }))}
-                          placeholder="app password (16 chars)"
-                          className="pr-8"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowSmtpPass(v => !v)}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
+                          placeholder="xxxx xxxx xxxx xxxx" className="pr-8" />
+                        <button type="button" onClick={() => setShowSmtpPass(v => !v)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                           {showSmtpPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                         </button>
                       </div>
                     </div>
                     <div>
                       <Label className="text-xs">Recipient Email</Label>
-                      <Input
-                        value={smtpConfig.recipient}
-                        onChange={e => setSmtpConfig(p => ({ ...p, recipient: e.target.value }))}
-                        placeholder="backup@yourorg.com"
-                      />
+                      <Input value={smtpConfig.recipient} onChange={e => setSmtpConfig(p => ({ ...p, recipient: e.target.value }))} placeholder="backup@org.com" />
                     </div>
                     <div className="sm:col-span-3 flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="smtpSecure"
-                        checked={smtpConfig.secure}
-                        onChange={e => setSmtpConfig(p => ({ ...p, secure: e.target.checked }))}
-                        className="rounded"
-                      />
-                      <label htmlFor="smtpSecure" className="text-xs text-muted-foreground">
-                        Use SSL/TLS (port 465) — leave unchecked for STARTTLS (port 587)
-                      </label>
+                      <input type="checkbox" id="smtpSecure" checked={smtpConfig.secure} onChange={e => setSmtpConfig(p => ({ ...p, secure: e.target.checked }))} className="rounded" />
+                      <label htmlFor="smtpSecure" className="text-xs text-muted-foreground">Use SSL/TLS on port 465 (leave unchecked for STARTTLS port 587)</label>
                     </div>
                   </div>
 
-                  {/* Scheduled backup times */}
-                  <div className="border border-blue-100 rounded-xl p-4 bg-white">
+                  {/* Schedule times */}
+                  <div className="border border-border rounded-xl p-4 bg-muted/20">
                     <div className="flex items-center gap-2 mb-3">
-                      <Bell className="w-3.5 h-3.5 text-blue-600" />
-                      <span className="text-xs font-semibold">Scheduled Daily Backup Times</span>
+                      <Bell className="w-3.5 h-3.5 text-primary" />
+                      <span className="text-xs font-semibold">Daily Schedule Times</span>
+                      <span className="text-[10px] text-muted-foreground ml-1">(Sri Lanka time)</span>
                       <div className="ml-auto flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id="schedEnabled"
-                          checked={smtpConfig.scheduledBackupEnabled}
-                          onChange={e => setSmtpConfig(p => ({ ...p, scheduledBackupEnabled: e.target.checked }))}
-                          className="rounded"
-                        />
-                        <label htmlFor="schedEnabled" className="text-xs text-muted-foreground">Enable scheduled backup</label>
+                        <input type="checkbox" id="schedEnabled" checked={smtpConfig.scheduledBackupEnabled}
+                          onChange={e => setSmtpConfig(p => ({ ...p, scheduledBackupEnabled: e.target.checked }))} className="rounded" />
+                        <label htmlFor="schedEnabled" className="text-xs text-muted-foreground">Enabled</label>
                       </div>
                     </div>
-                    <p className="text-[11px] text-muted-foreground mb-3">
-                      The system will automatically email a full backup at these times daily (Sri Lanka time). 3 backups per day recommended.
-                    </p>
-                    <div className="flex flex-wrap gap-2 mb-3">
+                    <div className="flex flex-wrap gap-2">
                       {smtpConfig.scheduleTimes.map((t, idx) => (
-                        <div key={idx} className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1">
-                          <input
-                            type="time"
-                            value={t}
-                            onChange={e => updateScheduleTime(idx, e.target.value)}
-                            className="bg-transparent text-xs font-mono text-blue-800 border-none outline-none w-20"
-                          />
+                        <div key={idx} className="flex items-center gap-1.5 bg-background border border-border rounded-lg px-2.5 py-1.5 shadow-sm">
+                          <input type="time" value={t} onChange={e => updateScheduleTime(idx, e.target.value)}
+                            className="bg-transparent text-xs font-mono text-foreground border-none outline-none w-[72px]" />
                           {smtpConfig.scheduleTimes.length > 1 && (
-                            <button onClick={() => removeScheduleTime(idx)} className="text-blue-400 hover:text-red-500">
+                            <button onClick={() => removeScheduleTime(idx)} className="text-muted-foreground hover:text-red-500 ml-0.5">
                               <X className="w-3 h-3" />
                             </button>
                           )}
                         </div>
                       ))}
                       {smtpConfig.scheduleTimes.length < 6 && (
-                        <button
-                          onClick={addScheduleTime}
-                          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 border border-dashed border-blue-300 rounded-lg px-3 py-1"
-                        >
+                        <button onClick={addScheduleTime}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground border border-dashed border-border rounded-lg px-3 py-1.5 hover:border-primary/40 transition-colors">
                           <Plus className="w-3 h-3" /> Add time
                         </button>
                       )}
                     </div>
                   </div>
 
-                  {/* Action buttons */}
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <Button
-                      className="flex items-center gap-2 text-xs bg-blue-600 hover:bg-blue-700 text-white"
-                      onClick={handleSaveSmtp}
-                      disabled={smtpSaving}
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                      {smtpSaving ? "Saving…" : "Save SMTP Settings"}
+                  <div className="flex flex-wrap gap-2">
+                    <Button className="flex items-center gap-2 text-xs" onClick={handleSaveSmtp} disabled={smtpSaving}>
+                      {smtpSaving ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Saving…</> : <><Save className="w-3.5 h-3.5" />Save Settings</>}
                     </Button>
-                    <Button
-                      variant="outline"
-                      className="flex items-center gap-2 text-xs border-blue-300 text-blue-700 hover:bg-blue-50"
-                      onClick={handleTestSmtp}
-                      disabled={smtpTesting}
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      {smtpTesting ? "Testing…" : "Test Connection"}
+                    <Button variant="outline" className="flex items-center gap-2 text-xs" onClick={handleTestSmtp} disabled={smtpTesting}>
+                      {smtpTesting ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Testing…</> : <><CheckCircle2 className="w-3.5 h-3.5" />Test Connection</>}
                     </Button>
-                    <Button
-                      variant="outline"
-                      className="flex items-center gap-2 text-xs border-green-300 text-green-700 hover:bg-green-50"
-                      onClick={handleSendEmailNow}
-                      disabled={emailSending}
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                      {emailSending ? "Sending…" : "Send Backup Now"}
+                    <Button variant="outline" className="flex items-center gap-2 text-xs text-green-700 border-green-300 hover:bg-green-50" onClick={handleSendEmailNow} disabled={emailSending}>
+                      {emailSending ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Sending…</> : <><Send className="w-3.5 h-3.5" />Send Now</>}
                     </Button>
                   </div>
-
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
-                    <strong>Gmail users:</strong> Use an <em>App Password</em> (not your regular password).
-                    Generate one at: Google Account → Security → 2-Step Verification → App passwords.
-                    The password format is 4 groups of 4 letters e.g. <code className="bg-amber-100 px-1 rounded">xxxx xxxx xxxx xxxx</code>
-                  </div>
+                  <p className="text-[10px] text-muted-foreground bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                    <strong>Gmail:</strong> Use an App Password, not your login password. Generate at: Google Account → Security → 2-Step Verification → App passwords.
+                  </p>
                 </div>
               )}
             </Card>
 
-            {/* Delete All Attendance Records */}
-            <Card className="p-5 border-red-200 bg-red-50/20">
-              <div className="flex items-center gap-2 mb-1">
-                <Trash2 className="w-4 h-4 text-red-600" />
-                <span className="text-sm font-bold text-foreground">Delete All Attendance Records</span>
+            {/* ── Backup History ── */}
+            <Card className="overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-border bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm font-bold">Backup History</span>
+                  {backupHistory.length > 0 && (
+                    <span className="text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-medium">
+                      Last {backupHistory.length}
+                    </span>
+                  )}
+                </div>
+                <Button variant="outline" className="flex items-center gap-1.5 text-xs h-7 px-2.5"
+                  onClick={loadBackupHistory} disabled={historyLoading}>
+                  <RefreshCw className={cn("w-3 h-3", historyLoading && "animate-spin")} />
+                  Refresh
+                </Button>
               </div>
-              <p className="text-xs text-muted-foreground mb-4">
-                Permanently removes every attendance record from the database.
-                <strong className="text-red-700"> This cannot be undone.</strong> Export a backup first if you need to preserve the data.
-              </p>
 
-              {deleteAttMsg && (
-                <div className={`flex items-start gap-2 p-3 rounded-xl mb-4 text-xs ${
-                  deleteAttMsg.type === "success"
-                    ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
-                    : "bg-red-50 border border-red-200 text-red-800"
-                }`}>
-                  {deleteAttMsg.type === "success"
-                    ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
-                    : <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />}
-                  <p className="flex-1 font-medium">{deleteAttMsg.text}</p>
-                  <button onClick={() => setDeleteAttMsg(null)} className="shrink-0 opacity-50 hover:opacity-100">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+              {historyLoading ? (
+                <div className="flex items-center justify-center py-10">
+                  <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : backupHistory.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center mb-3">
+                    <Database className="w-6 h-6 text-muted-foreground" />
+                  </div>
+                  <p className="text-sm font-medium text-foreground">No backups yet</p>
+                  <p className="text-xs text-muted-foreground mt-1">Download a backup or send one via email to see history here.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-border/60">
+                  {backupHistory.map((entry: any) => {
+                    const isSuccess = entry.status === "success";
+                    const typeColor: Record<string, string> = {
+                      manual:    "bg-blue-50 text-blue-700 border-blue-200",
+                      email:     "bg-purple-50 text-purple-700 border-purple-200",
+                      scheduled: "bg-teal-50 text-teal-700 border-teal-200",
+                      restore:   "bg-amber-50 text-amber-700 border-amber-200",
+                    };
+                    const typeIcon: Record<string, React.ReactNode> = {
+                      manual:    <Download className="w-3.5 h-3.5" />,
+                      email:     <Mail className="w-3.5 h-3.5" />,
+                      scheduled: <Bell className="w-3.5 h-3.5" />,
+                      restore:   <Upload className="w-3.5 h-3.5" />,
+                    };
+                    const ts = new Date(entry.timestamp);
+                    const dateStr = ts.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+                    const timeStr = ts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                    return (
+                      <div key={entry.id} className="flex items-center gap-3 px-5 py-3 hover:bg-muted/20 transition-colors">
+                        {/* Status dot */}
+                        <div className={cn("w-2 h-2 rounded-full shrink-0", isSuccess ? "bg-green-500" : "bg-red-400")} />
+                        {/* Type badge */}
+                        <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded border flex items-center gap-1 shrink-0", typeColor[entry.type] ?? "bg-muted text-muted-foreground border-border")}>
+                          {typeIcon[entry.type]}
+                          {entry.type === "manual" ? "Download" : entry.type === "email" ? "Email" : entry.type === "scheduled" ? "Scheduled" : "Restore"}
+                        </span>
+                        {/* Trigger label */}
+                        <span className="text-xs text-foreground font-medium truncate flex-1">{entry.trigger}</span>
+                        {/* Size */}
+                        {entry.sizeKb != null && (
+                          <span className="text-[11px] text-muted-foreground font-mono shrink-0">{entry.sizeKb} KB</span>
+                        )}
+                        {/* Recipient */}
+                        {entry.recipient && (
+                          <span className="text-[11px] text-muted-foreground truncate max-w-[140px] shrink-0 hidden sm:block">{entry.recipient}</span>
+                        )}
+                        {/* Date + time */}
+                        <div className="text-right shrink-0">
+                          <p className="text-[11px] font-medium text-foreground">{dateStr}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono">{timeStr}</p>
+                        </div>
+                        {/* Status */}
+                        <span className={cn("text-[10px] font-bold shrink-0 w-14 text-right", isSuccess ? "text-green-600" : "text-red-500")}>
+                          {isSuccess ? "Success" : "Failed"}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
-
-              <Button
-                className="flex items-center gap-2 text-sm bg-red-600 hover:bg-red-700 text-white"
-                onClick={handleDeleteAllAttendance}
-                disabled={deletingAtt}
-              >
-                <Trash2 className="w-4 h-4" />
-                {deletingAtt ? "Deleting..." : "Delete All Attendance Records"}
-              </Button>
             </Card>
 
-            {/* Warning */}
-            <Card className="p-4 border-red-200 bg-red-50/20">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+            {/* ── Danger zone ── */}
+            <Card className="p-5 border-red-200">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertTriangle className="w-4 h-4 text-red-500" />
+                <span className="text-sm font-bold text-red-700">Danger Zone</span>
+              </div>
+              <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-red-50 border border-red-100">
                 <div>
-                  <p className="text-xs font-bold text-red-700 mb-1">Important Notes</p>
-                  <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-                    <li>Always download a fresh backup before restoring to avoid losing recent data.</li>
-                    <li>The restore runs the full SQL dump against the live database — all tables are completely replaced.</li>
-                    <li>Only <code className="bg-muted px-1 rounded">.sql</code> files generated by this system's Export Backup are supported.</li>
-                    <li>After restore, refresh the page to see updated data.</li>
-                  </ul>
+                  <p className="text-xs font-semibold text-red-800">Delete All Attendance Records</p>
+                  <p className="text-[11px] text-red-600 mt-0.5">Permanently removes every punch-in/out record. Cannot be undone.</p>
+                </div>
+                <div className="shrink-0">
+                  {deleteAttMsg && (
+                    <p className={cn("text-xs mb-2 font-medium", deleteAttMsg.type === "success" ? "text-green-600" : "text-red-600")}>
+                      {deleteAttMsg.text}
+                    </p>
+                  )}
+                  <Button
+                    variant="outline"
+                    className="flex items-center gap-1.5 text-xs border-red-300 text-red-600 hover:bg-red-100 h-8"
+                    onClick={handleDeleteAllAttendance} disabled={deletingAtt}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {deletingAtt ? "Deleting…" : "Delete All"}
+                  </Button>
                 </div>
               </div>
             </Card>
