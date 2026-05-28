@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, Fragment } from "react";
 import { useGetAttendanceReport, useGetMonthlyReport, useGetOvertimeReport, useListBranches, useListEmployees, useListShifts } from "@workspace/api-client-react";
 import { PageHeader, Card, Input, Select, Label } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -1601,7 +1601,7 @@ function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { init
                 {filtered.map((e: any) => {
                   const isOpen = expandedIds.has(e.employeeId);
                   return (
-                    <React.Fragment key={e.employeeId}>
+                    <Fragment key={e.employeeId}>
                       <tr
                         key={e.employeeId}
                         onClick={() => toggleExpand(e.employeeId)}
@@ -1702,7 +1702,7 @@ function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { init
                           </td>
                         </tr>
                       )}
-                    </React.Fragment>
+                    </Fragment>
                   );
                 })}
                 {!filtered.length && (
