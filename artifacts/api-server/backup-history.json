@@ -1,5 +1,13 @@
 [
   {
+    "id": "86d7f8d9-ac04-4df0-8762-86646bf5c4f7",
+    "timestamp": "2026-05-28T10:37:09.846Z",
+    "type": "restore",
+    "trigger": "Restore — db-backup-2026-05-28_08-30.sql",
+    "sizeKb": 49,
+    "status": "success"
+  },
+  {
     "id": "6c3b4e80-c6d1-4e29-aa5e-b0c9c1a27837",
     "timestamp": "2026-05-28T08:30:05.960Z",
     "type": "scheduled",

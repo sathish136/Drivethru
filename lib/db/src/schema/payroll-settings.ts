@@ -52,6 +52,8 @@ export const payrollSettings = pgTable("payroll_settings", {
   })),
 
   employeeOverrides: text("employee_overrides").notNull().default("{}"),
+  apitOverrides: text("apit_overrides").notNull().default("{}"),
+  epfEtfExemptIds: text("epf_etf_exempt_ids").notNull().default("[]"),
 
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
