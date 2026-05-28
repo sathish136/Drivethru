@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   Percent, BadgeIndianRupee, Save, RefreshCw, Check,
   Edit2, X, Info, AlertTriangle, SlidersHorizontal, Users, ChevronRight,
-  Search, UserCheck, Undo2, CalendarDays, ToggleLeft,
+  Search, UserCheck, Undo2, CalendarDays, ToggleLeft, ShieldOff, BadgePercent,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -50,6 +50,8 @@ interface PayrollConfig {
   offSeasonEnd: string;
   offSeasonMonths: number[];
   salaryScale: Record<string, number>; employeeOverrides: Record<string, number>;
+  apitOverrides: Record<string, number>;
+  epfEtfExemptIds: number[];
 }
 const DEFAULTS: PayrollConfig = {
   epfEmployeePercent: 8, epfEmployerPercent: 12, etfEmployerPercent: 3,
@@ -68,6 +70,7 @@ const DEFAULTS: PayrollConfig = {
   offSeasonEnd: "",
   offSeasonMonths: [5,6,7,8,9],
   salaryScale: { ...DEFAULT_SALARY_SCALE }, employeeOverrides: {},
+  apitOverrides: {}, epfEtfExemptIds: [],
 };
 
 interface Employee {
@@ -121,6 +124,8 @@ export default function PayrollSettings() {
             offSeasonMonths: Array.isArray(d.offSeasonMonths) ? d.offSeasonMonths : (() => { try { return JSON.parse(d.offSeasonMonths ?? "[5,6,7,8,9]"); } catch { return [5,6,7,8,9]; } })(),
             salaryScale: d.salaryScale && typeof d.salaryScale === "object" ? d.salaryScale : { ...DEFAULT_SALARY_SCALE },
             employeeOverrides: d.employeeOverrides && typeof d.employeeOverrides === "object" ? d.employeeOverrides : {},
+            apitOverrides: d.apitOverrides && typeof d.apitOverrides === "object" ? d.apitOverrides : {},
+            epfEtfExemptIds: Array.isArray(d.epfEtfExemptIds) ? d.epfEtfExemptIds : [],
           });
         }
       })
@@ -172,6 +177,38 @@ export default function PayrollSettings() {
     `${e.fullName} ${e.employeeId} ${e.designation} ${e.department}`.toLowerCase().includes(empSearch.toLowerCase())
   );
   const overrideCount = Object.keys(cfg.employeeOverrides).length;
+
+  /* ── Tax override state ── */
+  const [taxSearch, setTaxSearch] = useState("");
+  const [editingApitEmpId, setEditingApitEmpId] = useState<number | null>(null);
+  const [editApitVal, setEditApitVal] = useState("");
+
+  function toggleEpfExempt(empId: number) {
+    setCfg(s => {
+      const ids = s.epfEtfExemptIds;
+      const next = ids.includes(empId) ? ids.filter(x => x !== empId) : [...ids, empId];
+      return { ...s, epfEtfExemptIds: next };
+    });
+  }
+  function startEditApit(empId: number) {
+    setEditingApitEmpId(empId);
+    setEditApitVal(String(cfg.apitOverrides[String(empId)] ?? ""));
+  }
+  function confirmApit(empId: number) {
+    const v = parseInt(editApitVal);
+    if (!isNaN(v) && v >= 0) {
+      setCfg(s => ({ ...s, apitOverrides: { ...s.apitOverrides, [String(empId)]: v } }));
+    }
+    setEditingApitEmpId(null);
+  }
+  function clearApit(empId: number) {
+    setCfg(s => { const next = { ...s.apitOverrides }; delete next[String(empId)]; return { ...s, apitOverrides: next }; });
+    if (editingApitEmpId === empId) setEditingApitEmpId(null);
+  }
+  const filteredTaxEmps = employees.filter(e =>
+    `${e.fullName} ${e.employeeId} ${e.designation} ${e.department}`.toLowerCase().includes(taxSearch.toLowerCase())
+  );
+  const taxConfiguredCount = Object.keys(cfg.apitOverrides).length + cfg.epfEtfExemptIds.length;
 
   /* ─── Loading state ─── */
   if (loading) {
@@ -443,6 +480,142 @@ export default function PayrollSettings() {
             })()}
           </Card>
         </div>
+
+      {/* ══════════════════════════════════════════
+          TAX & EPF/ETF EXEMPTION OVERRIDES
+      ══════════════════════════════════════════ */}
+      <Card className="p-5">
+        <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border">
+          <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
+            <ShieldOff className="w-4 h-4 text-purple-600" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-bold">Tax & EPF/ETF Exemption Overrides</p>
+            <p className="text-xs text-muted-foreground">Per-employee: fixed APIT amount or EPF/ETF exemption (e.g. Directors)</p>
+          </div>
+          {taxConfiguredCount > 0 && (
+            <span className="text-xs bg-purple-100 text-purple-700 font-semibold px-2.5 py-1 rounded-full">
+              {taxConfiguredCount} override{taxConfiguredCount !== 1 ? "s" : ""} active
+            </span>
+          )}
+        </div>
+
+        {/* Active overrides summary */}
+        {taxConfiguredCount > 0 && (
+          <div className="mb-4 space-y-1.5">
+            {cfg.epfEtfExemptIds.map(id => {
+              const e = employees.find(x => x.id === id);
+              if (!e) return null;
+              return (
+                <div key={id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs">
+                  <span className="font-medium text-amber-900">{e.fullName} <span className="text-amber-600">({e.department})</span></span>
+                  <span className="flex items-center gap-1 text-amber-700 font-semibold"><ShieldOff className="w-3 h-3" /> EPF/ETF Exempt</span>
+                </div>
+              );
+            })}
+            {Object.entries(cfg.apitOverrides).map(([id, amt]) => {
+              const e = employees.find(x => x.id === Number(id));
+              if (!e) return null;
+              return (
+                <div key={id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-purple-50 border border-purple-200 text-xs">
+                  <span className="font-medium text-purple-900">{e.fullName} <span className="text-purple-600">({e.department})</span></span>
+                  <span className="flex items-center gap-1 text-purple-700 font-semibold"><BadgePercent className="w-3 h-3" /> Fixed APIT Rs. {amt.toLocaleString()}/mo</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Search */}
+        <div className="relative mb-3">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <input
+            type="text" placeholder="Search employees…" value={taxSearch}
+            onChange={e => setTaxSearch(e.target.value)}
+            className="w-full pl-8 pr-3 py-2 text-xs border border-border rounded-lg bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+
+        {/* Employee list */}
+        {empsLoading ? (
+          <div className="flex items-center gap-2 py-4 text-muted-foreground text-xs justify-center"><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading employees…</div>
+        ) : (
+          <div className="divide-y divide-border max-h-80 overflow-y-auto rounded-lg border border-border">
+            {filteredTaxEmps.length === 0 && (
+              <p className="text-xs text-muted-foreground py-6 text-center">No employees found</p>
+            )}
+            {filteredTaxEmps.map(emp => {
+              const isExempt = cfg.epfEtfExemptIds.includes(emp.id);
+              const apitFixed = cfg.apitOverrides[String(emp.id)];
+              const isEditingApit = editingApitEmpId === emp.id;
+              return (
+                <div key={emp.id} className={cn("flex items-center gap-3 px-3 py-2.5 text-xs", (isExempt || apitFixed !== undefined) && "bg-purple-50/40")}>
+                  {/* Name */}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-foreground truncate">{emp.fullName}</p>
+                    <p className="text-muted-foreground truncate">{emp.designation} · {emp.department}</p>
+                  </div>
+
+                  {/* EPF/ETF toggle */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => toggleEpfExempt(emp.id)}
+                      className={cn(
+                        "relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none",
+                        isExempt ? "bg-amber-500" : "bg-muted-foreground/30"
+                      )}
+                    >
+                      <span className={cn("inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform", isExempt ? "translate-x-4" : "translate-x-0.5")} />
+                    </button>
+                    <span className={cn("text-[10px] font-semibold w-16", isExempt ? "text-amber-600" : "text-muted-foreground")}>
+                      {isExempt ? "EPF Exempt" : "EPF Normal"}
+                    </span>
+                  </div>
+
+                  {/* Fixed APIT */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    {isEditingApit ? (
+                      <>
+                        <Input
+                          type="number" min="0" value={editApitVal}
+                          onChange={e => setEditApitVal(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") confirmApit(emp.id); if (e.key === "Escape") setEditingApitEmpId(null); }}
+                          className="h-7 w-24 text-xs px-2"
+                          autoFocus
+                          placeholder="0"
+                        />
+                        <button type="button" onClick={() => confirmApit(emp.id)} className="p-1 rounded hover:bg-green-100 text-green-600"><Check className="w-3.5 h-3.5" /></button>
+                        <button type="button" onClick={() => setEditingApitEmpId(null)} className="p-1 rounded hover:bg-muted text-muted-foreground"><X className="w-3.5 h-3.5" /></button>
+                      </>
+                    ) : (
+                      <>
+                        {apitFixed !== undefined ? (
+                          <span className="flex items-center gap-1 text-purple-700 font-semibold text-[10px] bg-purple-100 px-2 py-0.5 rounded-full">
+                            <BadgePercent className="w-2.5 h-2.5" /> Rs.{apitFixed.toLocaleString()}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">Auto APIT</span>
+                        )}
+                        <button type="button" onClick={() => startEditApit(emp.id)} className="p-1 rounded hover:bg-muted text-muted-foreground ml-1"><Edit2 className="w-3 h-3" /></button>
+                        {apitFixed !== undefined && (
+                          <button type="button" onClick={() => clearApit(emp.id)} className="p-1 rounded hover:bg-red-50 text-red-400"><Undo2 className="w-3 h-3" /></button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <p className="text-[10px] text-muted-foreground mt-3">
+          <strong>EPF Exempt:</strong> No EPF 8%/12% or ETF 3% deducted/contributed. &nbsp;
+          <strong>Fixed APIT:</strong> Replaces the progressive IRD slab calculation with a fixed monthly amount. &nbsp;
+          Changes apply to next payroll run. Click <strong>Save</strong> below.
+        </p>
+      </Card>
 
       {/* ══════════════════════════════════════════
           SAVE BAR

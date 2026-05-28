@@ -24,6 +24,8 @@ async function getPayrollSettings() {
     ...row,
     salaryScale: JSON.parse(row.salaryScale) as Record<string, number>,
     employeeOverrides: JSON.parse(row.employeeOverrides ?? "{}") as Record<string, number>,
+    apitOverrides: JSON.parse((row as any).apitOverrides ?? "{}") as Record<string, number>,
+    epfEtfExemptIds: JSON.parse((row as any).epfEtfExemptIds ?? "[]") as number[],
   };
 }
 
@@ -725,7 +727,16 @@ router.post("/generate", async (req, res) => {
         etfEmployer = Math.round(epfBase * (cfg.etfEmployerPercent / 100));
       }
 
-      const apit          = calcAPIT(grossSalary);
+      /* ── EPF / ETF exemption override (e.g. Directors) ── */
+      if (cfg.epfEtfExemptIds.includes(emp.id)) {
+        epfEmployee = 0;
+        epfEmployer = 0;
+        etfEmployer = 0;
+      }
+
+      /* ── APIT: fixed override or progressive slab ── */
+      const apitFixedOverride = cfg.apitOverrides[String(emp.id)];
+      const apit = apitFixedOverride !== undefined ? apitFixedOverride : calcAPIT(grossSalary);
       const otherDeductions = otherDeductionsFromStruct;
 
       /* ── Loan / Advance deduction for this month ── */

@@ -166,9 +166,31 @@ export default function PayslipPage() {
     hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true,
   });
 
+  const isEpfEtfExempt = epf8 === 0 && row.grossSalary > 10000;
+
+  /* Compute what progressive APIT would be for this gross to detect fixed overrides */
+  function calcApitMonthly(gross: number): number {
+    const ag = gross * 12;
+    if (ag <= 1800000) return 0;
+    const slabs: [number, number, number][] = [
+      [1800000, 3000000, 0.06], [3000000, 4200000, 0.12],
+      [4200000, 7200000, 0.18], [7200000, 10200000, 0.24], [10200000, Infinity, 0.30],
+    ];
+    let tax = 0;
+    for (const [s, e, r] of slabs) {
+      if (ag <= s) break;
+      tax += (Math.min(ag, e) - s) * r;
+    }
+    return Math.round(tax / 12);
+  }
+  const progressiveApit = calcApitMonthly(row.grossSalary);
+  const isApitFixed = apit > 0 && apit !== progressiveApit;
+
   const annualGross = row.grossSalary * 12;
   let apitFormula = "Annual gross ≤ Rs.1,800,000 — no tax";
-  if (annualGross > 1800000 && annualGross <= 3000000) {
+  if (isApitFixed) {
+    apitFormula = `Fixed monthly override (configured in Payroll Settings → Tax Exemptions)`;
+  } else if (annualGross > 1800000 && annualGross <= 3000000) {
     apitFormula = `(Rs.${annualGross.toLocaleString()} − 1,800,000) × 6% ÷ 12`;
   } else if (annualGross > 3000000 && annualGross <= 4200000) {
     apitFormula = `(1,200,000×6% + (Rs.${annualGross.toLocaleString()}−3,000,000)×12%) ÷ 12`;
@@ -197,7 +219,7 @@ export default function PayslipPage() {
       : []),
     ...(overtime === 0 ? [{ label: "Add  :  Overtime / Holiday Pay", value: "", italic: true }] : []),
     { label: "Total Earnings",          value: fmtAmt(totalEarnings), borderTop: true },
-    { label: "Recoveries  :  EPF 8%",   value: fmtAmt(epf8) },
+    { label: isEpfEtfExempt ? "EPF / ETF" : "Recoveries  :  EPF 8%", value: isEpfEtfExempt ? "Exempt" : fmtAmt(epf8) },
     ...(loans > 0     ? [{ label: "Loans / Advances",   value: fmtAmt(loans),    indent: true }] : []),
     ...(otherDeds > 0 ? [{ label: "Other Deductions",   value: fmtAmt(otherDeds), indent: true }] : []),
     ...(apit > 0      ? [{ label: "APIT (Income Tax)",  value: fmtAmt(apit),     indent: true }] : []),
@@ -251,10 +273,14 @@ export default function PayslipPage() {
   }
   if ((row.holidayOtPay || 0) > 0) formulaRows.push({ label: "Holiday / Off-Day Pay", formula: "Hours worked × hourly rate × holiday multiplier", result: `+ Rs.${(row.holidayOtPay || 0).toLocaleString()}` });
 
-  if (epf8 > 0) formulaRows.push({ label: "EPF 8% (Employee)", formula: isNightWatcher ? `Rs.${totalForEPF.toLocaleString()} (salary after deduction) × 8%` : `Rs.${row.grossSalary.toLocaleString()} × 8%`, result: `− Rs.${epf8.toLocaleString()}`, deduction: true, highlight: true });
-  if (epf12 > 0) formulaRows.push({ label: "EPF 12% (Employer)", formula: isNightWatcher ? `Rs.${totalForEPF.toLocaleString()} (salary after deduction) × 12%` : `Rs.${row.grossSalary.toLocaleString()} × 12%`, result: `Rs.${epf12.toLocaleString()} (employer cost)` });
-  if (etf3 > 0) formulaRows.push({ label: "ETF 3% (Employer)", formula: isNightWatcher ? `Rs.${totalForEPF.toLocaleString()} (salary after deduction) × 3%` : `Rs.${row.grossSalary.toLocaleString()} × 3%`, result: `Rs.${etf3.toLocaleString()} (employer cost)`, highlight: true });
-  if (apit >= 0) formulaRows.push({ label: "APIT (Income Tax)", formula: apitFormula, result: apit > 0 ? `− Rs.${apit.toLocaleString()}` : "Rs.0 (exempt)", deduction: apit > 0 });
+  if (isEpfEtfExempt) {
+    formulaRows.push({ label: "EPF / ETF", formula: "Employee exempt — no statutory contributions deducted or contributed", result: "Exempt", highlight: true });
+  } else {
+    if (epf8 > 0) formulaRows.push({ label: "EPF 8% (Employee)", formula: isNightWatcher ? `Rs.${totalForEPF.toLocaleString()} (salary after deduction) × 8%` : `Rs.${row.grossSalary.toLocaleString()} × 8%`, result: `− Rs.${epf8.toLocaleString()}`, deduction: true, highlight: true });
+    if (epf12 > 0) formulaRows.push({ label: "EPF 12% (Employer)", formula: isNightWatcher ? `Rs.${totalForEPF.toLocaleString()} (salary after deduction) × 12%` : `Rs.${row.grossSalary.toLocaleString()} × 12%`, result: `Rs.${epf12.toLocaleString()} (employer cost)` });
+    if (etf3 > 0) formulaRows.push({ label: "ETF 3% (Employer)", formula: isNightWatcher ? `Rs.${totalForEPF.toLocaleString()} (salary after deduction) × 3%` : `Rs.${row.grossSalary.toLocaleString()} × 3%`, result: `Rs.${etf3.toLocaleString()} (employer cost)`, highlight: true });
+  }
+  if (apit >= 0) formulaRows.push({ label: isApitFixed ? "APIT (Fixed Override)" : "APIT (Income Tax)", formula: apitFormula, result: apit > 0 ? `− Rs.${apit.toLocaleString()}` : "Rs.0 (exempt)", deduction: apit > 0 });
   if (loans > 0) formulaRows.push({ label: "Loan / Advance", formula: "Monthly installment from active loan", result: `− Rs.${loans.toLocaleString()}`, deduction: true, highlight: true });
 
   const earnParts: string[] = [];
