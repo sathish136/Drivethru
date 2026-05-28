@@ -463,6 +463,15 @@ router.post("/generate", async (req, res) => {
       const leaveDays      = leaveRecs.length;
       const halfDaysCount  = halfDayRecs.length;
       const holidayDays    = holidayRecs.length;
+      /* Single-punch days: employee has an inTime1 punch but no outTime1.
+         These are not already counted in presentDays/halfDaysCount but the
+         employee did show up, so they qualify for lunch incentive. */
+      const singlePunchDays = empAtt.filter(a =>
+        a.inTime1 && !a.outTime1 &&
+        a.status !== "present" && a.status !== "late" &&
+        a.status !== "half_day" && a.status !== "holiday" &&
+        a.status !== "leave"   && a.status !== "off_day"
+      ).length;
 
       /* Any working day with no attendance record is treated as absent.
          Weekoff days do NOT count as working days, so don't penalise. */
@@ -502,10 +511,10 @@ router.post("/generate", async (req, res) => {
           else if (name.includes("lunch") || name.includes("incentive")) lunchIncentive += e.amount || 0;
           else otherAllowances += e.amount || 0;
         }
-        /* Default lunch incentive: if no lunch component in structure and employee has present days, apply per-day default */
-        if (lunchIncentive === 0 && (presentDays + halfDaysCount) > 0) {
+        /* Default lunch incentive: if no lunch component in structure and employee has present/single-punch days, apply per-day default */
+        if (lunchIncentive === 0 && (presentDays + halfDaysCount + singlePunchDays) > 0) {
           const lunchPerDay = cfg.lunchIncentivePerDay ?? 125;
-          lunchIncentive = Math.round(lunchPerDay * (presentDays + halfDaysCount));
+          lunchIncentive = Math.round(lunchPerDay * (presentDays + halfDaysCount + singlePunchDays));
         }
 
         epfEmployee = Math.round(basicSalary * 0.08);
@@ -519,7 +528,7 @@ router.post("/generate", async (req, res) => {
         transportAllowance = cfg.transportAllowance;
         {
           const lunchPerDay = cfg.lunchIncentivePerDay ?? 125;
-          lunchIncentive = Math.round(lunchPerDay * (presentDays + halfDaysCount));
+          lunchIncentive = Math.round(lunchPerDay * (presentDays + halfDaysCount + singlePunchDays));
         }
         housingAllowance =
           basicSalary >= cfg.housingHighThreshold ? cfg.housingAllowanceHigh :
