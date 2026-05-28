@@ -1875,7 +1875,7 @@ function ShiftDetailsTab() {
                       </td>
 
                       {/* Actions */}
-                      <td className={TD + " text-right"} onClick={e => e.stopPropagation()}>
+                      <td className={TD + " text-right whitespace-nowrap"} onClick={e => e.stopPropagation()}>
                         {isEditing ? (
                           <div className="flex items-center justify-end gap-1.5">
                             <button
