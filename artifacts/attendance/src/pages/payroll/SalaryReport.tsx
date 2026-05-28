@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation, useSearch } from "wouter";
-import { ArrowLeft, Printer, RefreshCw } from "lucide-react";
+import { ArrowLeft, Printer, RefreshCw, Download, FileSpreadsheet } from "lucide-react";
 import drivethruLogo from "@/assets/drivethru-wave-logo.png";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -17,9 +17,10 @@ function amt(v: number | null | undefined) {
   if (x === 0) return "-";
   return x.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-function amtNum(v: number) {
-  if (v === 0) return "-";
-  return v.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function amtNum(v: number | null | undefined) {
+  const x = v ?? 0;
+  if (x === 0) return "-";
+  return x.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 interface PayrollRow {
@@ -82,6 +83,66 @@ export default function SalaryReport() {
   }, [month, year]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const monthLabel2 = `${MONTHS[month - 1]}_${year}`;
+
+  const exportExcel = () => {
+    const derived2 = rows.map(r => {
+      const allowances    = n(r.transportAllowance) + n(r.housingAllowance) + n(r.otherAllowances);
+      const otAmt         = n(r.overtimePay) + n(r.holidayOtPay);
+      const totalEarnings = n(r.basicSalary) + allowances + otAmt;
+      const payDeduction  = n(r.lateDeduction) + n(r.lunchLateDeduction) + n(r.absenceDeduction) + n(r.halfDayDeduction) + n(r.incompleteDeduction);
+      const totalForEPF   = n(r.basicSalary) + allowances - payDeduction;
+      const advance       = n(r.loanDeduction);
+      const apit          = n(r.apit);
+      const balancePay    = totalEarnings - n(r.epfEmployee) - payDeduction - advance - apit;
+      return { r, allowances, otAmt, totalEarnings, payDeduction, totalForEPF, advance, apit, balancePay };
+    });
+
+    if (tab === "summary") {
+      const headers = ["#","EPF #","Name","Basic Salary","OT Hrs","OT Amount","Total Earnings","EPF 8%","Deduction","Total for EPF","Advance","APIT","Balance Pay","EPF 12%","ETF 3%"];
+      const dataRows = derived2.map((d, i) => [
+        i + 1,
+        d.r.employee.epfNumber || d.r.employee.employeeId,
+        d.r.employee.fullName,
+        n(d.r.basicSalary).toFixed(2),
+        d.r.overtimeHours > 0 ? d.r.overtimeHours.toFixed(1) : "",
+        d.otAmt > 0 ? d.otAmt.toFixed(2) : "",
+        d.totalEarnings.toFixed(2),
+        n(d.r.epfEmployee).toFixed(2),
+        d.payDeduction > 0 ? d.payDeduction.toFixed(2) : "",
+        d.totalForEPF.toFixed(2),
+        d.advance > 0 ? d.advance.toFixed(2) : "",
+        d.apit > 0 ? d.apit.toFixed(2) : "",
+        d.balancePay.toFixed(2),
+        n(d.r.epfEmployer).toFixed(2),
+        n(d.r.etfEmployer).toFixed(2),
+      ]);
+      const csv = [headers, ...dataRows].map(row => row.map(v => `"${v}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = `Salary_Summary_${monthLabel2}.csv`; a.click(); URL.revokeObjectURL(url);
+    } else {
+      const headers = ["#","EPF #","Name","Department","OT Hours","Regular OT Pay","Holiday OT Pay","Total OT Pay","EPF 12%","ETF 3%"];
+      const dataRows = derived2.filter(d => d.otAmt > 0).map((d, i) => [
+        i + 1,
+        d.r.employee.epfNumber || d.r.employee.employeeId,
+        d.r.employee.fullName,
+        (d.r.employee as any).department || "",
+        d.r.overtimeHours.toFixed(2),
+        n(d.r.overtimePay).toFixed(2),
+        n(d.r.holidayOtPay).toFixed(2),
+        d.otAmt.toFixed(2),
+        n(d.r.epfEmployer).toFixed(2),
+        n(d.r.etfEmployer).toFixed(2),
+      ]);
+      const csv = [headers, ...dataRows].map(row => row.map(v => `"${v}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = `OT_Cost_Report_${monthLabel2}.csv`; a.click(); URL.revokeObjectURL(url);
+    }
+  };
+
 
   const monthLabel = `${MONTHS[month - 1]} ${year}`;
 
@@ -163,9 +224,13 @@ export default function SalaryReport() {
               {t === "summary" ? "Salary Summary" : "OT Cost"}
             </button>
           ))}
+          <button onClick={exportExcel}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold ml-2">
+            <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
+          </button>
           <button onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold ml-2">
-            <Printer className="w-3.5 h-3.5" /> Print
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-semibold">
+            <Download className="w-3.5 h-3.5" /> PDF
           </button>
         </div>
       </div>
@@ -310,7 +375,7 @@ export default function SalaryReport() {
           {/* Footer */}
           <div className="px-6 py-4 border-t border-slate-200 flex justify-between items-center">
             <p className="text-[10px] text-slate-400">Generated: {new Date().toLocaleString("en-LK")}</p>
-            <p className="text-[10px] text-slate-400 font-medium">Sri Lanka Post — Payroll System</p>
+            <p className="text-[10px] text-slate-400 font-medium">Drivethru Attendance Management System</p>
           </div>
         </div>
       </div>

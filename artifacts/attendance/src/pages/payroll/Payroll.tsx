@@ -1113,7 +1113,7 @@ export default function Payroll() {
     <div className="space-y-6">
       <PageHeader
         title="Payroll Management"
-        subtitle="Generate, review and process monthly payroll for Sri Lanka Post employees."
+        subtitle="Generate, review and process monthly payroll for Drivethru employees."
       />
 
       {msg && (
@@ -1161,7 +1161,7 @@ export default function Payroll() {
           </Button>
           <Button
             onClick={() => navigate(`/payroll/report?month=${month}&year=${year}`)}
-            className="text-xs flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white"
+            className="text-xs flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
           >
             <FileText className="w-3.5 h-3.5" />
             Salary Report
