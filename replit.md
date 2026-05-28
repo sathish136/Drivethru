@@ -65,20 +65,11 @@ Dark sidebar, clean white content area
 - 14 Regional Offices
 - Sub-branches under each regional
 
-## Demo Logins
+## Default Login
 
 | Username | Password | Role |
 |----------|----------|------|
 | admin | admin123 | Super Admin (all access) |
-| western | western123 | Regional Admin (Western region) |
-| viewer | viewer123 | Viewer (Head Office only) |
-
-## Seeded Data
-
-- 124 active employees across 24 branches
-- 2000 attendance records (30 days history)
-- 3 shifts (Morning, Day, Split Shift A)
-- 5 national/religious holidays
 
 ## Replit Environment Notes
 
