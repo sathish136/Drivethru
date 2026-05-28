@@ -93,10 +93,9 @@ export default function SalaryReport() {
     const payDeduction    = n(r.lateDeduction) + n(r.lunchLateDeduction) + n(r.absenceDeduction) + n(r.halfDayDeduction) + n(r.incompleteDeduction);
     const totalForEPF     = n(r.basicSalary) + allowances - payDeduction;
     const advance         = n(r.loanDeduction);
-    const staffLoan       = n(r.otherDeductions);
     const apit            = n(r.apit);
-    const balancePay      = totalEarnings - n(r.epfEmployee) - payDeduction - advance - staffLoan - apit;
-    return { ...r, allowances, otAmt, totalEarnings, payDeduction, totalForEPF, advance, staffLoan, apit, balancePay };
+    const balancePay      = totalEarnings - n(r.epfEmployee) - payDeduction - advance - apit;
+    return { ...r, allowances, otAmt, totalEarnings, payDeduction, totalForEPF, advance, apit, balancePay };
   });
 
   /* ── Totals ── */
@@ -109,12 +108,11 @@ export default function SalaryReport() {
     payDed:       acc.payDed       + r.payDeduction,
     totalForEPF:  acc.totalForEPF  + r.totalForEPF,
     advance:      acc.advance      + r.advance,
-    staffLoan:    acc.staffLoan    + r.staffLoan,
     apit:         acc.apit         + r.apit,
     balancePay:   acc.balancePay   + r.balancePay,
     epf12:        acc.epf12        + n(r.epfEmployer),
     etf3:         acc.etf3         + n(r.etfEmployer),
-  }), { basic:0, otHrs:0, otAmt:0, totalEarnings:0, epf8:0, payDed:0, totalForEPF:0, advance:0, staffLoan:0, apit:0, balancePay:0, epf12:0, etf3:0 });
+  }), { basic:0, otHrs:0, otAmt:0, totalEarnings:0, epf8:0, payDed:0, totalForEPF:0, advance:0, apit:0, balancePay:0, epf12:0, etf3:0 });
 
   /* ── OT tab totals ── */
   const otTotals = derived.reduce((acc, r) => ({
@@ -212,7 +210,6 @@ export default function SalaryReport() {
                     <th className={colHead.replace("text-slate-600","text-slate-200").replace("border-slate-300","border-slate-600")}>Deduction</th>
                     <th className={colHead.replace("text-slate-600","text-slate-200").replace("border-slate-300","border-slate-600")}>Total for EPF</th>
                     <th className={colHead.replace("text-slate-600","text-slate-200").replace("border-slate-300","border-slate-600")}>Advance</th>
-                    <th className={colHead.replace("text-slate-600","text-slate-200").replace("border-slate-300","border-slate-600")}>Staff Loan</th>
                     <th className={colHead.replace("text-slate-600","text-slate-200").replace("border-slate-300","border-slate-600")}>APIT</th>
                     <th className={colHead.replace("text-slate-600","text-slate-200").replace("border-slate-300","border-slate-600")}>Balance Pay</th>
                     <th className={colHead.replace("text-slate-600","text-slate-200").replace("border-slate-300","border-slate-600")}>EPF 12%</th>
@@ -233,7 +230,6 @@ export default function SalaryReport() {
                       <td className={cell + (r.payDeduction > 0 ? " text-red-600" : "")}>{amtNum(r.payDeduction)}</td>
                       <td className={cell + " font-medium"}>{amtNum(r.totalForEPF)}</td>
                       <td className={cell + (r.advance > 0 ? " text-amber-700 font-medium bg-amber-50" : "")}>{amtNum(r.advance)}</td>
-                      <td className={cell + (r.staffLoan > 0 ? " text-orange-700 font-medium" : "")}>{amtNum(r.staffLoan)}</td>
                       <td className={cell + (r.apit > 0 ? " text-red-600" : "")}>{amtNum(r.apit)}</td>
                       <td className={cell + " font-bold text-primary"}>{amtNum(r.balancePay)}</td>
                       <td className={cell + " text-slate-500 text-[10px]"}>{amtNum(n(r.epfEmployer))}</td>
@@ -252,7 +248,6 @@ export default function SalaryReport() {
                     <td className={totalCell + " bg-slate-800 text-white"}>{amtNum(totals.payDed)}</td>
                     <td className={totalCell + " bg-slate-800 text-white"}>{amtNum(totals.totalForEPF)}</td>
                     <td className={totalCell + " bg-slate-800 text-white"}>{amtNum(totals.advance)}</td>
-                    <td className={totalCell + " bg-slate-800 text-white"}>{amtNum(totals.staffLoan)}</td>
                     <td className={totalCell + " bg-slate-800 text-white"}>{amtNum(totals.apit)}</td>
                     <td className={totalCell + " bg-slate-800 text-white"}>{amtNum(totals.balancePay)}</td>
                     <td className={totalCell + " bg-slate-800 text-white text-[10px]"}>{amtNum(totals.epf12)}</td>
