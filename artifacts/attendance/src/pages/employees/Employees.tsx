@@ -2631,7 +2631,7 @@ function PayrollTab() {
 // ── CSV Import helpers ──────────────────────────────────────────────────────────
 const IMPORT_HEADERS = [
   "Employee ID","Biometric ID","First Name","Last Name","Gender",
-  "Department","Branch","Employee Type","Status","Phone","Email",
+  "Department","Branch","Shift","Employee Type","Status","Phone","Email",
   "NIC Number","Passport No.","Basic Salary","EPF No.","ETF No.","Joining Date",
 ];
 
@@ -2657,7 +2657,7 @@ function parseCSV(text: string): Record<string, string>[] {
 function downloadTemplate() {
   const sample = [
     IMPORT_HEADERS,
-    ["EMP001","BIO-001","Kamal","Perera","male","Kitchen","Head Office - Colombo","permanent","active","+94-71-1234567","kamal@slpost.lk","123456789V","","45000","EPF001","ETF001","2023-01-15"],
+    ["EMP001","BIO-001","Kamal","Perera","male","Kitchen","Head Office - Colombo","Morning Shift","permanent","active","+94-71-1234567","kamal@slpost.lk","123456789V","","45000","EPF001","ETF001","2023-01-15"],
   ];
   const csv = sample.map(r => r.map(c => `"${c}"`).join(",")).join("\n");
   const a = document.createElement("a");
@@ -2744,6 +2744,9 @@ export default function Employees() {
       const branchMatch = branches.find((b: any) =>
         b.name.toLowerCase().trim() === (raw["Branch"] || "").toLowerCase().trim()
       );
+      const shiftMatch = raw["Shift"]
+        ? allShifts.find((s: any) => s.name.toLowerCase().trim() === raw["Shift"].toLowerCase().trim())
+        : null;
       const body: Record<string, any> = {
         employeeId: raw["Employee ID"],
         biometricId: raw["Biometric ID"] || null,
@@ -2753,6 +2756,7 @@ export default function Employees() {
         gender: raw["Gender"] || "male",
         department: raw["Department"] || null,
         branchId: branchMatch?.id,
+        shiftId: shiftMatch ? shiftMatch.id : null,
         employeeType: raw["Employee Type"] || "permanent",
         status: raw["Status"] || "active",
         phone: raw["Phone"] || null,
@@ -3124,6 +3128,7 @@ export default function Employees() {
                           <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Name</th>
                           <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Department</th>
                           <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Branch</th>
+                          <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Shift</th>
                           <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Type</th>
                           <th className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">Bio ID</th>
                         </tr>
@@ -3148,6 +3153,7 @@ export default function Employees() {
                             <td className="px-3 py-2 font-medium whitespace-nowrap">{[row.raw["First Name"], row.raw["Last Name"]].filter(Boolean).join(" ") || "—"}</td>
                             <td className="px-3 py-2 text-muted-foreground">{row.raw["Department"] || "—"}</td>
                             <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{row.raw["Branch"] || "—"}</td>
+                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{row.raw["Shift"] || "—"}</td>
                             <td className="px-3 py-2 text-muted-foreground capitalize">{row.raw["Employee Type"] || "permanent"}</td>
                             <td className="px-3 py-2 font-mono text-muted-foreground">{row.raw["Biometric ID"] || "—"}</td>
                           </tr>
