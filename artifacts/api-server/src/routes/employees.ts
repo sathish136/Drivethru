@@ -167,9 +167,21 @@ function sanitizeDates(body: Record<string, any>) {
   const DATE_FIELDS = ["dateOfBirth", "joiningDate"];
   for (const f of DATE_FIELDS) {
     if (body[f] === "") body[f] = null;
-    // If the field is not present in the body at all, leave it untouched
-    // so partial updates (e.g. only shiftId) don't overwrite existing DB values
     if (body[f] === undefined) delete body[f];
+  }
+}
+
+function sanitizeIntegers(body: Record<string, any>) {
+  const INT_FIELDS = ["companyId", "branchId", "shiftId", "weekoffScheduleId", "reportingManagerId"];
+  for (const f of INT_FIELDS) {
+    if (f in body) {
+      const v = body[f];
+      if (v === "" || v === null || v === undefined || Number.isNaN(Number(v))) {
+        body[f] = null;
+      } else {
+        body[f] = Number(v);
+      }
+    }
   }
 }
 
@@ -180,6 +192,7 @@ router.post("/", async (req, res) => {
       body.fullName = `${body.firstName} ${body.lastName}`;
     }
     sanitizeDates(body);
+    sanitizeIntegers(body);
     const check = await validateEmployeeId(body.employeeId, Number(body.branchId));
     if (!check.valid) {
       res.status(422).json({ message: check.message, success: false, code: "INVALID_EMPLOYEE_ID" });
@@ -216,6 +229,7 @@ router.put("/:id", async (req, res) => {
     delete body.branchName;
     delete body.shiftName;
     sanitizeDates(body);
+    sanitizeIntegers(body);
     if (body.firstName && body.lastName) {
       body.fullName = `${body.firstName} ${body.lastName}`;
     }
