@@ -1,5 +1,13 @@
 [
   {
+    "id": "3ba74f8d-c3ec-44ad-8d7e-d4eb049476ce",
+    "timestamp": "2026-05-28T12:35:10.497Z",
+    "type": "manual",
+    "trigger": "Manual Download",
+    "sizeKb": 437,
+    "status": "success"
+  },
+  {
     "id": "d916153c-bbea-4844-b22c-02de773befd7",
     "timestamp": "2026-05-28T10:41:46.712Z",
     "type": "restore",
