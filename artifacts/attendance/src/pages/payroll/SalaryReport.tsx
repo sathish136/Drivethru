@@ -143,6 +143,160 @@ export default function SalaryReport() {
     }
   };
 
+  const exportPDF = () => {
+    const fmt = (v: number | null | undefined) => {
+      const x = v ?? 0;
+      if (x === 0) return "-";
+      return x.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+    const ml = `${MONTHS[month - 1]} ${year}`;
+
+    let tableHtml = "";
+
+    if (tab === "summary") {
+      const d2 = rows.map(r => {
+        const allowances    = n(r.transportAllowance) + n(r.housingAllowance) + n(r.otherAllowances);
+        const otAmt         = n(r.overtimePay) + n(r.holidayOtPay);
+        const totalEarnings = n(r.basicSalary) + allowances + otAmt;
+        const payDeduction  = n(r.lateDeduction) + n(r.lunchLateDeduction) + n(r.absenceDeduction) + n(r.halfDayDeduction) + n(r.incompleteDeduction);
+        const totalForEPF   = n(r.basicSalary) + allowances - payDeduction;
+        const advance       = n(r.loanDeduction);
+        const apit          = n(r.apit);
+        const balancePay    = totalEarnings - n(r.epfEmployee) - payDeduction - advance - apit;
+        return { r, allowances, otAmt, totalEarnings, payDeduction, totalForEPF, advance, apit, balancePay };
+      });
+      const tot = d2.reduce((a, d) => ({
+        basic: a.basic + n(d.r.basicSalary), otHrs: a.otHrs + d.r.overtimeHours, otAmt: a.otAmt + d.otAmt,
+        earn: a.earn + d.totalEarnings, epf8: a.epf8 + n(d.r.epfEmployee), ded: a.ded + d.payDeduction,
+        forEPF: a.forEPF + d.totalForEPF, adv: a.adv + d.advance, apit: a.apit + d.apit,
+        bal: a.bal + d.balancePay, epf12: a.epf12 + n(d.r.epfEmployer), etf3: a.etf3 + n(d.r.etfEmployer),
+      }), { basic:0,otHrs:0,otAmt:0,earn:0,epf8:0,ded:0,forEPF:0,adv:0,apit:0,bal:0,epf12:0,etf3:0 });
+
+      tableHtml = `<table>
+        <thead><tr class="hdr">
+          <th class="l">#</th><th class="l">EPF #</th><th class="l">Name</th>
+          <th>Basic Salary</th><th>OT Hrs</th><th>OT Amount</th><th>Total Earnings</th>
+          <th>EPF 8%</th><th>Deduction</th><th>Total for EPF</th><th>Advance</th>
+          <th>APIT</th><th>Balance Pay</th><th>EPF 12%</th><th>ETF 3%</th>
+        </tr></thead>
+        <tbody>${d2.map((d, i) => `<tr class="${i%2===0?"":"alt"}">
+          <td class="l sm">${i+1}</td>
+          <td class="l">${d.r.employee.epfNumber || d.r.employee.employeeId}</td>
+          <td class="l name">${d.r.employee.fullName}</td>
+          <td>${fmt(d.r.basicSalary)}</td>
+          <td>${d.r.overtimeHours > 0 ? d.r.overtimeHours.toFixed(1) : "-"}</td>
+          <td class="${d.otAmt>0?"hi":""}">${fmt(d.otAmt)}</td>
+          <td class="b">${fmt(d.totalEarnings)}</td>
+          <td class="red">${fmt(d.r.epfEmployee)}</td>
+          <td class="${d.payDeduction>0?"red":""}">${fmt(d.payDeduction)}</td>
+          <td class="b">${fmt(d.totalForEPF)}</td>
+          <td class="${d.advance>0?"amber":""}">${fmt(d.advance)}</td>
+          <td class="${d.apit>0?"red":""}">${fmt(d.apit)}</td>
+          <td class="b primary">${fmt(d.balancePay)}</td>
+          <td class="sm">${fmt(d.r.epfEmployer)}</td>
+          <td class="sm">${fmt(d.r.etfEmployer)}</td>
+        </tr>`).join("")}</tbody>
+        <tfoot><tr class="tot">
+          <td class="l" colspan="3">Total (${rows.length} employees)</td>
+          <td>${fmt(tot.basic)}</td>
+          <td>${tot.otHrs > 0 ? tot.otHrs.toFixed(1) : "-"}</td>
+          <td>${fmt(tot.otAmt)}</td>
+          <td>${fmt(tot.earn)}</td>
+          <td>${fmt(tot.epf8)}</td>
+          <td>${fmt(tot.ded)}</td>
+          <td>${fmt(tot.forEPF)}</td>
+          <td>${fmt(tot.adv)}</td>
+          <td>${fmt(tot.apit)}</td>
+          <td>${fmt(tot.bal)}</td>
+          <td>${fmt(tot.epf12)}</td>
+          <td>${fmt(tot.etf3)}</td>
+        </tr></tfoot>
+      </table>`;
+    } else {
+      const d2 = rows.filter(r => n(r.overtimePay) + n(r.holidayOtPay) > 0).map(r => ({
+        r, otAmt: n(r.overtimePay) + n(r.holidayOtPay),
+      }));
+      const tot = d2.reduce((a, d) => ({
+        hrs: a.hrs + d.r.overtimeHours, ot: a.ot + n(d.r.overtimePay),
+        hol: a.hol + n(d.r.holidayOtPay), total: a.total + d.otAmt,
+      }), { hrs:0,ot:0,hol:0,total:0 });
+      tableHtml = `<table>
+        <thead><tr class="hdr">
+          <th class="l">#</th><th class="l">EPF #</th><th class="l">Name</th><th class="l">Designation</th>
+          <th>OT Hours</th><th>Regular OT Pay</th><th>Holiday / Off-Day Pay</th><th>Total OT Cost</th>
+        </tr></thead>
+        <tbody>${d2.map((d, i) => `<tr class="${i%2===0?"":"alt"}">
+          <td class="l sm">${i+1}</td>
+          <td class="l">${d.r.employee.epfNumber || d.r.employee.employeeId}</td>
+          <td class="l name">${d.r.employee.fullName}</td>
+          <td class="l sm">${d.r.employee.designation ?? "-"}</td>
+          <td class="b hi">${d.r.overtimeHours.toFixed(2)}</td>
+          <td>${fmt(d.r.overtimePay)}</td>
+          <td>${fmt(d.r.holidayOtPay)}</td>
+          <td class="b hi">${fmt(d.otAmt)}</td>
+        </tr>`).join("")}</tbody>
+        <tfoot><tr class="tot">
+          <td class="l" colspan="4">Total (${d2.length} employees)</td>
+          <td>${tot.hrs.toFixed(2)}</td><td>${fmt(tot.ot)}</td>
+          <td>${fmt(tot.hol)}</td><td>${fmt(tot.total)}</td>
+        </tr></tfoot>
+      </table>`;
+    }
+
+    const reportTitle = tab === "summary" ? "Salary Summary Sheet" : "Overtime Cost Report";
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+      <title>${reportTitle} — ${ml}</title>
+      <style>
+        @page { size: A3 landscape; margin: 10mm; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        body { background: #fff; color: #1e293b; font-size: 10px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; padding: 12px 16px 10px; border-bottom: 2px solid #1e3a8a; margin-bottom: 10px; }
+        .company { font-size: 14px; font-weight: 700; color: #0f172a; }
+        .sub { font-size: 10px; color: #64748b; margin-top: 2px; }
+        .emp-count { text-align: right; }
+        .emp-count .label { font-size: 9px; color: #64748b; }
+        .emp-count .num { font-size: 22px; font-weight: 800; color: #1e3a8a; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #1e293b; color: #fff; padding: 5px 4px; text-align: right; font-size: 8px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+        th.l { text-align: left; }
+        td { padding: 4px 4px; text-align: right; white-space: nowrap; border-bottom: 1px solid #e2e8f0; font-size: 9.5px; }
+        td.l { text-align: left; }
+        td.name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+        td.sm { font-size: 8.5px; color: #64748b; }
+        td.b { font-weight: 700; }
+        td.red { color: #dc2626; }
+        td.amber { color: #b45309; background: #fef3c7; }
+        td.hi { color: #7c3aed; font-weight: 600; }
+        td.primary { color: #1e3a8a; font-weight: 700; }
+        tr.alt td { background: #f8fafc; }
+        tr.tot td { background: #1e293b; color: #fff; font-weight: 700; font-size: 9.5px; border-top: 2px solid #475569; padding: 5px 4px; }
+        .footer { display: flex; justify-content: space-between; margin-top: 10px; padding: 6px 0; border-top: 1px solid #e2e8f0; font-size: 8.5px; color: #94a3b8; }
+      </style>
+    </head><body>
+      <div class="header">
+        <div>
+          <div class="company">Drivethru (Pvt) Ltd</div>
+          <div class="sub">${reportTitle} — ${ml}</div>
+        </div>
+        <div class="emp-count">
+          <div class="label">Total Employees</div>
+          <div class="num">${rows.length}</div>
+        </div>
+      </div>
+      ${tableHtml}
+      <div class="footer">
+        <span>Generated: ${new Date().toLocaleString("en-LK")}</span>
+        <span>Drivethru Attendance Management System</span>
+      </div>
+    </body></html>`;
+
+    const win = window.open("", "_blank", "width=1200,height=800");
+    if (!win) { alert("Please allow pop-ups to export PDF."); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 600);
+  };
 
   const monthLabel = `${MONTHS[month - 1]} ${year}`;
 
@@ -228,7 +382,7 @@ export default function SalaryReport() {
             className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold ml-2">
             <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
           </button>
-          <button onClick={() => window.print()}
+          <button onClick={exportPDF}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-semibold">
             <Download className="w-3.5 h-3.5" /> PDF
           </button>
