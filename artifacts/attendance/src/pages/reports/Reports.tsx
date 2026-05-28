@@ -116,13 +116,32 @@ function useDebounce<T>(value: T, ms: number): T {
 }
 
 /* ─── PDF download helper ─── */
+function makeSeasonBannerHtml(isOff: boolean): string {
+  if (!isOff) {
+    return `<div style="display:flex;align-items:center;gap:8px;padding:5px 18px;background:#f0fdf4;border-bottom:1px solid #bbf7d0">
+      <span style="font-size:9.5px;color:#166534;font-weight:700">🌿 MAIN SEASON</span>
+      <span style="font-size:8.5px;color:#166534;opacity:.85">— Full attendance policy in effect: OT pay, late deductions, and incomplete hours deductions all apply.</span>
+    </div>`;
+  }
+  return `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:7px 18px;background:#eff6ff;border-bottom:2px solid #93c5fd">
+    <span style="font-size:10px;color:#1e40af;font-weight:800">⛅ OFF SEASON</span>
+    <span style="font-size:8.5px;color:#374151;margin-left:2px">Payroll policies for this period:</span>
+    <span style="display:inline-flex;align-items:center;gap:3px;padding:1px 7px;background:#dbeafe;border-radius:9px;font-size:8px;color:#1e40af;font-weight:600">✗ No overtime pay</span>
+    <span style="display:inline-flex;align-items:center;gap:3px;padding:1px 7px;background:#dbeafe;border-radius:9px;font-size:8px;color:#1e40af;font-weight:600">✗ No late deductions</span>
+    <span style="display:inline-flex;align-items:center;gap:3px;padding:1px 7px;background:#dbeafe;border-radius:9px;font-size:8px;color:#1e40af;font-weight:600">✗ No incomplete hours deduction</span>
+    <span style="display:inline-flex;align-items:center;gap:3px;padding:1px 7px;background:#dcfce7;border-radius:9px;font-size:8px;color:#166534;font-weight:700">✔ Full salary paid — even without punch records</span>
+    <span style="display:inline-flex;align-items:center;gap:3px;padding:1px 7px;background:#ede9fe;border-radius:9px;font-size:8px;color:#6d28d9;font-weight:600">Night Watcher: full policy applies year-round (unaffected by off season)</span>
+  </div>`;
+}
+
 async function printReport(opts: {
   title: string;
   meta: { label: string; value: string }[];
   tableHtml: string;
   filename?: string;
+  seasonBanner?: boolean;
 }) {
-  const { title, meta, tableHtml, filename } = opts;
+  const { title, meta, tableHtml, filename, seasonBanner } = opts;
   if (!tableHtml || tableHtml.trim().length === 0) {
     throw new Error("Report table is empty.");
   }
@@ -176,6 +195,7 @@ async function printReport(opts: {
     </div>
   </div>
   <div class="meta-bar">${metaHtml}</div>
+  ${seasonBanner !== undefined ? makeSeasonBannerHtml(seasonBanner) : ""}
   ${tableHtml}
   <div class="footer">
     <div class="footer-note">System-generated report. For internal use only. © ${new Date().getFullYear()} Drivethru Pvt Ltd</div>
@@ -477,6 +497,9 @@ function AttendanceReport() {
 
   const { data: branches } = useListBranches();
   const dDept = useDebounce(department, 300);
+  const _attSeasonMonth = startDate ? new Date(startDate + "T00:00:00").getMonth()+1 : new Date().getMonth()+1;
+  const _attSeasonYear  = startDate ? new Date(startDate + "T00:00:00").getFullYear() : new Date().getFullYear();
+  const isOffSeason = useOffSeasonStatus(_attSeasonMonth, _attSeasonYear);
   const { data, isLoading } = useGetAttendanceReport({
     startDate: dStart, endDate: dEnd,
     ...(dBranch ? { branchId: Number(dBranch) } : {}),
@@ -702,6 +725,7 @@ function AttendanceReport() {
           { label: "Branch", value: firstRec?.branchName || "—" },
         ],
         tableHtml: `<table><thead>${theadPolicy}</thead><tbody>${tbodyPolicy}</tbody></table>`,
+        seasonBanner: isOffSeason,
       });
       return;
     }
@@ -777,6 +801,7 @@ function AttendanceReport() {
         { label:"Branch",        value:dBranch?(branches?.find(b=>String(b.id)===dBranch)?.name||"—"):"All Branches" },
       ],
       tableHtml: `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`,
+      seasonBanner: isOffSeason,
     });
   };
 
@@ -1237,6 +1262,7 @@ function MonthlyReport({ initialEmpName="", initialMonth, initialYear }: { initi
   const dBranch = useDebounce(branchId, 200);
 
   const { data: branches } = useListBranches();
+  const isOffSeason = useOffSeasonStatus(month, year);
   const { data, isLoading } = useGetMonthlyReport({
     month: dMonth, year: dYear,
     ...(dBranch ? { branchId: Number(dBranch) } : {}),
@@ -1278,6 +1304,7 @@ function MonthlyReport({ initialEmpName="", initialMonth, initialYear }: { initi
         { label:"Branch",        value:dBranch?(branches?.find(b=>String(b.id)===dBranch)?.name||"—"):"All Branches" },
       ],
       tableHtml: `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`,
+      seasonBanner: isOffSeason,
     });
   };
 
@@ -1444,6 +1471,9 @@ function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { init
   const dBranch = useDebounce(branchId, 200);
 
   const { data: branches } = useListBranches();
+  const _otSeasonMonth = startDate ? new Date(startDate + "T00:00:00").getMonth()+1 : new Date().getMonth()+1;
+  const _otSeasonYear  = startDate ? new Date(startDate + "T00:00:00").getFullYear() : new Date().getFullYear();
+  const isOffSeason = useOffSeasonStatus(_otSeasonMonth, _otSeasonYear);
   const { data, isLoading } = useGetOvertimeReport({
     startDate: dStart, endDate: dEnd,
     ...(dBranch ? { branchId: Number(dBranch) } : {}),
@@ -1488,6 +1518,7 @@ function OvertimeReport({ initialEmpName="", initialMonth, initialYear }: { init
         { label:"Branch",              value:dBranch?(branches?.find(b=>String(b.id)===dBranch)?.name||"—"):"All Branches" },
       ],
       tableHtml: `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`,
+      seasonBanner: isOffSeason,
     });
   };
 
@@ -1722,16 +1753,25 @@ function useOffSeasonStatus(month: number, _year?: number) {
 
 function SeasonBadge({ month, year }: { month: number; year?: number }) {
   const isOff = useOffSeasonStatus(month, year);
-  const label = isOff ? "Off Season" : "Main Season";
-  const cls   = isOff
-    ? "bg-blue-50 border-blue-200 text-blue-800"
-    : "bg-green-50 border-green-200 text-green-800";
-  const icon  = isOff ? "⛅" : "🌿";
+  if (!isOff) {
+    return (
+      <div className="flex items-center gap-2 px-4 py-2 border rounded-lg text-sm bg-green-50 border-green-200 text-green-800">
+        <span>🌿</span>
+        <span className="font-semibold">Main Season</span>
+        <span className="text-xs opacity-75">— Full policy: OT pay, late deductions and incomplete hours deductions apply</span>
+      </div>
+    );
+  }
   return (
-    <div className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm ${cls}`}>
-      <span>{icon}</span>
-      <span className="font-semibold">{label}</span>
-      {isOff && <span className="text-xs opacity-75">— No OT, no late deductions, no incomplete hours deduction</span>}
+    <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-2 rounded-lg text-sm bg-blue-50 border-blue-300">
+      <span className="text-base">⛅</span>
+      <span className="font-bold text-blue-900">Off Season</span>
+      <span className="text-blue-700 text-xs">—</span>
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">✗ No overtime pay</span>
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">✗ No late deductions</span>
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">✗ No incomplete hours deduction</span>
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-xs font-bold">✔ Full salary — even without punch records</span>
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 text-xs font-semibold">Night Watcher: full policy year-round (unaffected)</span>
     </div>
   );
 }
@@ -1850,6 +1890,7 @@ function PayrollReport() {
         { label:"Early Exit Ded.",  value:`Rs.${Math.round(totals.earlyExitDed).toLocaleString()}` },
       ],
       tableHtml: `<table><thead>${thead}</thead><tbody>${tbody}</tbody><tfoot>${tfoot}</tfoot></table>`,
+      seasonBanner: isOffSeason,
     });
   };
 
@@ -2052,6 +2093,7 @@ function IndividualReport() {
   const [deptFilter, setDeptFilter] = useState("");
   const [empNameFilter, setEmpNameFilter] = useState("");
   const [nwBioLogs, setNwBioLogs] = useState<any[]>([]);
+  const isOffSeason = useOffSeasonStatus(month, year);
 
   const { data: empData, isLoading: empLoading } = useListEmployees({ limit: 1000 });
   const { rules: hrRules } = useHrRules();
@@ -2431,6 +2473,7 @@ function IndividualReport() {
   <div class="emp-field"><div class="emp-label">Working Days</div><div class="emp-value">${daysInMonth}</div></div>
 </div>
 <div class="summary-bar">${sumCardsHtml}</div>
+${makeSeasonBannerHtml(isOffSeason)}
 <table><thead><tr>
   <th>#</th><th>Day</th><th>Status</th>
   <th>1st In</th><th>1st Out</th><th>2nd In</th><th>2nd Out</th>
