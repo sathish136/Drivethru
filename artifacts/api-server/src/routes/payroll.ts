@@ -141,9 +141,6 @@ router.get("/employees-for-payroll", async (req, res) => {
       status: employees.status,
       epfNumber: employees.epfNumber,
       etfNumber: employees.etfNumber,
-      apitOverride: employees.apitOverride,
-      epfEtfExempt: employees.epfEtfExempt,
-      basicSalary: employees.basicSalary,
     }).from(employees);
 
     const activeEmps = allEmployees.filter(e => e.status === "active");
@@ -162,7 +159,7 @@ router.get("/employees-for-payroll", async (req, res) => {
     const result = filteredByBranch.map(emp => ({
       ...emp,
       hasSalaryAssignment: assignedIds.has(emp.id),
-      basicSalary: cfg.employeeOverrides[String(emp.id)] ?? cfg.salaryScale[emp.designation] ?? Number(emp.basicSalary) ?? 40000,
+      basicSalary: cfg.employeeOverrides[String(emp.id)] ?? cfg.salaryScale[emp.designation] ?? 40000,
       hasOverride: cfg.employeeOverrides[String(emp.id)] !== undefined,
       hasPayroll: payrollMap.has(emp.id),
       payrollStatus: payrollMap.get(emp.id)?.status ?? null,
