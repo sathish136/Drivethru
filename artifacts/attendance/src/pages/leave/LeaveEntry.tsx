@@ -4,7 +4,7 @@ import {
 } from "@/components/ui";
 import {
   Search, CheckCircle2, AlertTriangle, RefreshCw,
-  CalendarDays, User, CalendarClock, Sun, MoonStar,
+  CalendarDays, CalendarClock, Sun, MoonStar,
   Wallet, TrendingDown, Hourglass, Sparkles,
   Trash2, X, ChevronRight,
 } from "lucide-react";
@@ -306,135 +306,91 @@ export default function LeaveEntry() {
   };
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-8">
+    <div className="space-y-4 max-w-6xl mx-auto pb-6">
       <PageHeader
         title="Leave Entry"
         description="Record annual leave, half-day or no-pay leave for any employee."
       />
 
-      {/* Toast-style notifications */}
+      {/* Notification bar */}
       {(successMsg || errorMsg) && (
         <div
           role="status"
           className={cn(
-            "flex items-start gap-3 px-4 py-3 rounded-xl text-sm border shadow-sm transition-all",
+            "flex items-center gap-2 px-3 py-2 rounded-lg text-xs border",
             successMsg
               ? "bg-emerald-50 text-emerald-800 border-emerald-200"
               : "bg-red-50 text-red-800 border-red-200"
           )}
         >
-          {successMsg ? (
-            <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600" />
-          ) : (
-            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-red-600" />
-          )}
-          <div className="flex-1 min-w-0">{successMsg || errorMsg}</div>
-          <button
-            onClick={() => { setSuccessMsg(""); setErrorMsg(""); }}
-            className="opacity-70 hover:text-current shrink-0"
-            aria-label="Dismiss"
-          >
-            <X className="w-4 h-4" />
+          {successMsg
+            ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+            : <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-red-600" />}
+          <span className="flex-1">{successMsg || errorMsg}</span>
+          <button onClick={() => { setSuccessMsg(""); setErrorMsg(""); }} className="opacity-60 hover:opacity-100">
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
-      {/* ── Stat strip (visible once an employee is selected) ── */}
+      {/* ── Stat strip ── */}
       {selectedEmp && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard
-            icon={Wallet}
-            label="Annual Entitlement"
-            value={balance?.leaveBalance ?? 21}
-            unit="days"
-            tone="neutral"
-            loading={balanceLoading}
-          />
-          <StatCard
-            icon={TrendingDown}
-            label="Used This Year"
-            value={balance?.leaveUsed ?? 0}
-            unit="days"
-            tone="warning"
-            loading={balanceLoading}
-          />
-          <StatCard
-            icon={Hourglass}
-            label="Remaining"
-            value={balance?.leaveRemaining ?? 0}
-            unit="days"
-            tone={(balance?.leaveRemaining ?? 0) < 3 ? "danger" : "success"}
-            loading={balanceLoading}
-            highlight
-          />
-          <StatCard
-            icon={Sparkles}
-            label="Half Days Available"
-            value={(balance?.leaveRemaining ?? 0) * 2}
-            unit="halves"
-            tone="info"
-            loading={balanceLoading}
-          />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <StatCard icon={Wallet}      label="Annual Entitlement" value={balance?.leaveBalance ?? 21}             unit="days"   tone="neutral"  loading={balanceLoading} />
+          <StatCard icon={TrendingDown} label="Used This Year"     value={balance?.leaveUsed ?? 0}               unit="days"   tone="warning"  loading={balanceLoading} />
+          <StatCard icon={Hourglass}   label="Remaining"           value={balance?.leaveRemaining ?? 0}          unit="days"   tone={(balance?.leaveRemaining ?? 0) < 3 ? "danger" : "success"} loading={balanceLoading} highlight />
+          <StatCard icon={Sparkles}    label="Half Days Available" value={(balance?.leaveRemaining ?? 0) * 2}    unit="halves" tone="info"     loading={balanceLoading} />
         </div>
       )}
 
       {/* ── Main form ── */}
       <Card className="overflow-hidden">
-        <div className="px-5 py-4 border-b border-border bg-gradient-to-r from-primary/5 to-transparent flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-            <CalendarClock className="w-5 h-5 text-primary" />
-          </div>
+        <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center gap-2.5">
+          <CalendarClock className="w-4 h-4 text-primary shrink-0" />
           <div>
-            <h2 className="text-base font-semibold text-foreground leading-tight">New Leave Entry</h2>
-            <p className="text-xs text-muted-foreground">Pick an employee, choose a date, and select the leave type.</p>
+            <h2 className="text-sm font-semibold text-foreground leading-tight">New Leave Entry</h2>
+            <p className="text-[11px] text-muted-foreground">Pick an employee, choose a date, and select the leave type.</p>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-6">
+        <form onSubmit={handleSubmit} className="p-4 space-y-4">
           {/* STEP 1 — Employee */}
           <section>
             <SectionLabel step="1" title="Employee" required />
             {selectedEmp ? (
-              <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3">
-                <div className="w-10 h-10 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-sm shrink-0">
+              <div className="flex items-center gap-2.5 rounded-lg border border-border bg-muted/20 px-3 py-2">
+                <div className="w-7 h-7 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-xs shrink-0">
                   {selectedEmp.fullName.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-sm text-foreground truncate">{selectedEmp.fullName}</p>
-                  <p className="text-xs text-muted-foreground truncate">
+                  <p className="font-semibold text-xs text-foreground truncate">{selectedEmp.fullName}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">
                     <span className="font-mono">{selectedEmp.employeeId}</span>
-                    <span className="mx-1.5">·</span>
+                    <span className="mx-1">·</span>
                     {selectedEmp.designation || selectedEmp.department}
                   </p>
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearEmployee}
-                  className="h-8 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="w-3.5 h-3.5" />
-                  Change
+                <Button type="button" variant="ghost" size="sm" onClick={clearEmployee}
+                  className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground">
+                  <X className="w-3 h-3" /> Change
                 </Button>
               </div>
             ) : (
               <div className="relative">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                 <Input
-                  id="emp-search"
                   type="text"
                   value={empSearch}
                   onChange={e => { setEmpSearch(e.target.value); setShowDropdown(true); }}
                   onFocus={() => setShowDropdown(true)}
                   onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
                   placeholder="Search by name, employee ID or department…"
-                  className="pl-10 h-11"
+                  className="pl-9 h-8 text-xs"
                 />
                 {showDropdown && empSearch.length > 0 && (
-                  <div className="absolute z-30 mt-1.5 w-full bg-card border border-border rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto">
+                  <div className="absolute z-30 mt-1 w-full bg-card border border-border rounded-lg shadow-xl overflow-hidden max-h-56 overflow-y-auto">
                     {filteredEmps.length === 0 ? (
-                      <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                      <div className="px-4 py-4 text-center text-xs text-muted-foreground">
                         No employees match "{empSearch}".
                       </div>
                     ) : (
@@ -443,20 +399,20 @@ export default function LeaveEntry() {
                           key={emp.id}
                           type="button"
                           onMouseDown={() => selectEmployee(emp)}
-                          className="w-full text-left px-4 py-2.5 hover:bg-muted/60 transition-colors flex items-center gap-3 border-b border-border/40 last:border-0 group"
+                          className="w-full text-left px-3 py-2 hover:bg-muted/60 transition-colors flex items-center gap-2.5 border-b border-border/40 last:border-0 group"
                         >
-                          <div className="w-8 h-8 rounded-full bg-muted text-foreground/70 group-hover:bg-primary/15 group-hover:text-primary flex items-center justify-center text-xs font-bold shrink-0 transition-colors">
+                          <div className="w-7 h-7 rounded-full bg-muted text-foreground/70 group-hover:bg-primary/15 group-hover:text-primary flex items-center justify-center text-xs font-bold shrink-0 transition-colors">
                             {emp.fullName.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase()}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-foreground truncate">{emp.fullName}</p>
-                            <p className="text-xs text-muted-foreground truncate">
+                            <p className="text-xs font-medium text-foreground truncate">{emp.fullName}</p>
+                            <p className="text-[11px] text-muted-foreground truncate">
                               <span className="font-mono">{emp.employeeId}</span>
-                              <span className="mx-1.5">·</span>
+                              <span className="mx-1">·</span>
                               {emp.designation || emp.department}
                             </p>
                           </div>
-                          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <ChevronRight className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                         </button>
                       ))
                     )}
@@ -469,19 +425,18 @@ export default function LeaveEntry() {
           {/* STEP 2 — Date */}
           <section>
             <SectionLabel step="2" title="Date" required />
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col sm:flex-row gap-2">
               <div className="relative flex-1">
-                <CalendarDays className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                 <Input
-                  id="leave-date"
                   type="date"
                   value={date}
                   onChange={e => setDate(e.target.value)}
                   required
-                  className="pl-10 h-11"
+                  className="pl-9 h-8 text-xs"
                 />
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 {(["today", "yesterday", "tomorrow"] as const).map(q => (
                   <button
                     key={q}
@@ -492,7 +447,7 @@ export default function LeaveEntry() {
                       if (q === "tomorrow") d.setDate(d.getDate() + 1);
                       setDate(d.toISOString().slice(0, 10));
                     }}
-                    className="px-3 h-11 rounded-lg border border-border text-xs font-medium text-foreground/80 hover:bg-muted transition-colors capitalize"
+                    className="px-2.5 h-8 rounded-md border border-border text-xs font-medium text-foreground/80 hover:bg-muted transition-colors capitalize"
                   >
                     {q}
                   </button>
@@ -500,12 +455,10 @@ export default function LeaveEntry() {
               </div>
             </div>
             {date && (
-              <p className="mt-2 text-xs text-muted-foreground flex items-center gap-1.5">
-                <CalendarClock className="w-3.5 h-3.5" />
+              <p className="mt-1.5 text-[11px] text-muted-foreground flex items-center gap-1">
+                <CalendarClock className="w-3 h-3" />
                 {formatDate(date)}
-                {relativeDay(date) && (
-                  <span className="text-foreground/70">· {relativeDay(date)}</span>
-                )}
+                {relativeDay(date) && <span className="text-foreground/60">· {relativeDay(date)}</span>}
               </p>
             )}
           </section>
@@ -513,7 +466,7 @@ export default function LeaveEntry() {
           {/* STEP 3 — Leave type */}
           <section>
             <SectionLabel step="3" title="Leave Type" required />
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2">
               {LEAVE_TYPES.map(type => {
                 const isSelected = leaveType === type.id;
                 const Icon = type.Icon;
@@ -523,36 +476,21 @@ export default function LeaveEntry() {
                     type="button"
                     onClick={() => setLeaveType(type.id)}
                     className={cn(
-                      "relative flex flex-col gap-2 p-4 rounded-xl border-2 text-left transition-all duration-150",
+                      "relative flex items-center gap-2.5 px-3 py-2.5 rounded-lg border-2 text-left transition-all duration-150",
                       isSelected
-                        ? `${type.selectedBg} ring-4 ${type.ring} shadow-sm`
+                        ? `${type.selectedBg} ring-2 ${type.ring} shadow-sm`
                         : "border-border bg-card hover:border-foreground/20 hover:bg-muted/30"
                     )}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center", type.iconBg)}>
-                        <Icon className={cn("w-5 h-5", type.iconColor)} />
-                      </div>
-                      {isSelected && (
-                        <CheckCircle2 className={cn("w-5 h-5", type.iconColor)} />
-                      )}
+                    <div className={cn("w-7 h-7 rounded-md flex items-center justify-center shrink-0", type.iconBg)}>
+                      <Icon className={cn("w-3.5 h-3.5", type.iconColor)} />
                     </div>
-                    <div>
-                      <p className={cn("text-sm font-semibold", isSelected ? "text-foreground" : "text-foreground/90")}>
-                        {type.label}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
-                        {type.desc}
-                      </p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-foreground truncate">{type.label}</p>
+                      <p className="text-[10px] text-muted-foreground">{type.desc}</p>
                     </div>
-                    {type.deduct > 0 ? (
-                      <Badge variant={type.badge} className="self-start">
-                        −{type.deduct} day
-                      </Badge>
-                    ) : (
-                      <Badge variant="neutral" className="self-start">
-                        No balance impact
-                      </Badge>
+                    {isSelected && (
+                      <CheckCircle2 className={cn("w-3.5 h-3.5 shrink-0", type.iconColor)} />
                     )}
                   </button>
                 );
@@ -560,36 +498,29 @@ export default function LeaveEntry() {
             </div>
 
             {insufficient && (
-              <div className="mt-3 flex items-start gap-2.5 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 text-sm text-rose-700">
-                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <div className="mt-2 flex items-center gap-2 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-xs text-rose-700">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                 <span>
-                  Only <strong>{remainingForType}</strong> day{remainingForType === 1 ? "" : "s"} of leave left —
-                  not enough for {selectedTypeDef.label.toLowerCase()}. Pick <strong>No-Pay Leave</strong> instead.
+                  Only <strong>{remainingForType}</strong> day{remainingForType === 1 ? "" : "s"} left — not enough. Pick <strong>No-Pay Leave</strong> instead.
                 </span>
               </div>
             )}
           </section>
 
           {/* Actions */}
-          <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2 border-t border-border">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleReset}
-              className="sm:w-auto"
-            >
-              Reset Form
+          <div className="flex items-center gap-2 pt-2 border-t border-border">
+            <Button type="button" variant="outline" size="sm" onClick={handleReset} className="text-xs h-8">
+              Reset
             </Button>
             <Button
               type="submit"
+              size="sm"
               disabled={!selectedEmp || !date || submitting || insufficient}
-              className="flex-1 h-11"
+              className="flex-1 h-8 text-xs"
             >
-              {submitting ? (
-                <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Saving…</>
-              ) : (
-                <><CheckCircle2 className="w-4 h-4 mr-2" /> Submit Leave Entry</>
-              )}
+              {submitting
+                ? <><RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />Saving…</>
+                : <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />Submit Leave Entry</>}
             </Button>
           </div>
         </form>
@@ -597,36 +528,31 @@ export default function LeaveEntry() {
 
       {/* ── Recent Leave Entries ── */}
       <Card className="overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-border">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
-              <CalendarClock className="w-5 h-5 text-muted-foreground" />
-            </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-border">
+          <div className="flex items-center gap-2">
+            <CalendarClock className="w-4 h-4 text-muted-foreground" />
             <div>
-              <h2 className="text-base font-semibold text-foreground leading-tight">Leave Entries</h2>
-              <p className="text-xs text-muted-foreground">
+              <h2 className="text-sm font-semibold text-foreground leading-tight">Leave Entries</h2>
+              <p className="text-[11px] text-muted-foreground">
                 {recentTotal === 0
                   ? "No entries"
-                  : `${recentTotal.toLocaleString()} total ${recentTotal === 1 ? "entry" : "entries"}${recentSearch ? ` matching "${recentSearch}"` : ""}`}
+                  : `${recentTotal.toLocaleString()} ${recentTotal === 1 ? "entry" : "entries"}${recentSearch ? ` matching "${recentSearch}"` : ""}`}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
               <input
                 type="text"
                 value={recentSearchInput}
                 onChange={e => setRecentSearchInput(e.target.value)}
                 placeholder="Search name or ID…"
-                className="h-8 pl-8 pr-7 text-xs rounded-md border border-input bg-background w-52 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="h-7 pl-7 pr-6 text-xs rounded-md border border-input bg-background w-44 focus:outline-none focus:ring-1 focus:ring-primary/30"
               />
               {recentSearchInput && (
-                <button
-                  type="button"
-                  onClick={() => setRecentSearchInput("")}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
+                <button type="button" onClick={() => setRecentSearchInput("")}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                   <X className="w-3 h-3" />
                 </button>
               )}
@@ -634,41 +560,39 @@ export default function LeaveEntry() {
             <select
               value={recentPageSize}
               onChange={e => { setRecentPage(1); setRecentPageSize(Number(e.target.value)); }}
-              className="h-8 text-xs rounded-md border border-input bg-background px-2 focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="h-7 text-xs rounded-md border border-input bg-background px-1.5 focus:outline-none focus:ring-1 focus:ring-primary/30"
             >
-              {[10, 25, 50, 100].map(n => (
-                <option key={n} value={n}>{n} / page</option>
-              ))}
+              {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n} / pg</option>)}
             </select>
-            <Button variant="ghost" size="sm" onClick={loadRecent} className="gap-1.5 text-xs h-8">
-              <RefreshCw className={cn("w-3.5 h-3.5", recentLoading && "animate-spin")} />
+            <Button variant="ghost" size="sm" onClick={loadRecent} className="gap-1 text-xs h-7 px-2">
+              <RefreshCw className={cn("w-3 h-3", recentLoading && "animate-spin")} />
               Refresh
             </Button>
           </div>
         </div>
 
         {recent.length === 0 && !recentLoading ? (
-          <div className="text-center py-16 px-6">
-            <div className="w-14 h-14 mx-auto rounded-full bg-muted flex items-center justify-center mb-3">
-              <CalendarClock className="w-6 h-6 text-muted-foreground/60" />
+          <div className="text-center py-10 px-6">
+            <div className="w-10 h-10 mx-auto rounded-full bg-muted flex items-center justify-center mb-2">
+              <CalendarClock className="w-5 h-5 text-muted-foreground/60" />
             </div>
-            <p className="text-sm font-medium text-foreground">
+            <p className="text-xs font-medium text-foreground">
               {recentSearch ? "No matches found" : "No leave entries yet"}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-[11px] text-muted-foreground mt-0.5">
               {recentSearch ? "Try a different name or employee ID." : "Submitted leave records will appear here."}
             </p>
           </div>
         ) : (
           <>
-            <div className="relative max-h-[560px] overflow-auto">
+            <div className="relative max-h-[480px] overflow-auto">
               {recentLoading && (
                 <div className="absolute inset-0 z-20 bg-white/60 backdrop-blur-[1px] flex items-center justify-center gap-2 text-muted-foreground">
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span className="text-sm">Loading…</span>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span className="text-xs">Loading…</span>
                 </div>
               )}
-              <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
+              <table className="w-full text-xs" style={{ tableLayout: "fixed" }}>
                 <colgroup>
                   <col style={{ width: "30%" }} />
                   <col style={{ width: "16%" }} />
@@ -701,19 +625,19 @@ export default function LeaveEntry() {
                         )}
                       >
                         <Td>
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-foreground/70 shrink-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-foreground/70 shrink-0">
                               {entry.employeeName.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase()}
                             </div>
                             <div className="min-w-0">
                               <div className="font-semibold text-foreground truncate">{entry.employeeName}</div>
-                              <div className="text-xs text-muted-foreground font-mono truncate">{entry.employeeCode}</div>
+                              <div className="text-[10px] text-muted-foreground font-mono truncate">{entry.employeeCode}</div>
                             </div>
                           </div>
                         </Td>
                         <Td>
-                          <div className="text-foreground truncate">{formatDate(entry.date)}</div>
-                          <div className="text-xs text-muted-foreground truncate">{relativeDay(entry.date) || entry.date}</div>
+                          <div className="truncate">{formatDate(entry.date)}</div>
+                          <div className="text-[10px] text-muted-foreground truncate">{relativeDay(entry.date) || entry.date}</div>
                         </Td>
                         <Td>
                           <Badge variant={leaveBadgeVariant(entry)}>
@@ -735,11 +659,11 @@ export default function LeaveEntry() {
                         </Td>
                         <Td>
                           {entry.currentRemaining == null ? (
-                            <span className="text-xs text-muted-foreground italic">—</span>
+                            <span className="text-[10px] text-muted-foreground italic">—</span>
                           ) : (
                             <div className="flex items-baseline gap-1">
                               <span className={cn(
-                                "text-base font-bold tabular-nums leading-none",
+                                "text-sm font-bold tabular-nums leading-none",
                                 entry.currentRemaining <= 0
                                   ? "text-rose-600"
                                   : entry.currentRemaining < 3
@@ -750,63 +674,45 @@ export default function LeaveEntry() {
                                   ? entry.currentRemaining
                                   : entry.currentRemaining.toFixed(1)}
                               </span>
-                              <span className="text-xs text-muted-foreground">days left</span>
+                              <span className="text-[10px] text-muted-foreground">days</span>
                             </div>
                           )}
                         </Td>
                         <Td>
-                          <div className="flex items-center justify-end gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
+                          <div className="flex items-center justify-end gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
                             {confirmId === entry.id ? (
-                            <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200">
-                              <span className="text-xs font-medium text-rose-900">
-                                Remove & restore balance?
-                              </span>
-                              <Button
-                                type="button"
-                                size="sm"
-                                onClick={() => handleRemove(entry)}
-                                disabled={isBusy}
-                                className="h-7 px-2.5 text-xs gap-1 text-white bg-rose-600 hover:bg-rose-700"
+                              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-rose-50 border border-rose-200">
+                                <span className="text-[10px] font-medium text-rose-900 whitespace-nowrap">
+                                  Remove &amp; restore?
+                                </span>
+                                <Button type="button" size="sm" onClick={() => handleRemove(entry)} disabled={isBusy}
+                                  className="h-6 px-2 text-[10px] gap-0.5 text-white bg-rose-600 hover:bg-rose-700">
+                                  {isBusy ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : <CheckCircle2 className="w-2.5 h-2.5" />}
+                                  Yes
+                                </Button>
+                                <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmId(null)} disabled={isBusy}
+                                  className="h-6 px-1.5 text-[10px]">
+                                  <X className="w-2.5 h-2.5" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button type="button" variant="ghost" size="sm"
+                                onClick={() => setConfirmId(entry.id)}
+                                disabled={isBusy || removingId !== null}
+                                className="h-7 px-2 text-xs gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                title="Remove leave entry and restore balance"
                               >
-                                {isBusy ? (
-                                  <RefreshCw className="w-3 h-3 animate-spin" />
-                                ) : (
-                                  <CheckCircle2 className="w-3 h-3" />
-                                )}
-                                Yes
+                                <Trash2 className="w-3 h-3" />
+                                Remove
                               </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setConfirmId(null)}
-                                disabled={isBusy}
-                                className="h-7 px-2 text-xs"
-                              >
-                                <X className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setConfirmId(entry.id)}
-                              disabled={isBusy || removingId !== null}
-                              className="h-8 px-2.5 text-xs gap-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                              title="Remove leave entry and restore balance"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              Remove
-                            </Button>
-                          )}
-                        </div>
-                      </Td>
-                    </Tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                            )}
+                          </div>
+                        </Td>
+                      </Tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
 
             {/* Pagination footer */}
@@ -815,39 +721,19 @@ export default function LeaveEntry() {
               const start = (recentPage - 1) * recentPageSize + 1;
               const end = Math.min(recentTotal, recentPage * recentPageSize);
               return (
-                <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-t border-border bg-muted/20 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 border-t border-border bg-muted/20 text-xs">
                   <span className="text-muted-foreground">
                     Showing <span className="font-semibold text-foreground tabular-nums">{start}–{end}</span>
                     {" "}of <span className="font-semibold text-foreground tabular-nums">{recentTotal.toLocaleString()}</span>
                   </span>
                   <div className="flex items-center gap-1">
-                    <Button
-                      variant="outline" size="sm"
-                      onClick={() => setRecentPage(1)}
-                      disabled={recentPage === 1 || recentLoading}
-                      className="h-7 px-2 text-xs"
-                    >First</Button>
-                    <Button
-                      variant="outline" size="sm"
-                      onClick={() => setRecentPage(p => Math.max(1, p - 1))}
-                      disabled={recentPage === 1 || recentLoading}
-                      className="h-7 px-2 text-xs"
-                    >Prev</Button>
-                    <span className="px-2.5 py-1 rounded-md bg-background border border-border tabular-nums">
-                      Page {recentPage} / {totalPages}
+                    <Button variant="outline" size="sm" onClick={() => setRecentPage(1)} disabled={recentPage === 1 || recentLoading} className="h-6 px-2 text-[10px]">First</Button>
+                    <Button variant="outline" size="sm" onClick={() => setRecentPage(p => Math.max(1, p - 1))} disabled={recentPage === 1 || recentLoading} className="h-6 px-2 text-[10px]">Prev</Button>
+                    <span className="px-2 py-0.5 rounded border border-border text-[10px] tabular-nums bg-background">
+                      {recentPage} / {totalPages}
                     </span>
-                    <Button
-                      variant="outline" size="sm"
-                      onClick={() => setRecentPage(p => Math.min(totalPages, p + 1))}
-                      disabled={recentPage >= totalPages || recentLoading}
-                      className="h-7 px-2 text-xs"
-                    >Next</Button>
-                    <Button
-                      variant="outline" size="sm"
-                      onClick={() => setRecentPage(totalPages)}
-                      disabled={recentPage >= totalPages || recentLoading}
-                      className="h-7 px-2 text-xs"
-                    >Last</Button>
+                    <Button variant="outline" size="sm" onClick={() => setRecentPage(p => Math.min(totalPages, p + 1))} disabled={recentPage >= totalPages || recentLoading} className="h-6 px-2 text-[10px]">Next</Button>
+                    <Button variant="outline" size="sm" onClick={() => setRecentPage(totalPages)} disabled={recentPage >= totalPages || recentLoading} className="h-6 px-2 text-[10px]">Last</Button>
                   </div>
                 </div>
               );
@@ -859,15 +745,15 @@ export default function LeaveEntry() {
   );
 }
 
-/* ── Small helper components ───────────────────────────────── */
+/* ── Helper components ── */
 
 function SectionLabel({ step, title, required }: { step: string; title: string; required?: boolean }) {
   return (
-    <div className="flex items-center gap-2 mb-3">
-      <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">
+    <div className="flex items-center gap-1.5 mb-2">
+      <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center">
         {step}
       </span>
-      <Label className="text-sm font-semibold text-foreground mb-0">
+      <Label className="text-xs font-semibold text-foreground mb-0">
         {title}
         {required && <span className="text-rose-500 ml-1">*</span>}
       </Label>
@@ -896,26 +782,21 @@ function StatCard({
 }) {
   const t = TONES[tone];
   return (
-    <Card className={cn(
-      "p-4 transition-all",
-      highlight && "ring-2 ring-primary/10 border-primary/30"
-    )}>
-      <div className="flex items-center gap-2.5 mb-2">
-        <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", t.iconBg)}>
-          <Icon className={cn("w-4 h-4", t.iconColor)} />
+    <Card className={cn("px-3 py-2.5 transition-all", highlight && "ring-2 ring-primary/10 border-primary/30")}>
+      <div className="flex items-center gap-2 mb-1.5">
+        <div className={cn("w-6 h-6 rounded-md flex items-center justify-center shrink-0", t.iconBg)}>
+          <Icon className={cn("w-3.5 h-3.5", t.iconColor)} />
         </div>
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide truncate">
-          {label}
-        </span>
+        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide truncate">{label}</span>
       </div>
       {loading ? (
-        <div className="h-8 w-20 bg-muted rounded animate-pulse" />
+        <div className="h-6 w-16 bg-muted rounded animate-pulse" />
       ) : (
-        <div className="flex items-baseline gap-1.5">
-          <span className={cn("text-2xl font-bold leading-none tabular-nums", t.value)}>
+        <div className="flex items-baseline gap-1">
+          <span className={cn("text-lg font-bold leading-none tabular-nums", t.value)}>
             {Number.isInteger(value) ? value : value.toFixed(1)}
           </span>
-          <span className="text-xs text-muted-foreground">{unit}</span>
+          <span className="text-[10px] text-muted-foreground">{unit}</span>
         </div>
       )}
     </Card>
