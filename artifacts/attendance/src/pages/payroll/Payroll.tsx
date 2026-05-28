@@ -1373,13 +1373,6 @@ export default function Payroll() {
                             >
                               <Eye className="w-3.5 h-3.5" />
                             </button>
-                            <button
-                              onClick={() => setDetailRow(row)}
-                              className="p-1.5 rounded-lg hover:bg-violet-50 transition-colors text-violet-600"
-                              title="Detailed view"
-                            >
-                              <ListChecks className="w-3.5 h-3.5" />
-                            </button>
                             {row.status === "draft" && (
                               <button
                                 onClick={() => updateStatus(row.id, "approved")}
