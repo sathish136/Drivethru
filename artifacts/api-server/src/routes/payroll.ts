@@ -143,9 +143,10 @@ router.get("/employees-for-payroll", async (req, res) => {
       etfNumber: employees.etfNumber,
       apitOverride: employees.apitOverride,
       epfEtfExempt: employees.epfEtfExempt,
+      basicSalary: employees.basicSalary,
     }).from(employees);
 
-    const activeEmps = allEmployees.filter(e => e.status === "active" && assignedIds.has(e.id));
+    const activeEmps = allEmployees.filter(e => e.status === "active");
     const filteredByBranch = branchId ? activeEmps.filter(e => e.branchId === parseInt(branchId)) : activeEmps;
 
     const existingPayroll = await db.select({
@@ -160,7 +161,8 @@ router.get("/employees-for-payroll", async (req, res) => {
 
     const result = filteredByBranch.map(emp => ({
       ...emp,
-      basicSalary: cfg.employeeOverrides[String(emp.id)] ?? cfg.salaryScale[emp.designation] ?? 40000,
+      hasSalaryAssignment: assignedIds.has(emp.id),
+      basicSalary: cfg.employeeOverrides[String(emp.id)] ?? cfg.salaryScale[emp.designation] ?? Number(emp.basicSalary) ?? 40000,
       hasOverride: cfg.employeeOverrides[String(emp.id)] !== undefined,
       hasPayroll: payrollMap.has(emp.id),
       payrollStatus: payrollMap.get(emp.id)?.status ?? null,
