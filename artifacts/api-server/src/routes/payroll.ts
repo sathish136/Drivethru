@@ -463,15 +463,6 @@ router.post("/generate", async (req, res) => {
       const leaveDays      = leaveRecs.length;
       const halfDaysCount  = halfDayRecs.length;
       const holidayDays    = holidayRecs.length;
-      /* Single-punch days: employee has an inTime1 punch but no outTime1.
-         These are not already counted in presentDays/halfDaysCount but the
-         employee did show up, so they qualify for lunch incentive. */
-      const singlePunchDays = empAtt.filter(a =>
-        a.inTime1 && !a.outTime1 &&
-        a.status !== "present" && a.status !== "late" &&
-        a.status !== "half_day" && a.status !== "holiday" &&
-        a.status !== "leave"   && a.status !== "off_day"
-      ).length;
 
       /* Any working day with no attendance record is treated as absent.
          Weekoff days do NOT count as working days, so don't penalise. */
@@ -508,14 +499,11 @@ router.post("/generate", async (req, res) => {
           const name = (e.component ?? "").toLowerCase();
           if (name.includes("transport") || name.includes("travel")) transportAllowance += e.amount || 0;
           else if (name.includes("housing") || name.includes("rent")) housingAllowance += e.amount || 0;
-          else if (name.includes("lunch") || name.includes("incentive")) lunchIncentive += e.amount || 0;
+          else if (name.includes("lunch") || name.includes("incentive")) { /* lunch handled via incentives page */ }
           else otherAllowances += e.amount || 0;
         }
-        /* Default lunch incentive: if no lunch component in structure and employee has present/single-punch days, apply per-day default */
-        if (lunchIncentive === 0 && (presentDays + halfDaysCount + singlePunchDays) > 0) {
-          const lunchPerDay = cfg.lunchIncentivePerDay ?? 125;
-          lunchIncentive = Math.round(lunchPerDay * (presentDays + halfDaysCount + singlePunchDays));
-        }
+        /* Lunch incentive is now managed via the Incentives page — not included in payroll */
+        lunchIncentive = 0;
 
         epfEmployee = Math.round(basicSalary * 0.08);
         epfEmployer = Math.round(basicSalary * 0.12);
@@ -526,10 +514,8 @@ router.post("/generate", async (req, res) => {
       } else {
         basicSalary = cfg.employeeOverrides[String(emp.id)] ?? cfg.salaryScale[emp.designation] ?? 40000;
         transportAllowance = cfg.transportAllowance;
-        {
-          const lunchPerDay = cfg.lunchIncentivePerDay ?? 125;
-          lunchIncentive = Math.round(lunchPerDay * (presentDays + halfDaysCount + singlePunchDays));
-        }
+        /* Lunch incentive is now managed via the Incentives page — not included in payroll */
+        lunchIncentive = 0;
         housingAllowance =
           basicSalary >= cfg.housingHighThreshold ? cfg.housingAllowanceHigh :
           basicSalary >= cfg.housingMidThreshold ? cfg.housingAllowanceMid :

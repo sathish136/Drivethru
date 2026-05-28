@@ -120,6 +120,11 @@ export default function Incentives() {
   const [empSearch,   setEmpSearch]   = useState("");
   const [showEmpDrop, setShowEmpDrop] = useState(false);
 
+  const [genMonth,   setGenMonth]   = useState(String(now.getMonth() + 1));
+  const [genYear,    setGenYear]    = useState(String(now.getFullYear()));
+  const [genLoading, setGenLoading] = useState(false);
+  const [genMsg,     setGenMsg]     = useState<{ type: "success" | "error"; text: string } | null>(null);
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -231,6 +236,26 @@ export default function Incentives() {
     }
   }
 
+  async function handleGenerateLunch() {
+    setGenLoading(true);
+    setGenMsg(null);
+    try {
+      const res = await fetch(getApiUrl("incentives/generate-lunch"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month: Number(genMonth), year: Number(genYear) }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Failed");
+      setGenMsg({ type: "success", text: `✓ Generated lunch incentives for ${d.created} employee(s) — Rs.${d.ratePerDay}/day rate` });
+      await fetchAll();
+    } catch (e: any) {
+      setGenMsg({ type: "error", text: e.message || "Generation failed" });
+    } finally {
+      setGenLoading(false);
+    }
+  }
+
   async function handleDelete(row: IncentiveRow) {
     await fetch(getApiUrl(`incentives/${row.id}`), { method: "DELETE" });
     setConfirmDelete(null);
@@ -266,6 +291,53 @@ export default function Incentives() {
             <Plus className="w-4 h-4" />
             Add Incentive
           </button>
+        </div>
+
+        {/* ── Auto-Generate Lunch Incentives ── */}
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 shadow-sm">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-lg">🍽️</span>
+              <div>
+                <p className="text-sm font-semibold text-yellow-900">Auto-Generate Lunch Incentives</p>
+                <p className="text-xs text-yellow-700">Calculates from attendance punches (present + late + single-punch days)</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 ml-auto flex-wrap">
+              <select
+                value={genMonth}
+                onChange={e => setGenMonth(e.target.value)}
+                className="border border-yellow-300 rounded-lg px-3 py-1.5 text-sm bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-yellow-400"
+              >
+                {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+              </select>
+              <select
+                value={genYear}
+                onChange={e => setGenYear(e.target.value)}
+                className="border border-yellow-300 rounded-lg px-3 py-1.5 text-sm bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-yellow-400"
+              >
+                {years.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+              <button
+                onClick={handleGenerateLunch}
+                disabled={genLoading}
+                className="inline-flex items-center gap-2 px-4 py-1.5 bg-yellow-500 hover:bg-yellow-600 disabled:opacity-60 text-white rounded-lg text-sm font-semibold transition-colors"
+              >
+                {genLoading ? (
+                  <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block" /> Generating…</>
+                ) : (
+                  <><TrendingUp className="w-3.5 h-3.5" /> Generate</>
+                )}
+              </button>
+            </div>
+          </div>
+          {genMsg && (
+            <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium ${genMsg.type === "success" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+              <span>{genMsg.type === "success" ? "✓" : "✗"}</span>
+              <span>{genMsg.text}</span>
+              <button onClick={() => setGenMsg(null)} className="ml-auto opacity-60 hover:opacity-100"><X className="w-3 h-3" /></button>
+            </div>
+          )}
         </div>
 
         {/* ── Summary Cards ── */}
