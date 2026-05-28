@@ -6,7 +6,7 @@ import {
   Search, CheckCircle2, AlertTriangle, RefreshCw,
   CalendarDays, CalendarClock, Sun, MoonStar,
   Wallet, TrendingDown, Hourglass, Sparkles,
-  Trash2, X, ChevronRight,
+  Trash2, X, ChevronRight, CalendarRange, Calendar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -128,11 +128,15 @@ export default function LeaveEntry() {
   const [empSearch, setEmpSearch] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedEmp, setSelectedEmp] = useState<Employee | null>(null);
+  const [dateMode, setDateMode] = useState<"single" | "range">("single");
   const [date, setDate] = useState(todayStr());
+  const [dateFrom, setDateFrom] = useState(todayStr());
+  const [dateTo, setDateTo] = useState(todayStr());
   const [leaveType, setLeaveType] = useState<LeaveTypeId>("leave");
   const [balance, setBalance] = useState<LeaveBalance | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitProgress, setSubmitProgress] = useState<{ done: number; total: number } | null>(null);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [recent, setRecent] = useState<RecentEntry[]>([]);
@@ -166,14 +170,15 @@ export default function LeaveEntry() {
 
   useEffect(() => {
     if (!selectedEmp) { setBalance(null); return; }
-    const year = new Date(date || todayStr()).getFullYear();
+    const refDate = dateMode === "range" ? (dateFrom || todayStr()) : (date || todayStr());
+    const year = new Date(refDate).getFullYear();
     setBalanceLoading(true);
     fetch(apiUrl(`/leave-balances/employee/${selectedEmp.id}?year=${year}`))
       .then(r => r.json())
       .then(d => setBalance(d))
       .catch(() => setBalance(null))
       .finally(() => setBalanceLoading(false));
-  }, [selectedEmp, date]);
+  }, [selectedEmp, date, dateFrom, dateMode]);
 
   function loadRecent() {
     setRecentLoading(true);
@@ -194,11 +199,31 @@ export default function LeaveEntry() {
 
   async function refreshBalance() {
     if (!selectedEmp) return;
-    const year = new Date(date).getFullYear();
+    const refDate = dateMode === "range" ? (dateFrom || todayStr()) : (date || todayStr());
+    const year = new Date(refDate).getFullYear();
     const updated = await fetch(apiUrl(`/leave-balances/employee/${selectedEmp.id}?year=${year}`))
       .then(r => r.json()).catch(() => null);
     if (updated) setBalance(updated);
   }
+
+  function getDatesInRange(from: string, to: string): string[] {
+    if (!from || !to) return [];
+    const dates: string[] = [];
+    const cur = new Date(from + "T00:00:00");
+    const end = new Date(to + "T00:00:00");
+    if (cur > end) return [];
+    while (cur <= end) {
+      dates.push(cur.toISOString().slice(0, 10));
+      cur.setDate(cur.getDate() + 1);
+    }
+    return dates;
+  }
+
+  const rangeDates = useMemo(
+    () => dateMode === "range" ? getDatesInRange(dateFrom, dateTo) : [],
+    [dateMode, dateFrom, dateTo]
+  );
+  const rangeDayCount = rangeDates.length;
 
   const filteredEmps = useMemo(() => employees.filter(e => {
     const q = empSearch.toLowerCase();
@@ -225,35 +250,77 @@ export default function LeaveEntry() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedEmp || !date || !leaveType) return;
-    setSubmitting(true);
     setSuccessMsg("");
     setErrorMsg("");
-    try {
-      const res = await fetch(apiUrl("/attendance/mark-leave"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ employeeId: selectedEmp.id, date, leaveType }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setErrorMsg(data.message || "Failed to mark leave. Please try again.");
-      } else {
-        const def = LEAVE_TYPES.find(t => t.id === leaveType)!;
-        setSuccessMsg(`${def.label} recorded for ${selectedEmp.fullName} on ${formatDate(date)}.`);
-        await refreshBalance();
-        loadRecent();
+
+    if (dateMode === "range") {
+      if (!selectedEmp || !dateFrom || !dateTo || !leaveType) return;
+      if (rangeDayCount === 0) { setErrorMsg("End date must be on or after the start date."); return; }
+      setSubmitting(true);
+      setSubmitProgress({ done: 0, total: rangeDayCount });
+      let failed = 0;
+      let firstError = "";
+      for (let i = 0; i < rangeDates.length; i++) {
+        try {
+          const res = await fetch(apiUrl("/attendance/mark-leave"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ employeeId: selectedEmp.id, date: rangeDates[i], leaveType }),
+          });
+          const data = await res.json();
+          if (!res.ok && !firstError) firstError = data.message || "Failed for some dates.";
+          if (!res.ok) failed++;
+        } catch {
+          failed++;
+          if (!firstError) firstError = "Network error on some dates.";
+        }
+        setSubmitProgress({ done: i + 1, total: rangeDayCount });
       }
-    } catch {
-      setErrorMsg("Network error. Please try again.");
-    } finally {
+      await refreshBalance();
+      loadRecent();
+      const succeeded = rangeDayCount - failed;
+      if (failed === 0) {
+        const def = LEAVE_TYPES.find(t => t.id === leaveType)!;
+        setSuccessMsg(`${def.label} recorded for ${selectedEmp.fullName} — ${rangeDayCount} day${rangeDayCount !== 1 ? "s" : ""} (${formatDate(dateFrom)} → ${formatDate(dateTo)}).`);
+      } else if (succeeded > 0) {
+        setErrorMsg(`${succeeded} of ${rangeDayCount} days saved. Some failed: ${firstError}`);
+      } else {
+        setErrorMsg(firstError || "Failed to mark leave.");
+      }
       setSubmitting(false);
+      setSubmitProgress(null);
+    } else {
+      if (!selectedEmp || !date || !leaveType) return;
+      setSubmitting(true);
+      try {
+        const res = await fetch(apiUrl("/attendance/mark-leave"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ employeeId: selectedEmp.id, date, leaveType }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setErrorMsg(data.message || "Failed to mark leave. Please try again.");
+        } else {
+          const def = LEAVE_TYPES.find(t => t.id === leaveType)!;
+          setSuccessMsg(`${def.label} recorded for ${selectedEmp.fullName} on ${formatDate(date)}.`);
+          await refreshBalance();
+          loadRecent();
+        }
+      } catch {
+        setErrorMsg("Network error. Please try again.");
+      } finally {
+        setSubmitting(false);
+      }
     }
   }
 
   function handleReset() {
     clearEmployee();
+    setDateMode("single");
     setDate(todayStr());
+    setDateFrom(todayStr());
+    setDateTo(todayStr());
     setLeaveType("leave");
     setSuccessMsg("");
     setErrorMsg("");
@@ -288,8 +355,9 @@ export default function LeaveEntry() {
 
   const selectedTypeDef = LEAVE_TYPES.find(t => t.id === leaveType)!;
   const remainingForType = leaveType !== "no_pay" && balance ? balance.leaveRemaining : null;
+  const totalDeduct = selectedTypeDef.deduct * (dateMode === "range" ? Math.max(rangeDayCount, 1) : 1);
   const insufficient =
-    remainingForType !== null && remainingForType < selectedTypeDef.deduct;
+    remainingForType !== null && remainingForType < totalDeduct;
 
   const leaveTypeLabel = (entry: RecentEntry) => {
     if (entry.status === "half_day") return "Half Day";
@@ -424,42 +492,138 @@ export default function LeaveEntry() {
 
           {/* STEP 2 — Date */}
           <section>
-            <SectionLabel step="2" title="Date" required />
-            <div className="flex flex-col sm:flex-row gap-2">
-              <div className="relative flex-1">
-                <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                <Input
-                  type="date"
-                  value={date}
-                  onChange={e => setDate(e.target.value)}
-                  required
-                  className="pl-9 h-8 text-xs"
-                />
-              </div>
-              <div className="flex items-center gap-1.5">
-                {(["today", "yesterday", "tomorrow"] as const).map(q => (
-                  <button
-                    key={q}
-                    type="button"
-                    onClick={() => {
-                      const d = new Date();
-                      if (q === "yesterday") d.setDate(d.getDate() - 1);
-                      if (q === "tomorrow") d.setDate(d.getDate() + 1);
-                      setDate(d.toISOString().slice(0, 10));
-                    }}
-                    className="px-2.5 h-8 rounded-md border border-border text-xs font-medium text-foreground/80 hover:bg-muted transition-colors capitalize"
-                  >
-                    {q}
-                  </button>
-                ))}
+            <div className="flex items-center justify-between mb-2">
+              <SectionLabel step="2" title="Date" required />
+              {/* Single / Range toggle */}
+              <div className="flex items-center rounded-md border border-border overflow-hidden text-xs">
+                <button
+                  type="button"
+                  onClick={() => setDateMode("single")}
+                  className={cn(
+                    "flex items-center gap-1 px-2.5 h-7 font-medium transition-colors",
+                    dateMode === "single"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background text-muted-foreground hover:bg-muted"
+                  )}
+                >
+                  <Calendar className="w-3 h-3" />
+                  Single Day
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDateMode("range")}
+                  className={cn(
+                    "flex items-center gap-1 px-2.5 h-7 font-medium transition-colors",
+                    dateMode === "range"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background text-muted-foreground hover:bg-muted"
+                  )}
+                >
+                  <CalendarRange className="w-3 h-3" />
+                  Date Range
+                </button>
               </div>
             </div>
-            {date && (
-              <p className="mt-1.5 text-[11px] text-muted-foreground flex items-center gap-1">
-                <CalendarClock className="w-3 h-3" />
-                {formatDate(date)}
-                {relativeDay(date) && <span className="text-foreground/60">· {relativeDay(date)}</span>}
-              </p>
+
+            {dateMode === "single" ? (
+              <>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="relative flex-1">
+                    <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                    <Input
+                      type="date"
+                      value={date}
+                      onChange={e => setDate(e.target.value)}
+                      required
+                      className="pl-9 h-8 text-xs"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {(["today", "yesterday", "tomorrow"] as const).map(q => (
+                      <button
+                        key={q}
+                        type="button"
+                        onClick={() => {
+                          const d = new Date();
+                          if (q === "yesterday") d.setDate(d.getDate() - 1);
+                          if (q === "tomorrow") d.setDate(d.getDate() + 1);
+                          setDate(d.toISOString().slice(0, 10));
+                        }}
+                        className="px-2.5 h-8 rounded-md border border-border text-xs font-medium text-foreground/80 hover:bg-muted transition-colors capitalize"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {date && (
+                  <p className="mt-1.5 text-[11px] text-muted-foreground flex items-center gap-1">
+                    <CalendarClock className="w-3 h-3" />
+                    {formatDate(date)}
+                    {relativeDay(date) && <span className="text-foreground/60">· {relativeDay(date)}</span>}
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground mb-1 block">From</Label>
+                    <div className="relative">
+                      <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                      <Input
+                        type="date"
+                        value={dateFrom}
+                        onChange={e => {
+                          setDateFrom(e.target.value);
+                          if (dateTo < e.target.value) setDateTo(e.target.value);
+                        }}
+                        required
+                        className="pl-9 h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground mb-1 block">To</Label>
+                    <div className="relative">
+                      <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                      <Input
+                        type="date"
+                        value={dateTo}
+                        min={dateFrom}
+                        onChange={e => setDateTo(e.target.value)}
+                        required
+                        className="pl-9 h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+                {rangeDayCount > 0 && (
+                  <p className="mt-1.5 text-[11px] text-muted-foreground flex items-center gap-1.5">
+                    <CalendarRange className="w-3 h-3 shrink-0" />
+                    <span>
+                      {formatDate(dateFrom)} → {formatDate(dateTo)}
+                      <span className="ml-1.5 font-semibold text-foreground">
+                        ({rangeDayCount} day{rangeDayCount !== 1 ? "s" : ""})
+                      </span>
+                    </span>
+                    {leaveType !== "no_pay" && remainingForType !== null && (
+                      <span className={cn(
+                        "ml-1.5 font-semibold",
+                        insufficient ? "text-rose-600" : "text-emerald-600"
+                      )}>
+                        · needs {totalDeduct} of {remainingForType} days remaining
+                      </span>
+                    )}
+                  </p>
+                )}
+                {rangeDayCount === 0 && dateFrom && dateTo && (
+                  <p className="mt-1.5 text-[11px] text-rose-600 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    End date must be on or after the start date.
+                  </p>
+                )}
+              </>
             )}
           </section>
 
@@ -501,7 +665,7 @@ export default function LeaveEntry() {
               <div className="mt-2 flex items-center gap-2 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-xs text-rose-700">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                 <span>
-                  Only <strong>{remainingForType}</strong> day{remainingForType === 1 ? "" : "s"} left — not enough. Pick <strong>No-Pay Leave</strong> instead.
+                  Only <strong>{remainingForType}</strong> day{remainingForType === 1 ? "" : "s"} remaining — need <strong>{totalDeduct}</strong>{dateMode === "range" ? ` for ${rangeDayCount} days` : ""}. Pick <strong>No-Pay Leave</strong> instead.
                 </span>
               </div>
             )}
@@ -515,12 +679,26 @@ export default function LeaveEntry() {
             <Button
               type="submit"
               size="sm"
-              disabled={!selectedEmp || !date || submitting || insufficient}
+              disabled={
+                !selectedEmp ||
+                (dateMode === "single" ? !date : (rangeDayCount === 0)) ||
+                submitting ||
+                (leaveType !== "no_pay" && insufficient)
+              }
               className="flex-1 h-8 text-xs"
             >
-              {submitting
-                ? <><RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />Saving…</>
-                : <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />Submit Leave Entry</>}
+              {submitting ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  {submitProgress
+                    ? `Saving ${submitProgress.done}/${submitProgress.total}…`
+                    : "Saving…"}
+                </>
+              ) : dateMode === "range" && rangeDayCount > 0 ? (
+                <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />Submit {rangeDayCount} Day{rangeDayCount !== 1 ? "s" : ""} Leave</>
+              ) : (
+                <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />Submit Leave Entry</>
+              )}
             </Button>
           </div>
         </form>
