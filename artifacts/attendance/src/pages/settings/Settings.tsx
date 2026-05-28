@@ -6,7 +6,7 @@ import {
   Calendar, Plus, Trash2, Copy, Check, Building, Clock,
   Fingerprint, Users, ChevronRight,
   Database, Download, AlertTriangle, CheckCircle2, Upload, X,
-  Save, RefreshCw, Edit2
+  Save, RefreshCw, Edit2, Mail, Send, Bell, Eye, EyeOff
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -85,6 +85,27 @@ export default function Settings() {
   const [deleteAttMsg, setDeleteAttMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [deletingAtt, setDeletingAtt] = useState(false);
 
+  // SMTP email backup state
+  const [smtpConfig, setSmtpConfig] = useState({
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
+    user: "techhackatmil000@gmail.com",
+    pass: "",
+    recipient: "techhackatmil000@gmail.com",
+    scheduledBackupEnabled: true,
+    scheduleTimes: ["06:00", "14:00", "22:00"],
+  });
+  const [smtpLoading, setSmtpLoading] = useState(false);
+  const [smtpSaving, setSmtpSaving] = useState(false);
+  const [smtpMsg, setSmtpMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [smtpTesting, setSmtpTesting] = useState(false);
+  const [emailSending, setEmailSending] = useState(false);
+  const [showSmtpPass, setShowSmtpPass] = useState(false);
+  const [schedulerStatus, setSchedulerStatus] = useState<{
+    running: boolean; lastRun: string | null; nextRun: string | null; error: string | null;
+  } | null>(null);
+
   const [checkinMsg, setCheckinMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const checkinInputRef = useRef<HTMLInputElement>(null);
 
@@ -148,6 +169,83 @@ export default function Settings() {
       setDbStats(d);
     } catch { setDbStats(null); }
     setDbStatsLoading(false);
+  }
+
+  async function loadSmtpSettings() {
+    setSmtpLoading(true);
+    try {
+      const r = await fetch(apiUrl("/backup/smtp-settings"));
+      const d = await r.json();
+      setSmtpConfig(prev => ({
+        ...prev,
+        host: d.host ?? prev.host,
+        port: d.port ?? prev.port,
+        secure: d.secure ?? prev.secure,
+        user: d.user ?? prev.user,
+        pass: d.pass ?? prev.pass,
+        recipient: d.recipient ?? prev.recipient,
+        scheduledBackupEnabled: d.scheduledBackupEnabled ?? prev.scheduledBackupEnabled,
+        scheduleTimes: Array.isArray(d.scheduleTimes) ? d.scheduleTimes : prev.scheduleTimes,
+      }));
+      if (d.schedulerStatus) setSchedulerStatus(d.schedulerStatus);
+    } catch {}
+    setSmtpLoading(false);
+  }
+
+  async function handleSaveSmtp() {
+    setSmtpSaving(true); setSmtpMsg(null);
+    try {
+      const r = await fetch(apiUrl("/backup/smtp-settings"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(smtpConfig),
+      });
+      const d = await r.json();
+      if (d.success) {
+        setSmtpMsg({ type: "success", text: "SMTP settings saved successfully" });
+        loadSmtpSettings();
+      } else {
+        setSmtpMsg({ type: "error", text: d.error || "Save failed" });
+      }
+    } catch { setSmtpMsg({ type: "error", text: "Failed to save settings" }); }
+    setSmtpSaving(false);
+  }
+
+  async function handleTestSmtp() {
+    setSmtpTesting(true); setSmtpMsg(null);
+    try {
+      const r = await fetch(apiUrl("/backup/test-smtp"), { method: "POST" });
+      const d = await r.json();
+      setSmtpMsg({ type: d.success ? "success" : "error", text: d.success ? d.message : (d.error || "Test failed") });
+    } catch { setSmtpMsg({ type: "error", text: "Connection test failed" }); }
+    setSmtpTesting(false);
+  }
+
+  async function handleSendEmailNow() {
+    if (!confirm("Send a full database backup email to " + smtpConfig.recipient + " now?")) return;
+    setEmailSending(true); setSmtpMsg(null);
+    try {
+      const r = await fetch(apiUrl("/backup/send-email"), { method: "POST" });
+      const d = await r.json();
+      setSmtpMsg({ type: d.success ? "success" : "error", text: d.success ? d.message : (d.error || "Send failed") });
+    } catch { setSmtpMsg({ type: "error", text: "Email send failed" }); }
+    setEmailSending(false);
+  }
+
+  function updateScheduleTime(idx: number, val: string) {
+    setSmtpConfig(prev => {
+      const times = [...prev.scheduleTimes];
+      times[idx] = val;
+      return { ...prev, scheduleTimes: times };
+    });
+  }
+
+  function addScheduleTime() {
+    setSmtpConfig(prev => ({ ...prev, scheduleTimes: [...prev.scheduleTimes, "08:00"] }));
+  }
+
+  function removeScheduleTime(idx: number) {
+    setSmtpConfig(prev => ({ ...prev, scheduleTimes: prev.scheduleTimes.filter((_, i) => i !== idx) }));
   }
 
   async function handleBackupDownload() {
@@ -287,7 +385,7 @@ export default function Settings() {
   function setER<K extends keyof DeptShiftRule>(k: K, v: DeptShiftRule[K]) { setEditingRule(s => ({ ...s, [k]: v })); }
 
   useEffect(() => {
-    if (activeTab === "database") { loadDbStats(); }
+    if (activeTab === "database") { loadDbStats(); loadSmtpSettings(); }
   }, [activeTab]);
 
   const serverUrl = `${window.location.origin}/api/biometric/push`;
@@ -987,6 +1085,230 @@ export default function Settings() {
                   </Button>
                 </div>
               </div>
+            </Card>
+
+            {/* Email Backup Settings */}
+            <Card className="p-5 border-blue-200 bg-blue-50/20">
+              <div className="flex items-center gap-2 mb-1">
+                <Mail className="w-4 h-4 text-blue-600" />
+                <span className="text-sm font-bold text-foreground">Email Backup (SMTP)</span>
+                <span className={cn(
+                  "ml-auto text-[10px] px-2 py-0.5 rounded font-mono font-bold",
+                  schedulerStatus?.running
+                    ? "bg-green-100 text-green-700"
+                    : "bg-gray-100 text-gray-500"
+                )}>
+                  {schedulerStatus?.running ? "Scheduler Active" : "Scheduler Off"}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Configure SMTP to automatically email a full database backup every day. The scheduler runs backups at the configured times and sends the <code className="bg-muted px-1 rounded text-[11px]">.sql</code> file as an attachment.
+              </p>
+
+              {smtpMsg && (
+                <div className={cn(
+                  "flex items-start gap-2 p-3 rounded-xl mb-4 text-xs",
+                  smtpMsg.type === "success"
+                    ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
+                    : "bg-red-50 border border-red-200 text-red-800"
+                )}>
+                  {smtpMsg.type === "success"
+                    ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+                    : <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />}
+                  <p className="flex-1 font-medium">{smtpMsg.text}</p>
+                  <button onClick={() => setSmtpMsg(null)} className="shrink-0 opacity-50 hover:opacity-100"><X className="w-3.5 h-3.5" /></button>
+                </div>
+              )}
+
+              {/* Scheduler status */}
+              {schedulerStatus && (
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider">Status</p>
+                    <p className={cn("text-xs font-bold mt-0.5", schedulerStatus.running ? "text-green-600" : "text-gray-400")}>
+                      {schedulerStatus.running ? "Running" : "Stopped"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider">Last Run</p>
+                    <p className="text-xs mt-0.5 text-foreground">
+                      {schedulerStatus.lastRun
+                        ? new Date(schedulerStatus.lastRun).toLocaleString()
+                        : <span className="text-muted-foreground">Not yet run</span>}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider">Next Run</p>
+                    <p className="text-xs mt-0.5 text-foreground">
+                      {schedulerStatus.nextRun
+                        ? new Date(schedulerStatus.nextRun).toLocaleString()
+                        : <span className="text-muted-foreground">—</span>}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wider">Last Error</p>
+                    <p className="text-xs mt-0.5 text-red-600 truncate">{schedulerStatus.error ?? "—"}</p>
+                  </div>
+                </div>
+              )}
+
+              {smtpLoading ? (
+                <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading SMTP settings…
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* SMTP server fields */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2">
+                      <Label className="text-xs">SMTP Host</Label>
+                      <Input
+                        value={smtpConfig.host}
+                        onChange={e => setSmtpConfig(p => ({ ...p, host: e.target.value }))}
+                        placeholder="smtp.gmail.com"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Port</Label>
+                      <Input
+                        type="number"
+                        value={smtpConfig.port}
+                        onChange={e => setSmtpConfig(p => ({ ...p, port: Number(e.target.value) }))}
+                        placeholder="587"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Username / Email</Label>
+                      <Input
+                        value={smtpConfig.user}
+                        onChange={e => setSmtpConfig(p => ({ ...p, user: e.target.value }))}
+                        placeholder="you@gmail.com"
+                      />
+                    </div>
+                    <div className="relative">
+                      <Label className="text-xs">App Password</Label>
+                      <div className="relative">
+                        <Input
+                          type={showSmtpPass ? "text" : "password"}
+                          value={smtpConfig.pass}
+                          onChange={e => setSmtpConfig(p => ({ ...p, pass: e.target.value }))}
+                          placeholder="app password (16 chars)"
+                          className="pr-8"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowSmtpPass(v => !v)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          {showSmtpPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Recipient Email</Label>
+                      <Input
+                        value={smtpConfig.recipient}
+                        onChange={e => setSmtpConfig(p => ({ ...p, recipient: e.target.value }))}
+                        placeholder="backup@yourorg.com"
+                      />
+                    </div>
+                    <div className="sm:col-span-3 flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="smtpSecure"
+                        checked={smtpConfig.secure}
+                        onChange={e => setSmtpConfig(p => ({ ...p, secure: e.target.checked }))}
+                        className="rounded"
+                      />
+                      <label htmlFor="smtpSecure" className="text-xs text-muted-foreground">
+                        Use SSL/TLS (port 465) — leave unchecked for STARTTLS (port 587)
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Scheduled backup times */}
+                  <div className="border border-blue-100 rounded-xl p-4 bg-white">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Bell className="w-3.5 h-3.5 text-blue-600" />
+                      <span className="text-xs font-semibold">Scheduled Daily Backup Times</span>
+                      <div className="ml-auto flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="schedEnabled"
+                          checked={smtpConfig.scheduledBackupEnabled}
+                          onChange={e => setSmtpConfig(p => ({ ...p, scheduledBackupEnabled: e.target.checked }))}
+                          className="rounded"
+                        />
+                        <label htmlFor="schedEnabled" className="text-xs text-muted-foreground">Enable scheduled backup</label>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mb-3">
+                      The system will automatically email a full backup at these times daily (Sri Lanka time). 3 backups per day recommended.
+                    </p>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {smtpConfig.scheduleTimes.map((t, idx) => (
+                        <div key={idx} className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1">
+                          <input
+                            type="time"
+                            value={t}
+                            onChange={e => updateScheduleTime(idx, e.target.value)}
+                            className="bg-transparent text-xs font-mono text-blue-800 border-none outline-none w-20"
+                          />
+                          {smtpConfig.scheduleTimes.length > 1 && (
+                            <button onClick={() => removeScheduleTime(idx)} className="text-blue-400 hover:text-red-500">
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      {smtpConfig.scheduleTimes.length < 6 && (
+                        <button
+                          onClick={addScheduleTime}
+                          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 border border-dashed border-blue-300 rounded-lg px-3 py-1"
+                        >
+                          <Plus className="w-3 h-3" /> Add time
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Button
+                      className="flex items-center gap-2 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                      onClick={handleSaveSmtp}
+                      disabled={smtpSaving}
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      {smtpSaving ? "Saving…" : "Save SMTP Settings"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex items-center gap-2 text-xs border-blue-300 text-blue-700 hover:bg-blue-50"
+                      onClick={handleTestSmtp}
+                      disabled={smtpTesting}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      {smtpTesting ? "Testing…" : "Test Connection"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex items-center gap-2 text-xs border-green-300 text-green-700 hover:bg-green-50"
+                      onClick={handleSendEmailNow}
+                      disabled={emailSending}
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      {emailSending ? "Sending…" : "Send Backup Now"}
+                    </Button>
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
+                    <strong>Gmail users:</strong> Use an <em>App Password</em> (not your regular password).
+                    Generate one at: Google Account → Security → 2-Step Verification → App passwords.
+                    The password format is 4 groups of 4 letters e.g. <code className="bg-amber-100 px-1 rounded">xxxx xxxx xxxx xxxx</code>
+                  </div>
+                </div>
+              )}
             </Card>
 
             {/* Delete All Attendance Records */}

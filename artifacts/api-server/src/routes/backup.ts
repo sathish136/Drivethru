@@ -12,15 +12,228 @@ import {
   manualSalaryEntries, activityLogs,
 } from "@workspace/db/schema";
 import { sql } from "drizzle-orm";
+import nodemailer from "nodemailer";
+import cron from "node-cron";
+import fs from "fs";
+import path from "path";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
+
+/* ── SMTP settings stored in a local JSON file ── */
+const SMTP_CONFIG_PATH = path.resolve(process.cwd(), "smtp-config.json");
+
+interface SmtpConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  pass: string;
+  recipient: string;
+  scheduledBackupEnabled: boolean;
+  scheduleTimes: string[];   // e.g. ["06:00","14:00","22:00"]
+}
+
+const DEFAULT_SMTP: SmtpConfig = {
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false,
+  user: "techhackatmil000@gmail.com",
+  pass: "wrgg veip pytm chlf",
+  recipient: "techhackatmil000@gmail.com",
+  scheduledBackupEnabled: true,
+  scheduleTimes: ["06:00", "14:00", "22:00"],
+};
+
+function loadSmtpConfig(): SmtpConfig {
+  try {
+    if (fs.existsSync(SMTP_CONFIG_PATH)) {
+      const raw = fs.readFileSync(SMTP_CONFIG_PATH, "utf-8");
+      return { ...DEFAULT_SMTP, ...JSON.parse(raw) };
+    }
+  } catch {}
+  return { ...DEFAULT_SMTP };
+}
+
+function saveSmtpConfig(cfg: SmtpConfig): void {
+  fs.writeFileSync(SMTP_CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf-8");
+}
 
 function getDatabaseUrl(): string {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL environment variable is not set");
   return url;
 }
+
+/* ── pg_dump to Buffer ── */
+function dumpToBuffer(): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    let dbUrl: string;
+    try { dbUrl = getDatabaseUrl(); } catch (e) { reject(e); return; }
+
+    const chunks: Buffer[] = [];
+    const pgDump = spawn("pg_dump", [
+      "--no-owner", "--no-acl", "--format=plain", "--encoding=UTF8", dbUrl,
+    ]);
+    pgDump.stdout.on("data", (c: Buffer) => chunks.push(c));
+    let errOut = "";
+    pgDump.stderr.on("data", (c: Buffer) => { errOut += c.toString(); });
+    pgDump.on("error", (e) => reject(new Error("pg_dump not available: " + e.message)));
+    pgDump.on("close", (code) => {
+      if (code === 0) resolve(Buffer.concat(chunks));
+      else reject(new Error("pg_dump failed (code " + code + "): " + errOut.slice(0, 300)));
+    });
+  });
+}
+
+/* ── send backup via email ── */
+async function sendBackupEmail(cfg: SmtpConfig, label?: string): Promise<void> {
+  const buf = await dumpToBuffer();
+  const dateStr = new Date().toISOString().replace("T", "_").slice(0, 16).replace(":", "-");
+  const filename = `db-backup-${dateStr}.sql`;
+
+  const transporter = nodemailer.createTransport({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.secure,
+    auth: { user: cfg.user, pass: cfg.pass },
+  });
+
+  const subject = label
+    ? `[Sri Lanka Post] DB Backup — ${label}`
+    : `[Sri Lanka Post] DB Backup — ${new Date().toUTCString()}`;
+
+  await transporter.sendMail({
+    from: `"Post Office HRMS" <${cfg.user}>`,
+    to: cfg.recipient,
+    subject,
+    text: `Automated database backup attached.\n\nGenerated: ${new Date().toUTCString()}\nFile: ${filename}\nSize: ${(buf.length / 1024).toFixed(1)} KB\n\nThis is an automated email from Sri Lanka Post Attendance Management System.`,
+    attachments: [{ filename, content: buf, contentType: "application/octet-stream" }],
+  });
+}
+
+/* ── Scheduler ── */
+let scheduledJobs: cron.ScheduledTask[] = [];
+let lastScheduledRun: string | null = null;
+let nextScheduledRun: string | null = null;
+let schedulerError: string | null = null;
+
+function cronExprFor(timeStr: string): string {
+  const [h, m] = timeStr.split(":").map(Number);
+  return `${m} ${h} * * *`;
+}
+
+function setupScheduler() {
+  scheduledJobs.forEach(j => j.stop());
+  scheduledJobs = [];
+  nextScheduledRun = null;
+
+  const cfg = loadSmtpConfig();
+  if (!cfg.scheduledBackupEnabled) return;
+
+  const times = cfg.scheduleTimes.length ? cfg.scheduleTimes : ["06:00", "14:00", "22:00"];
+
+  times.forEach((timeStr) => {
+    const expr = cronExprFor(timeStr);
+    try {
+      const job = cron.schedule(expr, async () => {
+        console.log(`[Backup] Scheduled email backup at ${timeStr} starting…`);
+        try {
+          const cfg2 = loadSmtpConfig();
+          if (!cfg2.scheduledBackupEnabled) return;
+          await sendBackupEmail(cfg2, `Scheduled ${timeStr}`);
+          lastScheduledRun = new Date().toISOString();
+          schedulerError = null;
+          console.log(`[Backup] Scheduled backup email sent successfully at ${timeStr}`);
+        } catch (err: any) {
+          schedulerError = err?.message ?? "Unknown error";
+          console.error(`[Backup] Scheduled backup email FAILED at ${timeStr}:`, err);
+        }
+      }, { timezone: "Asia/Colombo" });
+      scheduledJobs.push(job);
+    } catch (e: any) {
+      console.error(`[Backup] Invalid cron expression for ${timeStr}:`, e.message);
+    }
+  });
+
+  const now = new Date();
+  const upcoming = times
+    .map(t => {
+      const [h, m] = t.split(":").map(Number);
+      const d = new Date(now);
+      d.setHours(h, m, 0, 0);
+      if (d <= now) d.setDate(d.getDate() + 1);
+      return d;
+    })
+    .sort((a, b) => a.getTime() - b.getTime());
+  nextScheduledRun = upcoming[0]?.toISOString() ?? null;
+
+  console.log(`[Backup] Scheduler configured for ${times.join(", ")} (Asia/Colombo). Next: ${nextScheduledRun}`);
+}
+
+setupScheduler();
+
+/* ── GET /backup/smtp-settings ── */
+router.get("/smtp-settings", (_req, res) => {
+  const cfg = loadSmtpConfig();
+  const safe = { ...cfg, pass: cfg.pass ? "••••••••" : "" };
+  res.json({
+    ...safe,
+    schedulerStatus: {
+      running: scheduledJobs.length > 0,
+      lastRun: lastScheduledRun,
+      nextRun: nextScheduledRun,
+      error: schedulerError,
+    },
+  });
+});
+
+/* ── POST /backup/smtp-settings ── */
+router.post("/smtp-settings", (req, res) => {
+  const body = req.body as Partial<SmtpConfig> & { pass?: string };
+  const current = loadSmtpConfig();
+  const updated: SmtpConfig = {
+    ...current,
+    host: body.host ?? current.host,
+    port: typeof body.port === "number" ? body.port : current.port,
+    secure: typeof body.secure === "boolean" ? body.secure : current.secure,
+    user: body.user ?? current.user,
+    pass: body.pass && body.pass !== "••••••••" ? body.pass : current.pass,
+    recipient: body.recipient ?? current.recipient,
+    scheduledBackupEnabled: typeof body.scheduledBackupEnabled === "boolean" ? body.scheduledBackupEnabled : current.scheduledBackupEnabled,
+    scheduleTimes: Array.isArray(body.scheduleTimes) ? body.scheduleTimes : current.scheduleTimes,
+  };
+  saveSmtpConfig(updated);
+  setupScheduler();
+  res.json({ success: true, message: "SMTP settings saved" });
+});
+
+/* ── POST /backup/send-email ── send now */
+router.post("/send-email", async (_req, res) => {
+  const cfg = loadSmtpConfig();
+  try {
+    await sendBackupEmail(cfg, "Manual");
+    res.json({ success: true, message: `Backup emailed to ${cfg.recipient}` });
+  } catch (err: any) {
+    console.error("Send email error:", err);
+    res.status(500).json({ error: "Email failed: " + (err?.message ?? "Unknown error") });
+  }
+});
+
+/* ── POST /backup/test-smtp ── connection test */
+router.post("/test-smtp", async (_req, res) => {
+  const cfg = loadSmtpConfig();
+  try {
+    const transporter = nodemailer.createTransport({
+      host: cfg.host, port: cfg.port, secure: cfg.secure,
+      auth: { user: cfg.user, pass: cfg.pass },
+    });
+    await transporter.verify();
+    res.json({ success: true, message: "SMTP connection successful" });
+  } catch (err: any) {
+    res.status(500).json({ error: "SMTP test failed: " + (err?.message ?? "Unknown error") });
+  }
+});
 
 /* ── GET /backup/export ── pg_dump SQL backup (all tables) */
 router.get("/export", (_req, res) => {
@@ -31,16 +244,12 @@ router.get("/export", (_req, res) => {
     return res.status(500).json({ error: err.message });
   }
 
-  const filename = `attendance-backup-${new Date().toISOString().slice(0, 10)}.sql`;
+  const filename = `db-full-backup-${new Date().toISOString().slice(0, 10)}.sql`;
   res.setHeader("Content-Type", "application/octet-stream");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
 
   const pgDump = spawn("pg_dump", [
-    "--no-owner",
-    "--no-acl",
-    "--format=plain",
-    "--encoding=UTF8",
-    dbUrl,
+    "--no-owner", "--no-acl", "--format=plain", "--encoding=UTF8", dbUrl,
   ]);
 
   pgDump.stdout.pipe(res);
@@ -157,7 +366,7 @@ router.post("/restore", upload.single("backup"), async (req, res) => {
 /* ── DELETE /backup/attendance ── wipe all attendance records */
 router.delete("/attendance", async (_req, res) => {
   try {
-    const result = await db.delete(attendanceRecords);
+    await db.delete(attendanceRecords);
     res.json({ success: true, message: "All attendance records deleted successfully" });
   } catch (err: any) {
     console.error("Delete attendance error:", err);
