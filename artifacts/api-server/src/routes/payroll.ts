@@ -589,7 +589,7 @@ router.post("/generate", async (req, res) => {
       const absenceDeduction = (isNightWatcherPayroll || isOffSeason) ? 0 : Math.round(dailyRate * absentDays);
 
       /* ── Half-day deduction ────────────────────────────── */
-      const halfDayDeduction = isNightWatcherPayroll ? 0 : Math.round(halfDaysCount * (dailyRate / 2));
+      const halfDayDeduction = (isNightWatcherPayroll || isOffSeason) ? 0 : Math.round(halfDaysCount * (dailyRate / 2));
 
       /* ── Incomplete hours deduction (rules-based, skipped in off season) ─ */
       let incompleteDeduction = 0;

@@ -120,10 +120,9 @@ export default function PayslipPage() {
   const epfNo = row.employee.epfNumber || row.employee.employeeId;
 
   const transport    = row.transportAllowance || 0;
-  const lunch        = row.lunchIncentive || row.computedLunchIncentive || 0;
   const housing      = row.housingAllowance || 0;
   const otherAllow   = row.otherAllowances || 0;
-  const allowances   = transport + lunch + housing + otherAllow;
+  const allowances   = transport + housing + otherAllow;
   const subTotal     = row.basicSalary + allowances;
   const noPayLeave   = row.absenceDeduction || 0;
   const halfDayDed   = row.halfDayDeduction || 0;
@@ -181,7 +180,6 @@ export default function PayslipPage() {
   const slipRows: SlipRow[] = [
     { label: "Basic Salary",            value: fmtAmt(row.basicSalary) },
     ...(transport  > 0 ? [{ label: "  Transport Allowance", value: fmtAmt(transport),  indent: true }] : []),
-    ...(lunch      > 0 ? [{ label: "  Lunch Incentive",     value: fmtAmt(lunch),      indent: true }] : []),
     ...(housing    > 0 ? [{ label: "  Housing Allowance",   value: fmtAmt(housing),    indent: true }] : []),
     ...(otherAllow > 0 ? [{ label: "  Other Allowances",    value: fmtAmt(otherAllow), indent: true }] : []),
     { label: "Sub Total",               value: fmtAmt(subTotal), italic: true, borderTop: true },
@@ -229,7 +227,6 @@ export default function PayslipPage() {
   }
 
   if (transport > 0) formulaRows.push({ label: "Transport Allowance", formula: "Fixed monthly amount (salary structure)", result: `Rs.${transport.toLocaleString()}` });
-  if (lunch > 0)     formulaRows.push({ label: "Lunch Incentive", formula: "Fixed monthly amount (salary structure)", result: `Rs.${lunch.toLocaleString()}`, highlight: true });
   if (housing > 0)   formulaRows.push({ label: "Housing Allowance", formula: "Fixed monthly amount (salary structure)", result: `Rs.${housing.toLocaleString()}` });
   if (otherAllow > 0) formulaRows.push({ label: "Other Allowances", formula: "Fixed monthly amount (salary structure)", result: `Rs.${otherAllow.toLocaleString()}`, highlight: true });
 
