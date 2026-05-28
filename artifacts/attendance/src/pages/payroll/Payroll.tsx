@@ -974,6 +974,7 @@ export default function Payroll() {
   const [payslip, setPayslip] = useState<PayrollRow | null>(null);
   const [detailRow, setDetailRow] = useState<PayrollRow | null>(null);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [showEnvelopePrint, setShowEnvelopePrint] = useState(false);
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<string>("employee.fullName");
   const [sortAsc, setSortAsc] = useState(true);
@@ -1158,8 +1159,21 @@ export default function Payroll() {
             <UserCheck className="w-3.5 h-3.5" />
             Assign &amp; Generate Payroll
           </Button>
+          <Button
+            onClick={() => navigate(`/payroll/report?month=${month}&year=${year}`)}
+            className="text-xs flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            Salary Report
+          </Button>
           {selected.size > 0 && (
             <>
+              <Button
+                onClick={() => setShowEnvelopePrint(true)}
+                className="text-xs flex items-center gap-1.5 bg-slate-700 hover:bg-slate-800 text-white"
+              >
+                <Printer className="w-3.5 h-3.5" />Print Payslips ({selected.size})
+              </Button>
               <Button
                 onClick={() => bulkUpdateStatus("approved")}
                 className="text-xs flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
@@ -1505,6 +1519,132 @@ export default function Payroll() {
 
       {payslip   && <PayslipModal       row={payslip}    onClose={() => setPayslip(null)} />}
       {detailRow && <PayrollDetailModal row={detailRow}  onClose={() => setDetailRow(null)} />}
+
+      {/* ── Envelope / Multi-payslip print modal ── */}
+      {showEnvelopePrint && (() => {
+        const selectedRows = filtered.filter(r => selected.has(r.id));
+        const monthLabel = `${MONTHS[month - 1]} ${year}`;
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-700/80 overflow-auto" style={{ fontFamily: "'Inter','Segoe UI',Arial,sans-serif" }}>
+            {/* Toolbar */}
+            <div className="print:hidden sticky top-0 bg-white border-b shadow-sm px-4 py-2 flex items-center gap-3 z-10">
+              <span className="text-sm font-semibold text-slate-700">Print Payslips — {selectedRows.length} employees — {monthLabel}</span>
+              <div className="flex items-center gap-2 ml-auto">
+                <button
+                  onClick={() => window.print()}
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Print
+                </button>
+                <button
+                  onClick={() => setShowEnvelopePrint(false)}
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm"
+                >
+                  <X className="w-3.5 h-3.5" /> Close
+                </button>
+              </div>
+            </div>
+            {/* Payslip grid */}
+            <div className="p-4 grid grid-cols-2 gap-4 max-w-[900px] mx-auto" id="envelope-print-area">
+              {selectedRows.map(r => {
+                const allowances  = (r.transportAllowance || 0) + (r.housingAllowance || 0) + (r.otherAllowances || 0);
+                const subTotal    = r.basicSalary + allowances;
+                const noPayLeave  = r.absenceDeduction || 0;
+                const lateDed     = r.lateDeduction || 0;
+                const halfDayDed  = (r as any).halfDayDeduction || 0;
+                const llDed       = r.lunchLateDeduction || 0;
+                const totalForEPF = subTotal - noPayLeave - lateDed - halfDayDed - llDed;
+                const overtime    = (r.overtimePay || 0) + (r.holidayOtPay || 0);
+                const totalEarn   = totalForEPF + overtime;
+                const epf8        = r.epfEmployee || 0;
+                const loans       = r.loanDeduction || 0;
+                const otherDeds   = r.otherDeductions || 0;
+                const apit        = r.apit || 0;
+                const balancePay  = totalEarn - epf8 - loans - otherDeds - apit;
+                const epf12       = r.epfEmployer || 0;
+                const etf3        = r.etfEmployer || 0;
+                const epfNo       = r.employee.epfNumber || r.employee.employeeId;
+                const fa = (v: number) => v > 0 ? v.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-";
+                const fw = (v: number) => v.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                return (
+                  <div key={r.id} className="bg-white rounded-lg overflow-hidden shadow border border-slate-200" style={{ pageBreakInside: "avoid" }}>
+                    {/* Header */}
+                    <div style={{ background: "linear-gradient(135deg,#0f172a,#1e3a8a)", padding: "10px 14px 8px" }}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <img src={drivethruLogo} alt="" style={{ height: "24px" }} />
+                          <div>
+                            <p style={{ color: "#fff", fontWeight: "700", fontSize: "10px" }}>Drivethru (Pvt) Ltd</p>
+                            <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "9px" }}>Employee Pay Sheet — {monthLabel}</p>
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "8px" }}>EPF No.</p>
+                          <p style={{ color: "#fff", fontWeight: "700", fontSize: "11px" }}>{epfNo}</p>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: "6px", background: "rgba(255,255,255,0.1)", borderRadius: "6px", padding: "4px 10px" }}>
+                        <p style={{ color: "#fff", fontWeight: "700", fontSize: "11px" }}>{r.employee.fullName}</p>
+                        <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "9px" }}>{r.employee.designation} · ID: {r.employee.employeeId}</p>
+                      </div>
+                    </div>
+                    {/* Body */}
+                    <div style={{ padding: "8px 14px" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
+                        <tbody>
+                          {[
+                            ["Basic Salary", fw(r.basicSalary), false],
+                            ...(allowances > 0 ? [["Allowances", fw(allowances), false]] : []),
+                            ["Sub Total", fw(subTotal), true],
+                            ...(noPayLeave > 0 ? [["Less: Absence", fa(noPayLeave), false]] : []),
+                            ...(lateDed > 0 ? [["Less: Late", fa(lateDed), false]] : []),
+                            ...(halfDayDed > 0 ? [["Less: Half Day", fa(halfDayDed), false]] : []),
+                            ["Total for EPF", fw(totalForEPF), true],
+                            ...(overtime > 0 ? [["Add: OT/Holiday Pay", fa(overtime), false]] : []),
+                            ["Total Earnings", fw(totalEarn), true],
+                            ["EPF 8%", fa(epf8), false],
+                            ...(loans > 0 ? [["Advance / Loan", fa(loans), false]] : []),
+                            ...(otherDeds > 0 ? [["Other Deductions", fa(otherDeds), false]] : []),
+                            ...(apit > 0 ? [["APIT", fa(apit), false]] : []),
+                          ].map(([label, val, bold], i) => (
+                            <tr key={i} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                              <td style={{ padding: "3px 4px", color: bold ? "#1e3a8a" : "#475569", fontWeight: bold ? "700" : "400" }}>{label as string}</td>
+                              <td style={{ padding: "3px 4px", textAlign: "right", color: bold ? "#1e3a8a" : "#374151", fontWeight: bold ? "700" : "400" }}>{val as string}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {/* Balance */}
+                      <div style={{ background: "#eff6ff", borderRadius: "6px", padding: "6px 10px", marginTop: "6px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: "10px", fontWeight: "700", color: "#1e3a8a" }}>Balance Received</span>
+                        <span style={{ fontSize: "13px", fontWeight: "800", color: "#1e3a8a" }}>Rs.{fw(balancePay)}</span>
+                      </div>
+                      {/* EPF/ETF strip */}
+                      <div style={{ display: "flex", gap: "6px", marginTop: "5px" }}>
+                        {[["EPF 12%", epf12], ["EPF 8%", epf8], ["ETF 3%", etf3]].map(([lbl, val]) => (
+                          <div key={lbl as string} style={{ flex: 1, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "5px", padding: "3px 6px", textAlign: "center" }}>
+                            <p style={{ fontSize: "8px", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase" }}>{lbl as string}</p>
+                            <p style={{ fontSize: "10px", fontWeight: "700", color: "#334155" }}>{fa(val as number)}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <style>{`
+              @media print {
+                @page { size: A4; margin: 8mm; }
+                body > *:not([data-print-root]) { display: none !important; }
+                .print\\:hidden { display: none !important; }
+                #envelope-print-area { display: grid !important; grid-template-columns: 1fr 1fr; gap: 6mm; max-width: 100%; margin: 0; padding: 0; }
+                #envelope-print-area > * { box-shadow: none !important; border: 1px solid #cbd5e1 !important; page-break-inside: avoid; }
+              }
+            `}</style>
+          </div>
+        );
+      })()}
 
       {showGenerateModal && (
         <GeneratePayrollModal

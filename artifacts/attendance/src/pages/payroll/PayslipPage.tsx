@@ -410,10 +410,10 @@ export default function PayslipPage() {
                 Salary Summary Formula
               </p>
               <p style={{ fontSize: "10px", color: "#475569", marginBottom: "3px" }}>
-                <span style={{ fontWeight: "600" }}>Gross Salary</span> = ({earnParts.join(" + ")}){dedParts.length > 0 ? ` − (${dedParts.join(" + ")})` : ""} = <span style={{ fontWeight: "700", color: "#1e3a8a" }}>Rs.{row.grossSalary.toLocaleString()}</span>
+                <span style={{ fontWeight: "600" }}>Gross Salary</span> = ({earnParts.join(" + ")}){dedParts.length > 0 ? ` − (${dedParts.join(" + ")})` : ""} = <span style={{ fontWeight: "700", color: "#1e3a8a" }}>Rs.{(row.grossSalary ?? 0).toLocaleString()}</span>
               </p>
               <p style={{ fontSize: "10px", color: "#475569" }}>
-                <span style={{ fontWeight: "600" }}>Net Salary</span> = Rs.{row.grossSalary.toLocaleString()} − EPF 8% Rs.{epf8.toLocaleString()}{apit > 0 ? ` − APIT Rs.${apit.toLocaleString()}` : ""}{otherDeds > 0 ? ` − Other Rs.${otherDeds.toLocaleString()}` : ""}{loans > 0 ? ` − Loans Rs.${loans.toLocaleString()}` : ""} = <span style={{ fontWeight: "700", color: "#1e3a8a" }}>Rs.{row.netSalary.toLocaleString()}</span>
+                <span style={{ fontWeight: "600" }}>Net Salary</span> = Rs.{(row.grossSalary ?? 0).toLocaleString()} − EPF 8% Rs.{epf8.toLocaleString()}{apit > 0 ? ` − APIT Rs.${apit.toLocaleString()}` : ""}{otherDeds > 0 ? ` − Other Rs.${otherDeds.toLocaleString()}` : ""}{loans > 0 ? ` − Loans Rs.${loans.toLocaleString()}` : ""} = <span style={{ fontWeight: "700", color: "#1e3a8a" }}>Rs.{(row.netSalary ?? 0).toLocaleString()}</span>
               </p>
             </div>
           </div>
