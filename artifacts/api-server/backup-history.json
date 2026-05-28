@@ -1,0 +1,11 @@
+[
+  {
+    "id": "6c3b4e80-c6d1-4e29-aa5e-b0c9c1a27837",
+    "timestamp": "2026-05-28T08:30:05.960Z",
+    "type": "scheduled",
+    "trigger": "Scheduled 14:00",
+    "sizeKb": 49,
+    "status": "success",
+    "recipient": "techhacktamil000@gmail.com"
+  }
+]

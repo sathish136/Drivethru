@@ -561,17 +561,23 @@ router.post("/generate", async (req, res) => {
         ? Math.max(0, basicSalary - nwLeaveDeduction)
         : 0;
 
-      /* ── Off-season: skip OT, late deductions and incomplete hours ── */
-      /* Doc: "Off Season — No overtime, no late hour deductions"       */
+      /* ── Off-season: skip OT, late deductions, incomplete hours, and absence deductions ──
+         Night Watcher shift runs ALL YEAR with its own fixed policy — never off-season.
+         For all other employees during off season:
+           • Full salary paid even if punch records are missing (no absence deduction)
+           • No OT, no late deductions, no incomplete-hour deductions
+           • Loan/advance deductions and EPF/ETF continue as normal
+           • Leave balance still tracked (manually approved leave still deducted)        */
       const offSeasonMonthsList: number[] = (() => {
         try { return JSON.parse((cfg as any).offSeasonMonths ?? "[5,6,7,8,9]") as number[]; }
         catch { return [5,6,7,8,9]; }
       })();
-      const isOffSeason = cfg.offSeasonEnabled && offSeasonMonthsList.includes(Number(month));
+      /* Night Watchers are explicitly excluded from off-season — they operate year-round */
+      const isOffSeason = !isNightWatcherPayroll && cfg.offSeasonEnabled && offSeasonMonthsList.includes(Number(month));
 
       /* ── STANDARD deductions ────────────────────────────────────────── */
-      /* Morning late: applies to ALL employees incl. Night Watchers (policy: "late deductions apply").
-         Night Watcher late = arrived after 20:15 (shift 20:00 + 15 min grace). */
+      /* Morning late: applies to all employees EXCEPT during off-season (non-NW).
+         Night Watcher late deductions always apply (year-round policy). */
       const morningLateMinutes = (!isOffSeason)
         ? presentRecs.reduce((sum, rec) => sum + salaryRowFor(rec).lateMinutes, 0)
         : 0;
@@ -584,7 +590,8 @@ router.post("/generate", async (req, res) => {
       const lunchLateDeduction = Math.round(lunchLateMinutes * minuteRate);
 
       /* ── Absence deduction ─────────────────────────────── */
-      const absenceDeduction = isNightWatcherPayroll ? 0 : Math.round(dailyRate * absentDays);
+      /* Off season: full salary paid even if punch records are missing — no absence deduction */
+      const absenceDeduction = (isNightWatcherPayroll || isOffSeason) ? 0 : Math.round(dailyRate * absentDays);
 
       /* ── Half-day deduction ────────────────────────────── */
       const halfDayDeduction = isNightWatcherPayroll ? 0 : Math.round(halfDaysCount * (dailyRate / 2));

@@ -369,13 +369,13 @@ export default function PayrollSettings() {
 
           {/* Off-Season Mode */}
           <Card className="p-5">
-            <div className="flex items-center gap-2 mb-5 pb-3 border-b border-border">
+            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border">
               <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
                 <ToggleLeft className="w-4 h-4 text-blue-600" />
               </div>
               <div className="flex-1">
                 <p className="text-sm font-bold">Off-Season Mode</p>
-                <p className="text-xs text-muted-foreground">During off-season: no OT, no late deductions, no incomplete hours deduction</p>
+                <p className="text-xs text-muted-foreground">Controls payroll rules for non-Night Watcher employees during off season months</p>
               </div>
               <button
                 onClick={() => set("offSeasonEnabled", !cfg.offSeasonEnabled)}
@@ -390,6 +390,33 @@ export default function PayrollSettings() {
                 )} />
               </button>
             </div>
+
+            {/* Policy summary cards */}
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-2.5">
+                <p className="text-[11px] font-bold text-blue-800 mb-1.5">Off Season Rules (all employees except Night Watcher)</p>
+                <ul className="space-y-0.5 text-[10px] text-blue-700">
+                  <li className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-300 inline-flex items-center justify-center text-white text-[8px]">✓</span> Full salary paid even if punch records are missing</li>
+                  <li className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-300 inline-flex items-center justify-center text-white text-[8px]">✓</span> No overtime calculations</li>
+                  <li className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-300 inline-flex items-center justify-center text-white text-[8px]">✓</span> No late arrival deductions</li>
+                  <li className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-300 inline-flex items-center justify-center text-white text-[8px]">✓</span> No incomplete hours deductions</li>
+                  <li className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-300 inline-flex items-center justify-center text-white text-[8px]">✓</span> Leave balance still tracked (manually approved)</li>
+                  <li className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-300 inline-flex items-center justify-center text-white text-[8px]">✓</span> Loan / advance deductions continue</li>
+                  <li className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-300 inline-flex items-center justify-center text-white text-[8px]">✓</span> EPF / ETF contributions continue</li>
+                </ul>
+              </div>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5">
+                <p className="text-[11px] font-bold text-amber-800 mb-1.5">Night Watcher — All Year Round (unaffected)</p>
+                <ul className="space-y-0.5 text-[10px] text-amber-700">
+                  <li className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-amber-300 inline-flex items-center justify-center text-white text-[8px]">★</span> Full shift policy applies in all seasons</li>
+                  <li className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-amber-300 inline-flex items-center justify-center text-white text-[8px]">★</span> OT calculated (discrete 0/1/2/3 hrs)</li>
+                  <li className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-amber-300 inline-flex items-center justify-center text-white text-[8px]">★</span> Late arrival deductions apply</li>
+                  <li className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-amber-300 inline-flex items-center justify-center text-white text-[8px]">★</span> 15-shift schedule, 30-day salary basis</li>
+                  <li className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-amber-300 inline-flex items-center justify-center text-white text-[8px]">★</span> Off-season toggle does NOT affect Night Watcher</li>
+                </ul>
+              </div>
+            </div>
+
             {(() => {
               const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
               const toggleMonth = (m: number) => {
@@ -397,28 +424,45 @@ export default function PayrollSettings() {
                 const next = current.includes(m) ? current.filter(x => x !== m) : [...current, m].sort((a,b)=>a-b);
                 set("offSeasonMonths", next);
               };
+              const currentMonth = new Date().getMonth() + 1;
+              const isCurrentMonthOff = (cfg.offSeasonMonths ?? [5,6,7,8,9]).includes(currentMonth);
               return (
                 <div>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Click months to toggle between <span className="text-blue-600 font-medium">Off Season</span> (blue) and <span className="text-green-600 font-medium">Main Season</span> (green).
-                  </p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-muted-foreground">
+                      Click months to toggle between <span className="text-blue-600 font-medium">Off Season</span> and <span className="text-green-600 font-medium">Main Season</span>.
+                    </p>
+                    {cfg.offSeasonEnabled && (
+                      <span className={cn(
+                        "text-[10px] font-semibold px-2 py-0.5 rounded-full",
+                        isCurrentMonthOff
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-green-100 text-green-700"
+                      )}>
+                        Current month: {isCurrentMonthOff ? "Off Season" : "Main Season"}
+                      </span>
+                    )}
+                  </div>
                   <div className="grid grid-cols-4 gap-2">
                     {MONTHS.map((name, i) => {
                       const m = i + 1;
                       const isOff = (cfg.offSeasonMonths ?? [5,6,7,8,9]).includes(m);
+                      const isCurrent = m === currentMonth;
                       return (
                         <button
                           key={m}
                           type="button"
                           onClick={() => toggleMonth(m)}
                           className={cn(
-                            "py-2 rounded-lg text-xs font-semibold border transition-all",
+                            "py-2 rounded-lg text-xs font-semibold border transition-all relative",
                             isOff
                               ? "bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200"
-                              : "bg-green-50 border-green-200 text-green-800 hover:bg-green-100"
+                              : "bg-green-50 border-green-200 text-green-800 hover:bg-green-100",
+                            isCurrent && "ring-2 ring-offset-1 ring-primary"
                           )}
                         >
                           {name}
+                          {isCurrent && <span className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-primary rounded-full border border-white" />}
                           <div className="text-[10px] font-normal opacity-70 mt-0.5">{isOff ? "Off" : "Main"}</div>
                         </button>
                       );
@@ -427,6 +471,7 @@ export default function PayrollSettings() {
                   <div className="mt-3 flex gap-4 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-blue-300 inline-block"/> Off Season — May · Jun · Jul · Aug · Sep (default)</span>
                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-green-300 inline-block"/> Main Season — Jan · Feb · Mar · Apr · Oct · Nov · Dec (default)</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-primary inline-block"/> Current month</span>
                   </div>
                 </div>
               );
