@@ -23,9 +23,9 @@ const TYPE_STYLE: Record<string, string> = {
 
 type SettingsTab = "organisation" | "database";
 
-const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ElementType; description: string; color: string }[] = [
-  { key: "organisation", label: "Organisation",       icon: Building,     description: "Name, country, timezone",       color: "text-emerald-600" },
-  { key: "database",     label: "Backup & Restore",   icon: Download,     description: "Backup and restore all data",    color: "text-teal-600"    },
+const SETTINGS_TABS: { key: SettingsTab; label: string; icon: React.ElementType; color: string; accent: string }[] = [
+  { key: "organisation", label: "Organisation",     icon: Building,  color: "text-emerald-600", accent: "border-emerald-500 text-emerald-700 bg-emerald-50" },
+  { key: "database",     label: "Backup & Restore", icon: Database,  color: "text-blue-600",    accent: "border-blue-500 text-blue-700 bg-blue-50"         },
 ];
 
 export default function Settings() {
@@ -413,53 +413,30 @@ export default function Settings() {
     setTimeout(() => setter(false), 2500);
   }
 
-  const activeInfo = SETTINGS_TABS.find(t => t.key === activeTab) ?? SETTINGS_TABS[0];
-
   return (
-    <div className="flex gap-5 max-w-6xl mx-auto h-full">
+    <div className="max-w-5xl mx-auto space-y-5">
 
-      {/* Left Sidebar Nav */}
-      <div className="w-56 shrink-0">
-        <div className="sticky top-0">
-          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2 px-1">Settings</p>
-          <nav className="flex flex-col gap-1">
-            {SETTINGS_TABS.map(({ key, label, icon: Icon, description, color }) => (
-              <button key={key} onClick={() => setActiveTab(key)}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150 group",
-                  activeTab === key
-                    ? "bg-primary/10 border border-primary/20 shadow-sm"
-                    : "hover:bg-muted/60 border border-transparent"
-                )}>
-                <div className={cn(
-                  "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
-                  activeTab === key ? "bg-primary/15" : "bg-muted group-hover:bg-muted/80"
-                )}>
-                  <Icon className={cn("w-4 h-4", activeTab === key ? color : "text-muted-foreground")} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className={cn("text-xs font-semibold leading-tight", activeTab === key ? "text-foreground" : "text-muted-foreground group-hover:text-foreground")}>{label}</p>
-                  <p className="text-[10px] text-muted-foreground leading-tight mt-0.5 truncate">{description}</p>
-                </div>
-                {activeTab === key && <ChevronRight className="w-3 h-3 text-primary shrink-0" />}
-              </button>
-            ))}
-          </nav>
-        </div>
+      {/* Top Tab Bar */}
+      <div className="flex items-center gap-1 border-b border-border pb-0">
+        {SETTINGS_TABS.map(({ key, label, icon: Icon, color, accent }) => (
+          <button
+            key={key}
+            onClick={() => setActiveTab(key)}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-all duration-150 -mb-px",
+              activeTab === key
+                ? cn("border-b-2", accent)
+                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            )}
+          >
+            <Icon className={cn("w-3.5 h-3.5", activeTab === key ? color : "text-muted-foreground")} />
+            {label}
+          </button>
+        ))}
       </div>
 
-      {/* Right Content Area */}
-      <div className="flex-1 min-w-0 space-y-5">
-        {/* Tab Header */}
-        <div className="flex items-center gap-3 pb-1">
-          <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center", "bg-muted")}>
-            <activeInfo.icon className={cn("w-5 h-5", activeInfo.color)} />
-          </div>
-          <div>
-            <h2 className="font-bold text-base leading-tight">{activeInfo.label}</h2>
-            <p className="text-xs text-muted-foreground">{activeInfo.description}</p>
-          </div>
-        </div>
+      {/* Content Area */}
+      <div className="space-y-4">
 
         {/* ── Organisation ─────────────────────────────────── */}
         {activeTab === "organisation" && (
@@ -925,56 +902,7 @@ export default function Settings() {
 
         {/* ─── Database Backup & Restore ─── */}
         {activeTab === "database" && (
-          <div className="space-y-4">
-
-            {/* Current Database Stats */}
-            <Card className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Database className="w-4 h-4 text-teal-600" />
-                  <span className="text-sm font-bold text-foreground">Current Database</span>
-                </div>
-                <Button
-                  variant="outline"
-                  className="flex items-center gap-1.5 text-xs h-8"
-                  onClick={loadDbStats}
-                  disabled={dbStatsLoading}
-                >
-                  <RefreshCw className={`w-3 h-3 ${dbStatsLoading ? "animate-spin" : ""}`} />
-                  Refresh
-                </Button>
-              </div>
-              {dbStatsLoading ? (
-                <div className="flex items-center justify-center h-20">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
-                </div>
-              ) : dbStats ? (
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                  {[
-                    { label: "Branches",        value: dbStats.branches,        icon: "🏬" },
-                    { label: "Employees",       value: dbStats.employees,       icon: "👥" },
-                    { label: "Attendance",      value: dbStats.attendance,      icon: "🕐" },
-                    { label: "Departments",     value: dbStats.departments,     icon: "📂" },
-                    { label: "Designations",    value: dbStats.designations,    icon: "🏷️" },
-                    { label: "Shifts",          value: dbStats.shifts,          icon: "🔄" },
-                    { label: "Holidays",        value: dbStats.holidays,        icon: "📅" },
-                    { label: "Payroll Records", value: dbStats.payrollRecords,  icon: "💰" },
-                    { label: "Loans",           value: dbStats.staffLoans,      icon: "🏦" },
-                    { label: "Incentives",      value: dbStats.staffIncentives, icon: "🎁" },
-                    { label: "Leave Balances",  value: dbStats.leaveBalances,   icon: "🌴" },
-                    { label: "Users",           value: dbStats.users,           icon: "👤" },
-                  ].map(item => (
-                    <div key={item.label} className="bg-muted rounded-xl p-3 text-center border border-border">
-                      <div className="text-lg mb-0.5">{item.icon}</div>
-                      <div className="text-xl font-bold text-foreground">{item.value ?? 0}</div>
-                      <div className="text-[10px] text-muted-foreground mt-0.5">{item.label}</div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">Click Refresh to load statistics</p>
-              )}
-            </Card>
+          <>
 
             {/* Backup Export */}
             <Card className="p-5">
@@ -1364,9 +1292,10 @@ export default function Settings() {
               </div>
             </Card>
 
-          </div>
+          </>
         )}
       </div>
     </div>
   );
 }
+
