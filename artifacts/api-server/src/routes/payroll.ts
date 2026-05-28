@@ -139,6 +139,8 @@ router.get("/employees-for-payroll", async (req, res) => {
       status: employees.status,
       epfNumber: employees.epfNumber,
       etfNumber: employees.etfNumber,
+      apitOverride: employees.apitOverride,
+      epfEtfExempt: employees.epfEtfExempt,
     }).from(employees);
 
     const activeEmps = allEmployees.filter(e => e.status === "active" && assignedIds.has(e.id));

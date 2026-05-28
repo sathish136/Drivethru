@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, boolean, timestamp, date } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, timestamp, date, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { branches, companies } from "./branches";
@@ -46,6 +46,8 @@ export const employees = pgTable("employees", {
   certificatesDocUrl: text("certificates_doc_url"),
   resumeDocUrl: text("resume_doc_url"),
   remarks: text("remarks"),
+  apitOverride: real("apit_override"),
+  epfEtfExempt: boolean("epf_etf_exempt").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

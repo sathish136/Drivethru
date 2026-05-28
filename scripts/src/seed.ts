@@ -1,7 +1,8 @@
 import { db } from "@workspace/db";
 import {
   branches, employees, shifts, attendanceRecords,
-  systemUsers, systemSettings, holidays
+  systemUsers, systemSettings, holidays, biometricLogs, biometricDevices,
+  leaveBalances, payrollRecords, employeeSalaryAssignments, staffLoans, staffIncentives,
 } from "@workspace/db/schema";
 import crypto from "crypto";
 
@@ -18,7 +19,14 @@ function calcWorkHours(t1: string, t2: string): number {
 async function seed() {
   console.log("Seeding database...");
 
-  // Clear existing
+  // Clear existing (order matters for FK constraints)
+  await db.delete(biometricLogs);
+  await db.delete(biometricDevices);
+  await db.delete(staffIncentives);
+  await db.delete(staffLoans);
+  await db.delete(employeeSalaryAssignments);
+  await db.delete(payrollRecords);
+  await db.delete(leaveBalances);
   await db.delete(attendanceRecords);
   await db.delete(employees);
   await db.delete(shifts);
