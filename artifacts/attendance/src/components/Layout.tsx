@@ -137,6 +137,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   /* s(dark, light) — returns the right class based on sidebar theme */
   const s = (dark: string, light: string) => sidebarLight ? light : dark;
   const [now, setNow] = useState(new Date());
+  const [isOffSeason, setIsOffSeason] = useState<boolean | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -179,6 +180,20 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
+  }, []);
+
+  /* Off-season status */
+  useEffect(() => {
+    fetch(`${BASE}/api/payroll-settings`)
+      .then(r => r.json())
+      .then(d => {
+        if (!d.offSeasonEnabled) { setIsOffSeason(false); return; }
+        let months: number[] = [5, 6, 7, 8, 9];
+        if (Array.isArray(d.offSeasonMonths)) months = d.offSeasonMonths;
+        else try { months = JSON.parse(d.offSeasonMonths ?? "[5,6,7,8,9]"); } catch {}
+        setIsOffSeason(months.includes(new Date().getMonth() + 1));
+      })
+      .catch(() => setIsOffSeason(false));
   }, []);
 
   /* Close notification dropdown on outside click */
@@ -596,6 +611,19 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               {now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
             </span>
           </div>
+
+          {/* Season badge */}
+          {isOffSeason !== null && (
+            <div className={cn(
+              "flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold shrink-0 border",
+              isOffSeason
+                ? "bg-blue-50 border-blue-200 text-blue-800"
+                : "bg-green-50 border-green-200 text-green-800"
+            )}>
+              <span>{isOffSeason ? "⛅" : "🌿"}</span>
+              <span>{isOffSeason ? "Off Season" : "Main Season"}</span>
+            </div>
+          )}
 
           {/* Centre — search bar */}
           <div className="flex-1 flex justify-center px-4">
