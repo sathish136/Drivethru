@@ -754,7 +754,7 @@ router.post("/generate", async (req, res) => {
       /* ── For Night Watcher: map leave data to standard fields for storage/display ── */
       const storedAbsenceDeduction = isNightWatcherPayroll ? Math.round(nwLeaveDeduction) : absenceDeduction;
       const storedLeaveDays        = isNightWatcherPayroll ? nwLeaveDays : leaveDays;
-      const storedAbsentDays       = isNightWatcherPayroll ? Math.floor(nwLeaveDays) : absentDays;
+      const storedAbsentDays       = isNightWatcherPayroll ? Math.floor(nwLeaveDays) : Math.round(absentDays);
       const storedHalfDays         = isNightWatcherPayroll ? halfDaysCount : halfDaysCount;
       const storedWorkingDays      = isNightWatcherPayroll ? NW_SCHEDULED_SHIFTS : Math.round(empWdCount);
 
