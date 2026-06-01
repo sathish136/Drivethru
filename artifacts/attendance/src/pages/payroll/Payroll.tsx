@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { PageHeader, Card, Button, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import drivethruLogo from "@/assets/drivethru-wave-logo.png";
+import liveuLogo from "@/assets/liveu-logo.png";
 import {
   Banknote, RefreshCw, CheckCircle, CreditCard,
   Users, TrendingUp, Minus, Eye, X, Printer,
@@ -1525,138 +1526,203 @@ export default function Payroll() {
         const selectedRows = filtered.filter(r => selected.has(r.id));
         const monthLabel = `${MONTHS[month - 1]} ${year}`;
 
-        const fa = (v: number) => v > 0 ? v.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-";
-        const fw = (v: number) => v.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const fmtAmt = (n: number | null | undefined) => {
+          if (!n || n === 0) return "";
+          return n.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        };
+        const fmtOrDash = (n: number) => n > 0 ? n.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-";
 
         function renderPayslipCard(r: PayrollRow, copyLabel: "OFFICE COPY" | "EMPLOYEE COPY") {
-          const transport     = r.transportAllowance || 0;
-          const housing       = r.housingAllowance || 0;
-          const otherAllow    = r.otherAllowances || 0;
-          const allowances    = transport + housing + otherAllow;
-          const subTotal      = r.basicSalary + allowances;
-          const noPayLeave    = r.absenceDeduction || 0;
-          const lateDed       = r.lateDeduction || 0;
-          const halfDayDed    = (r as any).halfDayDeduction || 0;
-          const llDed         = r.lunchLateDeduction || 0;
-          const earlyExitDed  = (r as any).incompleteDeduction || 0;
-          const totalForEPF   = subTotal - noPayLeave - lateDed - halfDayDed - llDed - earlyExitDed;
-          const overtimePay   = (r.overtimePay || 0) + ((r as any).holidayOtPay || 0);
-          const lunchInc      = (r as any).lunchIncentive || (r as any).computedLunchIncentive || 0;
-          const totalEarn     = totalForEPF + overtimePay + lunchInc;
-          const epf8          = r.epfEmployee || 0;
-          const loans         = r.loanDeduction || 0;
-          const otherDeds     = r.otherDeductions || 0;
-          const apit          = r.apit || 0;
-          const totalRec      = epf8 + loans + otherDeds + apit;
-          const balancePay    = totalEarn - totalRec;
-          const epf12         = r.epfEmployer || 0;
-          const etf3          = r.etfEmployer || 0;
-          const epfNo         = r.employee.epfNumber || r.employee.employeeId;
-          const isOffice      = copyLabel === "OFFICE COPY";
-          const lastDay       = new Date(r.year, r.month, 0);
-          const dateStr       = `${String(lastDay.getDate()).padStart(2,"0")}-${String(r.month).padStart(2,"0")}-${r.year}`;
+          const transport    = r.transportAllowance || 0;
+          const housing      = r.housingAllowance || 0;
+          const otherAllow   = r.otherAllowances || 0;
+          const allowances   = transport + housing + otherAllow;
+          const subTotal     = r.basicSalary + allowances;
+          const noPayLeave   = r.absenceDeduction || 0;
+          const halfDayDed   = (r as any).halfDayDeduction || 0;
+          const lateDed      = r.lateDeduction || 0;
+          const lunchLateDed = r.lunchLateDeduction || 0;
+          const earlyExitDed = (r as any).incompleteDeduction || 0;
+          const totalForEPF  = subTotal - noPayLeave - halfDayDed - lateDed - lunchLateDed - earlyExitDed;
+          const otPay        = r.overtimePay || 0;
+          const holOtPay     = (r as any).holidayOtPay || 0;
+          const overtime     = otPay + holOtPay;
+          const lunchInc     = (r as any).lunchIncentive || (r as any).computedLunchIncentive || 0;
+          const totalEarn    = totalForEPF + overtime + lunchInc;
+          const epf8         = r.epfEmployee || 0;
+          const loans        = r.loanDeduction || 0;
+          const otherDeds    = r.otherDeductions || 0;
+          const apit         = r.apit || 0;
+          const totalRec     = epf8 + loans + otherDeds + apit;
+          const balancePay   = totalEarn - totalRec;
+          const epf12        = r.epfEmployer || 0;
+          const etf3         = r.etfEmployer || 0;
+          const epfNo        = r.employee.epfNumber || r.employee.employeeId;
+          const pvNumber     = `PV ${String(r.id).padStart(5, "0")}`;
+          const isOffice     = copyLabel === "OFFICE COPY";
+          const lastDay      = new Date(r.year, r.month, 0);
+          const dateStr      = `${String(lastDay.getDate()).padStart(2,"0")}-${String(r.month).padStart(2,"0")}-${r.year}`;
+          const isEpfExempt  = epf8 === 0 && r.grossSalary > 10000;
+          const lateDayLabel = r.lateDays > 0 ? ` (${r.lateDays}d)` : "";
 
-          const rows: [string, string, boolean, boolean?][] = [
-            ["Basic Salary", fw(r.basicSalary), false],
-            ...(transport > 0  ? [["  Transport Allow.", fa(transport),  false, true] as [string,string,boolean,boolean?]] : []),
-            ...(housing > 0    ? [["  Housing Allow.",   fa(housing),    false, true] as [string,string,boolean,boolean?]] : []),
-            ...(otherAllow > 0 ? [["  Other Allow.",     fa(otherAllow), false, true] as [string,string,boolean,boolean?]] : []),
-            ["Sub Total", fw(subTotal), false, false],
-            ...(noPayLeave  > 0 ? [["Less: No Pay Leave", fa(noPayLeave),  false] as [string,string,boolean]] : []),
-            ...(halfDayDed  > 0 ? [["Less: Half Day",     fa(halfDayDed), false] as [string,string,boolean]] : []),
-            ...(lateDed     > 0 ? [["Less: Late Arrival", fa(lateDed),    false] as [string,string,boolean]] : []),
-            ...(llDed       > 0 ? [["Less: Lunch Late",   fa(llDed),      false] as [string,string,boolean]] : []),
-            ...(earlyExitDed>0  ? [["Less: Short Hours",  fa(earlyExitDed),false] as [string,string,boolean]] : []),
-            ["Total for EPF / ETF", fw(totalForEPF), true],
-            ["Add: OT / Holiday Pay", overtimePay > 0 ? fa(overtimePay) : "-", false],
-            ["Add: Lunch Incentive",  lunchInc > 0 ? fa(lunchInc) : "-", false],
-            ["Total Earnings", fw(totalEarn), true],
-            ["Recoveries: EPF 8%", fa(epf8), false],
-            ...(loans > 0    ? [["  Advance / Loan",    fa(loans),    false, true] as [string,string,boolean,boolean?]] : []),
-            ...(otherDeds> 0 ? [["  Other Deductions",  fa(otherDeds),false, true] as [string,string,boolean,boolean?]] : []),
-            ...(apit > 0     ? [["  APIT",              fa(apit),     false, true] as [string,string,boolean,boolean?]] : []),
-            ["Less: Total Recoveries", fa(totalRec), false],
+          type SR = { label: string; value?: string; indent?: boolean; bold?: boolean; italic?: boolean; borderTop?: boolean; borderBottom?: boolean };
+          const slipRows: SR[] = [
+            { label: "Basic Salary",                     value: fmtAmt(r.basicSalary) },
+            ...(transport  > 0 ? [{ label: "  Transport Allowance", value: fmtAmt(transport),  indent: true }] : []),
+            ...(housing    > 0 ? [{ label: "  Housing Allowance",   value: fmtAmt(housing),    indent: true }] : []),
+            ...(otherAllow > 0 ? [{ label: "  Other Allowances",    value: fmtAmt(otherAllow), indent: true }] : []),
+            { label: "Sub Total",                        value: fmtAmt(subTotal), italic: true, borderTop: true },
+            { label: "Less  :  No Pay Leave",            value: noPayLeave > 0 ? fmtAmt(noPayLeave) : "-", italic: true },
+            ...(halfDayDed   > 0 ? [{ label: "Less  :  Half Day Deduction",          value: fmtAmt(halfDayDed),   italic: true }] : []),
+            ...(lateDed      > 0 ? [{ label: `Less  :  Late Arrival${lateDayLabel}`, value: fmtAmt(lateDed),      italic: true }] : []),
+            ...(lunchLateDed > 0 ? [{ label: "Less  :  Lunch Return Late",           value: fmtAmt(lunchLateDed), italic: true }] : []),
+            ...(earlyExitDed > 0 ? [{ label: "Less  :  Early Exit / Short Hours",   value: fmtAmt(earlyExitDed), italic: true }] : []),
+            { label: "Total for EPF / ETF",              value: fmtAmt(totalForEPF), bold: true },
+            ...(otPay    > 0 ? [{ label: `Add  :  Overtime  (${(r.overtimeHours || 0).toFixed(1)} hrs)`, value: fmtAmt(otPay),    italic: true }] : []),
+            ...(holOtPay > 0 ? [{ label: "Add  :  Holiday / Off-Day Pay",                                value: fmtAmt(holOtPay), italic: true }] : []),
+            ...(overtime === 0 ? [{ label: "Add  :  Overtime / Holiday Pay", value: "", italic: true }] : []),
+            ...(lunchInc > 0 ? [{ label: "Add  :  Lunch Incentive",         value: fmtAmt(lunchInc), italic: true }] : []),
+            { label: "Total Earnings",                   value: fmtAmt(totalEarn), borderTop: true },
+            { label: isEpfExempt ? "EPF / ETF" : "Recoveries  :  EPF 8%", value: isEpfExempt ? "Exempt" : fmtOrDash(epf8) },
+            ...(loans    > 0 ? [{ label: "Loans / Advances",  value: fmtAmt(loans),    indent: true }] : []),
+            ...(otherDeds> 0 ? [{ label: "Other Deductions",  value: fmtAmt(otherDeds),indent: true }] : []),
+            ...(apit     > 0 ? [{ label: "APIT (Income Tax)", value: fmtAmt(apit),     indent: true }] : []),
+            { label: "Less  :  Total Recoveries",        value: fmtAmt(totalRec), italic: true, borderTop: true },
+            { label: "Balance Received",                 value: fmtAmt(balancePay), bold: true, borderTop: true, borderBottom: true },
+            { label: "" },
+            { label: "EPF 12%",                          value: fmtAmt(epf12) },
+            { label: "EPF 8%",                           value: fmtAmt(epf8) },
+            { label: "ETF 3%",                           value: fmtAmt(etf3) },
           ];
 
+          /* S = scale helper: full-payslip values × 0.62 */
           return (
-            <div style={{ background: "white", borderRadius: "10px", overflow: "hidden", border: "1px solid #e2e8f0", display: "flex", flexDirection: "column" }}>
-              {/* Header */}
-              <div style={{ background: "linear-gradient(135deg,#0f172a,#1e3a8a)", padding: "9px 12px 7px" }}>
+            <div style={{ background: "white", borderRadius: "14px", overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}>
+
+              {/* ── Hero header (mirrors PayslipPage exactly, scaled ~62%) ── */}
+              <div style={{ background: "linear-gradient(135deg,#0f172a 0%,#1e3a8a 60%,#2563eb 100%)", padding: "17px 20px 14px" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <img src={drivethruLogo} alt="" style={{ height: "22px" }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: "9px", padding: "5px", backdropFilter: "blur(4px)" }}>
+                      <img src={drivethruLogo} alt="Drivethru" style={{ height: "28px", width: "auto", display: "block" }} />
+                    </div>
                     <div>
-                      <p style={{ color: "#fff", fontWeight: "700", fontSize: "9.5px" }}>Drivethru (Pvt) Ltd</p>
-                      <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "8px" }}>Pay Sheet — {monthLabel}</p>
+                      <p style={{ color: "#fff", fontWeight: "700", fontSize: "11px", letterSpacing: "0.01em", lineHeight: 1.2 }}>Drivethru (Pvt) Ltd</p>
+                      <p style={{ color: "rgba(255,255,255,0.65)", fontSize: "7px", fontWeight: "500", letterSpacing: "0.06em", textTransform: "uppercase", marginTop: "2px" }}>Employee Pay Sheet</p>
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ background: isOffice ? "rgba(255,255,255,0.18)" : "rgba(251,191,36,0.3)", borderRadius: "10px", padding: "2px 8px", marginBottom: "2px", display: "inline-block" }}>
-                      <span style={{ color: isOffice ? "#fff" : "#fde68a", fontWeight: "700", fontSize: "8px", letterSpacing: "0.06em" }}>{copyLabel}</span>
+                    <div style={{ background: isOffice ? "rgba(255,255,255,0.15)" : "rgba(251,191,36,0.25)", borderRadius: "13px", padding: "3px 9px", display: "inline-block", marginBottom: "3px", border: isOffice ? "none" : "1px solid rgba(251,191,36,0.5)" }}>
+                      <span style={{ color: isOffice ? "#fff" : "#fde68a", fontWeight: "700", fontSize: "7px", letterSpacing: "0.08em" }}>{copyLabel}</span>
                     </div>
-                    <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "7.5px" }}>EPF: {epfNo}</p>
+                    <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "7px" }}>Ref: {pvNumber}</p>
                   </div>
                 </div>
-                <div style={{ marginTop: "5px", background: "rgba(255,255,255,0.1)", borderRadius: "5px", padding: "4px 8px" }}>
-                  <p style={{ color: "#fff", fontWeight: "700", fontSize: "10.5px" }}>{r.employee.fullName}</p>
-                  <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "8px" }}>{r.employee.designation} · ID: {r.employee.employeeId}</p>
+                <div style={{ marginTop: "11px", background: "rgba(255,255,255,0.1)", borderRadius: "6px", padding: "5px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ color: "#fff", fontWeight: "700", fontSize: "8.5px", letterSpacing: "0.06em" }}>PAY SHEET</span>
+                  <span style={{ color: "#fff", fontWeight: "600", fontSize: "8.5px" }}>{monthLabel}</span>
                 </div>
               </div>
-              {/* Body */}
-              <div style={{ padding: "7px 12px", flex: 1 }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "9.5px" }}>
+
+              {/* ── Employee info strip ── */}
+              <div style={{ background: "#eff6ff", borderBottom: "1px solid #bfdbfe", padding: "9px 20px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <p style={{ fontSize: "7px", color: "#64748b", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "1px" }}>Employee Name</p>
+                    <p style={{ fontSize: "10px", fontWeight: "700", color: "#1e3a8a" }}>{r.employee.fullName}</p>
+                    <p style={{ fontSize: "7.5px", color: "#64748b", marginTop: "1px" }}>{r.employee.designation} · {r.employee.department}</p>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <p style={{ fontSize: "7px", color: "#64748b", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "1px" }}>EPF No.</p>
+                    <p style={{ fontSize: "10px", fontWeight: "700", color: "#1e3a8a" }}>{epfNo}</p>
+                    <p style={{ fontSize: "7.5px", color: "#64748b", marginTop: "1px" }}>ID: {r.employee.employeeId}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Payment Details table ── */}
+              <div style={{ padding: "12px 20px 0" }}>
+                <p style={{ fontSize: "7px", fontWeight: "700", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "6px" }}>Payment Details</p>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "8px" }}>
+                  <thead>
+                    <tr style={{ background: "#f8fafc" }}>
+                      <th style={{ textAlign: "left", padding: "5px 7px", color: "#475569", fontWeight: "600", fontSize: "7.5px", borderBottom: "2px solid #e2e8f0" }}>Description</th>
+                      <th style={{ textAlign: "right", padding: "5px 7px", color: "#475569", fontWeight: "600", fontSize: "7.5px", borderBottom: "2px solid #e2e8f0", width: "90px" }}>Amount (Rs.)</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {rows.map(([label, val, bold, indent], i) => (
-                      <tr key={i} style={{ borderBottom: "1px solid #f1f5f9", background: bold ? "#eff6ff" : "transparent" }}>
-                        <td style={{ padding: "2.5px 4px", paddingLeft: indent ? "12px" : "4px", color: bold ? "#1e3a8a" : indent ? "#64748b" : "#475569", fontWeight: bold ? "700" : "400", fontSize: indent ? "8.5px" : "9.5px" }}>{label}</td>
-                        <td style={{ padding: "2.5px 4px", textAlign: "right", color: bold ? "#1e3a8a" : indent ? "#64748b" : "#374151", fontWeight: bold ? "700" : "400", whiteSpace: "nowrap", fontSize: indent ? "8.5px" : "9.5px" }}>{val}</td>
+                    {slipRows.map((sr, i) => (
+                      <tr key={i} style={{
+                        borderTop: sr.borderTop ? "2px solid #e2e8f0" : undefined,
+                        borderBottom: sr.borderBottom ? "2px solid #e2e8f0" : undefined,
+                        background: sr.bold && sr.borderTop ? "#eff6ff" : "transparent",
+                      }}>
+                        <td style={{ padding: sr.label ? "4px 7px" : "2px 7px", paddingLeft: sr.indent ? "18px" : "7px", fontStyle: sr.italic ? "italic" : "normal", fontWeight: sr.bold ? "700" : "400", color: sr.bold ? "#1e3a8a" : sr.indent ? "#64748b" : "#374151", fontSize: sr.indent ? "7px" : "8px" }}>
+                          {sr.label}
+                        </td>
+                        <td style={{ textAlign: "right", padding: "4px 7px", fontStyle: sr.italic ? "italic" : "normal", fontWeight: sr.bold ? "700" : "400", color: sr.bold ? "#1e3a8a" : sr.indent ? "#64748b" : "#374151", whiteSpace: "nowrap", fontSize: sr.indent ? "7px" : "8px" }}>
+                          {sr.value}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                {/* Balance */}
-                <div style={{ background: "#1e3a8a", borderRadius: "6px", padding: "5px 10px", marginTop: "5px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: "9.5px", fontWeight: "700", color: "#fff" }}>Balance Received</span>
-                  <span style={{ fontSize: "13px", fontWeight: "800", color: "#fff" }}>Rs.{fw(balancePay)}</span>
-                </div>
-                {/* EPF/ETF strip */}
-                <div style={{ display: "flex", gap: "4px", marginTop: "4px" }}>
-                  {[["EPF 12%", epf12], ["EPF 8%", epf8], ["ETF 3%", etf3]].map(([lbl, val]) => (
-                    <div key={lbl as string} style={{ flex: 1, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "5px", padding: "3px 4px", textAlign: "center" }}>
-                      <p style={{ fontSize: "7.5px", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase" }}>{lbl as string}</p>
-                      <p style={{ fontSize: "9.5px", fontWeight: "700", color: "#334155" }}>{fa(val as number)}</p>
-                    </div>
-                  ))}
-                </div>
-                {/* Attendance row */}
-                <div style={{ display: "flex", gap: "4px", marginTop: "4px" }}>
+              </div>
+
+              {/* ── Attendance Summary ── */}
+              <div style={{ margin: "10px 20px 4px" }}>
+                <p style={{ fontSize: "7px", fontWeight: "700", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "5px" }}>Attendance Summary</p>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: "4px", textAlign: "center" }}>
                   {[
-                    ["Work", r.workingDays],
-                    ["Present", r.presentDays],
-                    ["Absent", r.absentDays],
-                    ["Late", r.lateDays],
-                    ["OT hrs", (r.overtimeHours || 0).toFixed(1)],
-                  ].map(([lbl, val]) => (
-                    <div key={lbl as string} style={{ flex: 1, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "5px", padding: "3px 2px", textAlign: "center" }}>
-                      <p style={{ fontSize: "7px", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase" }}>{lbl as string}</p>
-                      <p style={{ fontSize: "9px", fontWeight: "700", color: "#1e3a8a" }}>{val as string | number}</p>
+                    { label: "Working", val: r.workingDays },
+                    { label: "Present",  val: r.presentDays },
+                    { label: "Absent",   val: r.absentDays },
+                    { label: "Late",     val: r.lateDays },
+                    { label: "OT hrs",   val: (r.overtimeHours || 0).toFixed(1) },
+                  ].map(s => (
+                    <div key={s.label} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "6px", padding: "5px 2px" }}>
+                      <p style={{ fontSize: "6px", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.04em" }}>{s.label}</p>
+                      <p style={{ fontSize: "10px", fontWeight: "700", color: "#1e3a8a", marginTop: "1px" }}>{s.val}</p>
                     </div>
                   ))}
-                </div>
-                {/* Signature */}
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px" }}>
-                  <div>
-                    <div style={{ borderBottom: "1px dotted #94a3b8", width: "90px", height: "18px" }} />
-                    <p style={{ fontSize: "7.5px", color: "#94a3b8", textTransform: "uppercase", marginTop: "2px" }}>Signature</p>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ borderBottom: "1px dotted #94a3b8", width: "80px", height: "18px", display: "flex", alignItems: "flex-end", justifyContent: "flex-end" }}>
-                      <span style={{ fontSize: "8px", color: "#475569" }}>{dateStr}</span>
-                    </div>
-                    <p style={{ fontSize: "7.5px", color: "#94a3b8", textTransform: "uppercase", marginTop: "2px" }}>Date</p>
-                  </div>
                 </div>
               </div>
+
+              {/* ── Signature area ── */}
+              <div style={{ padding: "14px 20px 8px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+                  <div>
+                    <div style={{ borderBottom: "1.5px dotted #94a3b8", minWidth: "100px", height: "18px" }} />
+                    <p style={{ fontSize: "7px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: "3px" }}>Signature</p>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ borderBottom: "1.5px dotted #94a3b8", minWidth: "90px", height: "18px", display: "flex", alignItems: "flex-end", justifyContent: "flex-end" }}>
+                      <span style={{ fontSize: "7.5px", color: "#475569", paddingBottom: "1px" }}>{dateStr}</span>
+                    </div>
+                    <p style={{ fontSize: "7px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: "3px" }}>Date</p>
+                  </div>
+                </div>
+                <div style={{ marginTop: "10px" }}>
+                  <div style={{ borderBottom: "1.5px dotted #94a3b8", minWidth: "100px", height: "18px", display: "inline-block" }} />
+                  <p style={{ fontSize: "7px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: "3px" }}>Paying Authority</p>
+                </div>
+              </div>
+
+              {/* ── Footer ── */}
+              <div style={{ background: "#f8fafc", borderTop: "1px solid #e2e8f0", padding: "6px 20px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "5px", marginBottom: "4px" }}>
+                  <div style={{ width: "5px", height: "5px", background: "#3a9ec2", borderRadius: "50%", flexShrink: 0 }} />
+                  <p style={{ fontSize: "7px", color: "#94a3b8" }}>
+                    <span style={{ fontWeight: "600", color: "#64748b" }}>System Generated</span>
+                  </p>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px", borderTop: "1px dashed #e2e8f0", paddingTop: "4px" }}>
+                  <span style={{ fontSize: "6.5px", color: "#94a3b8" }}>Powered by</span>
+                  <img src={liveuLogo} alt="Live U" style={{ height: "10px", width: "auto", display: "block", opacity: 0.75 }} />
+                  <span style={{ fontSize: "6.5px", color: "#64748b", fontWeight: "600" }}>Live U Pvt Ltd</span>
+                </div>
+              </div>
+
             </div>
           );
         }
