@@ -652,6 +652,7 @@ router.post("/generate", async (req, res) => {
 
       /* ── OT and holiday pay (rules-based) ───────────────── */
       let regularOtHours = 0;
+      let holidayOtHours = 0;
       let holidayOtPay   = 0;
       let offDayOtPay    = 0;
       let regularOtPay   = 0;
@@ -693,7 +694,10 @@ router.post("/generate", async (req, res) => {
           const mult = ruleHolidayOtMult != null
             ? (hType === "statutory" ? Math.max(ruleHolidayOtMult, cfgMult) : ruleHolidayOtMult)
             : cfgMult;
-          if (rawHrs > 0) holidayOtPay += Math.round(rawHrs * hourlyRate * mult);
+          if (rawHrs > 0) {
+            holidayOtHours += rawHrs;
+            holidayOtPay += Math.round(rawHrs * hourlyRate * mult);
+          }
 
         } else if (rec.status === "off_day") {
           /* Off-day worked: full daily rate × offday OT multiplier */
@@ -830,7 +834,7 @@ router.post("/generate", async (req, res) => {
         halfDays: storedHalfDays,
         leaveDays: storedLeaveDays,
         holidayDays,
-        overtimeHours: Math.round(regularOtHours * 100) / 100,
+        overtimeHours: Math.round((regularOtHours + holidayOtHours) * 100) / 100,
         basicSalary,
         transportAllowance: isNightWatcherPayroll ? 0 : transportAllowance,
         lunchIncentive,
@@ -863,6 +867,16 @@ router.post("/generate", async (req, res) => {
       generated.push(record);
     }
 
+    if (generated.length > 0) {
+      const genEmpIds = generated.map(r => r.employeeId);
+      await db.delete(payrollRecords).where(
+        and(
+          eq(payrollRecords.month, month),
+          eq(payrollRecords.year, year),
+          inArray(payrollRecords.employeeId, genEmpIds)
+        )
+      );
+    }
     for (let i = 0; i < generated.length; i += 50) {
       await db.insert(payrollRecords).values(generated.slice(i, i + 50));
     }
