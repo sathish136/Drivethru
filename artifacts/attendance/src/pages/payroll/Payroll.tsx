@@ -1581,7 +1581,7 @@ export default function Payroll() {
             ...(otPay    > 0 ? [{ label: `Add  :  Overtime  (${(r.overtimeHours || 0).toFixed(1)} hrs)`, value: fmtAmt(otPay),    italic: true }] : []),
             ...(holOtPay > 0 ? [{ label: "Add  :  Holiday / Off-Day Pay",                                value: fmtAmt(holOtPay), italic: true }] : []),
             ...(overtime === 0 ? [{ label: "Add  :  Overtime / Holiday Pay", value: "", italic: true }] : []),
-            ...(lunchInc > 0 ? [{ label: "Add  :  Lunch Incentive",         value: fmtAmt(lunchInc), italic: true }] : []),
+            { label: "Add  :  Lunch Incentive", value: lunchInc > 0 ? fmtAmt(lunchInc) : "-", italic: true },
             { label: "Total Earnings",                   value: fmtAmt(totalEarn), borderTop: true },
             { label: isEpfExempt ? "EPF / ETF" : "Recoveries  :  EPF 8%", value: isEpfExempt ? "Exempt" : fmtOrDash(epf8) },
             ...(loans    > 0 ? [{ label: "Loans / Advances",  value: fmtAmt(loans),    indent: true }] : []),
