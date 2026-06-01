@@ -57,6 +57,7 @@ interface PayrollRow {
   lateMinutes?: number | null;
   lunchLateMinutes?: number | null;
   incompleteMinutes?: number | null;
+  offSeasonPayableHours?: number | null;
   employee: {
     id: number;
     employeeId: string;
@@ -145,6 +146,7 @@ export default function PayslipPage() {
 
   const reqHrs     = row.reqHoursPerDay || 0;
   const isNightWatcher = row.workingDays === 15;
+  const isOffSeason    = (row.offSeasonPayableHours ?? 0) > 0 || row.absenceDeduction > 0 && (row.lateDeduction === 0 && row.halfDayDeduction === 0 && row.incompleteDeduction === 0 && row.absentDays === 0);
   const dailyRate  = isNightWatcher
     ? row.basicSalary / 30
     : (row.workingDays > 0 ? row.basicSalary / row.workingDays : 0);
@@ -205,7 +207,7 @@ export default function PayslipPage() {
     ...(housing    > 0 ? [{ label: "  Housing Allowance",   value: fmtAmt(housing),    indent: true }] : []),
     ...(otherAllow > 0 ? [{ label: "  Other Allowances",    value: fmtAmt(otherAllow), indent: true }] : []),
     { label: "Sub Total",               value: fmtAmt(subTotal), italic: true, borderTop: true },
-    { label: "Less  :  No Pay Leave",   value: noPayLeave > 0 ? fmtAmt(noPayLeave) : "-", italic: true },
+    { label: isOffSeason ? "Less  :  Off-Season Adjustment" : "Less  :  No Pay Leave", value: noPayLeave > 0 ? fmtAmt(noPayLeave) : "-", italic: true },
     ...(halfDayDed > 0  ? [{ label: "Less  :  Half Day Deduction",                     value: fmtAmt(halfDayDed),    italic: true }] : []),
     ...(lateDeduction > 0 ? [{ label: `Less  :  Late Arrival${lateDayLabel}`,           value: fmtAmt(lateDeduction), italic: true }] : []),
     ...(lunchLateDed > 0  ? [{ label: "Less  :  Lunch Return Late",                     value: fmtAmt(lunchLateDed),  italic: true }] : []),
@@ -258,9 +260,20 @@ export default function PayslipPage() {
       const leaveDaysNW  = Math.max(0, 15 - workedShifts);
       formulaRows.push({ label: "Leave Deduction", formula: `15 shifts − ${workedShifts} worked = ${leaveDaysNW} leave days × Rs.${dailyRate.toFixed(3)}`, result: `− Rs.${noPayLeave.toLocaleString()}`, deduction: true });
       formulaRows.push({ label: "Salary After Deduction", formula: `Rs.${row.basicSalary.toLocaleString()} − Rs.${noPayLeave.toLocaleString()}`, result: `Rs.${totalForEPF.toLocaleString()}`, highlight: true });
+    } else if (isOffSeason) {
+      const payHrs      = row.offSeasonPayableHours ?? 0;
+      const earnedBasic = Math.round(row.basicSalary - noPayLeave);
+      formulaRows.push({ label: "Off-Season Payable Hours", formula: `≥ 8 hrs punched → full day  |  < 8 hrs → (worked − 1h lunch) × hourly rate`, result: `${payHrs.toFixed(1)} hrs`, highlight: true });
+      formulaRows.push({ label: "Off-Season Earned Basic", formula: `${payHrs.toFixed(1)} hrs × Rs.${hourlyRate.toFixed(2)} / hr`, result: `Rs.${earnedBasic.toLocaleString()}`, highlight: true });
+      formulaRows.push({ label: "Off-Season Adjustment", formula: `Rs.${row.basicSalary.toLocaleString()} (contracted) − Rs.${earnedBasic.toLocaleString()} (earned) = Rs.${noPayLeave.toLocaleString()}`, result: `− Rs.${noPayLeave.toLocaleString()}`, deduction: true });
     } else {
       formulaRows.push({ label: "Absence Deduction", formula: `${row.absentDays} absent day${row.absentDays !== 1 ? "s" : ""} × Rs.${dailyRate.toFixed(2)} / day`, result: `− Rs.${noPayLeave.toLocaleString()}`, deduction: true });
     }
+  } else if (isOffSeason) {
+    /* Zero adjustment = all days fully paid (all days had ≥ 8 hrs) */
+    const payHrs = row.offSeasonPayableHours ?? 0;
+    formulaRows.push({ label: "Off-Season Payable Hours", formula: `≥ 8 hrs punched → full day  |  < 8 hrs → (worked − 1h lunch) × hourly rate`, result: `${payHrs.toFixed(1)} hrs`, highlight: true });
+    formulaRows.push({ label: "Off-Season Earned Basic", formula: `${payHrs.toFixed(1)} hrs × Rs.${hourlyRate.toFixed(2)} / hr = full salary`, result: `Rs.${row.basicSalary.toLocaleString()}`, highlight: true });
   }
   if (halfDayDed > 0) formulaRows.push({ label: "Half-Day Deduction", formula: `${row.halfDays} half-day${row.halfDays !== 1 ? "s" : ""} × (Rs.${dailyRate.toFixed(2)} ÷ 2)`, result: `− Rs.${halfDayDed.toLocaleString()}`, deduction: true, highlight: true });
   if (lateDeduction > 0 && (row.lateMinutes ?? 0) > 0) formulaRows.push({ label: "Late Arrival", formula: `${Math.round(row.lateMinutes!)} late min × Rs.${minuteRate.toFixed(4)} / min`, result: `− Rs.${lateDeduction.toLocaleString()}`, deduction: true });

@@ -58,6 +58,7 @@ interface PayrollRow {
   loanDeduction: number;
   totalDeductions: number;
   netSalary: number;
+  offSeasonPayableHours?: number | null;
   status: PayStatus;
   generatedAt: string;
   approvedAt?: string;
@@ -163,7 +164,7 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
     { label: "Basic Salary",            value: fmtAmt(row.basicSalary) },
     ...(allowances > 0 ? [{ label: "Allowances", value: fmtAmt(allowances) }] : [{ label: "Holiday Pay", value: "" }]),
     { label: "Sub Total",               value: fmtAmt(subTotal), italic: true, borderTop: true },
-    { label: "Less  :  No Pay Leave",   value: noPayLeave > 0 ? fmtAmt(noPayLeave) : "-", italic: true },
+    { label: (row.offSeasonPayableHours ?? 0) > 0 ? "Less  :  Off-Season Adj." : "Less  :  No Pay Leave", value: noPayLeave > 0 ? fmtAmt(noPayLeave) : "-", italic: true },
     ...(lateDeduction > 0 ? [{ label: `Less  :  Late Arrival${lateDayLabel}`, value: fmtAmt(lateDeduction), italic: true }] : []),
     ...(lunchLateDed > 0 ? [{ label: "Less  :  Lunch Return Late", value: fmtAmt(lunchLateDed), italic: true }] : []),
     { label: "Total for EPF / ETF",     value: fmtAmt(totalForEPF), bold: true },
@@ -1564,6 +1565,7 @@ export default function Payroll() {
           const dateStr      = `${String(lastDay.getDate()).padStart(2,"0")}-${String(r.month).padStart(2,"0")}-${r.year}`;
           const isEpfExempt  = epf8 === 0 && r.grossSalary > 10000;
           const lateDayLabel = r.lateDays > 0 ? ` (${r.lateDays}d)` : "";
+          const isOffSeasonSlip = (r.offSeasonPayableHours ?? 0) > 0;
 
           type SR = { label: string; value?: string; indent?: boolean; bold?: boolean; italic?: boolean; borderTop?: boolean; borderBottom?: boolean };
           const slipRows: SR[] = [
@@ -1572,7 +1574,7 @@ export default function Payroll() {
             ...(housing    > 0 ? [{ label: "  Housing Allowance",   value: fmtAmt(housing),    indent: true }] : []),
             ...(otherAllow > 0 ? [{ label: "  Other Allowances",    value: fmtAmt(otherAllow), indent: true }] : []),
             { label: "Sub Total",                        value: fmtAmt(subTotal), italic: true, borderTop: true },
-            { label: "Less  :  No Pay Leave",            value: noPayLeave > 0 ? fmtAmt(noPayLeave) : "-", italic: true },
+            { label: isOffSeasonSlip ? "Less  :  Off-Season Adj." : "Less  :  No Pay Leave", value: noPayLeave > 0 ? fmtAmt(noPayLeave) : "-", italic: true },
             ...(halfDayDed   > 0 ? [{ label: "Less  :  Half Day Deduction",          value: fmtAmt(halfDayDed),   italic: true }] : []),
             ...(lateDed      > 0 ? [{ label: `Less  :  Late Arrival${lateDayLabel}`, value: fmtAmt(lateDed),      italic: true }] : []),
             ...(lunchLateDed > 0 ? [{ label: "Less  :  Lunch Return Late",           value: fmtAmt(lunchLateDed), italic: true }] : []),

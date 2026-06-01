@@ -582,6 +582,31 @@ router.post("/generate", async (req, res) => {
       /* Night Watchers are explicitly excluded from off-season — they operate year-round */
       const isOffSeason = !isNightWatcherPayroll && cfg.offSeasonEnabled && offSeasonMonthsList.includes(Number(month));
 
+      /* ── Off-season earned basic (hours-based) ───────────────────────
+         Rule:  ≥ 8 hrs punched  → pay full dailyRate
+                0 < hrs < 8      → pay (totalHours − 1) × hourlyRate  (1 hr lunch deducted)
+                no punch / ≤ 1h  → Rs. 0
+         Holiday/off-day records are excluded here — their pay is covered by holidayOtPay/offDayOtPay. */
+      let offSeasonEarnedBasic = basicSalary; // non-off-season: full salary
+      let offSeasonPayableHrs  = 0;
+      if (isOffSeason) {
+        offSeasonEarnedBasic = 0;
+        for (const rec of empAtt) {
+          const h = rec.totalHours ?? 0;
+          if (rec.status === "off_day") continue;
+          if (rec.status === "holiday" || (holidayDateMap.has(rec.date) && h > 0)) continue;
+          if (h >= 8) {
+            offSeasonEarnedBasic += dailyRate;
+            offSeasonPayableHrs  += 8;
+          } else if (h > 1) {
+            offSeasonEarnedBasic += (h - 1) * hourlyRate;
+            offSeasonPayableHrs  += (h - 1);
+          }
+        }
+        offSeasonEarnedBasic = Math.round(offSeasonEarnedBasic);
+        offSeasonPayableHrs  = Math.round(offSeasonPayableHrs * 100) / 100;
+      }
+
       /* ── STANDARD deductions ────────────────────────────────────────── */
       /* Morning late: applies to all employees EXCEPT during off-season (non-NW).
          Night Watcher late deductions always apply (year-round policy). */
@@ -597,8 +622,12 @@ router.post("/generate", async (req, res) => {
       const lunchLateDeduction = Math.round(lunchLateMinutes * minuteRate);
 
       /* ── Absence deduction ─────────────────────────────── */
-      /* Off season: full salary paid even if punch records are missing — no absence deduction */
-      const absenceDeduction = (isNightWatcherPayroll || isOffSeason) ? 0 : Math.round(dailyRate * absentDays);
+      /* Off-season: difference between contractual basic and hours-earned basic stored here
+         so the standard gross formula (basic − absenceDeduction + allowances + OT) stays valid.
+         NW: no absence deduction (handled via nwLeaveDeduction separately). */
+      const absenceDeduction = isNightWatcherPayroll ? 0
+        : isOffSeason ? Math.max(0, Math.round(basicSalary - offSeasonEarnedBasic))
+        : Math.round(dailyRate * absentDays);
 
       /* ── Half-day deduction ────────────────────────────── */
       const halfDayDeduction = (isNightWatcherPayroll || isOffSeason) ? 0 : Math.round(halfDaysCount * (dailyRate / 2));
@@ -732,6 +761,8 @@ router.post("/generate", async (req, res) => {
        */
       const epfBase = isNightWatcherPayroll
         ? Math.max(0, nwSalaryAfterDeduction)
+        : isOffSeason
+        ? Math.max(0, offSeasonEarnedBasic)
         : Math.max(0, grossSalary);
       if (structData) {
         epfEmployee = Math.round(epfBase * 0.08);
@@ -825,6 +856,7 @@ router.post("/generate", async (req, res) => {
         lateMinutes: morningLateMinutes,
         lunchLateMinutes,
         incompleteMinutes: totalIncompleteMinutes,
+        offSeasonPayableHours: offSeasonPayableHrs,
         status: "draft" as const,
         generatedAt: new Date(),
       };
