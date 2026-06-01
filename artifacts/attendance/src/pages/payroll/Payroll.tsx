@@ -1768,9 +1768,19 @@ export default function Payroll() {
             <style>{`
               @media print {
                 @page { size: A4 landscape; margin: 6mm; }
-                body > *:not([data-print-root]) { display: none !important; }
-                .print\\:hidden { display: none !important; }
-                #envelope-print-area { padding: 0 !important; margin: 0 !important; }
+                body * { visibility: hidden !important; }
+                #envelope-print-area,
+                #envelope-print-area * { visibility: visible !important; }
+                #envelope-print-area {
+                  position: fixed !important;
+                  top: 0 !important;
+                  left: 0 !important;
+                  width: 100% !important;
+                  padding: 0 !important;
+                  margin: 0 !important;
+                  background: white !important;
+                  overflow: visible !important;
+                }
                 #envelope-print-area > * { page-break-inside: avoid; margin-bottom: 4mm; }
               }
             `}</style>
