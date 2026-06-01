@@ -87,8 +87,12 @@ router.get("/", async (req, res) => {
     const { month, year, branchId, status } = req.query as Record<string, string>;
     if (!month || !year) return res.status(400).json({ message: "month and year required" });
 
-    const assignedEmployeeRows = await db.select({ employeeId: employeeSalaryAssignments.employeeId }).from(employeeSalaryAssignments);
+    const [assignedEmployeeRows, psRow] = await Promise.all([
+      db.select({ employeeId: employeeSalaryAssignments.employeeId }).from(employeeSalaryAssignments),
+      db.select().from(payrollSettings).then(rows => rows[0]),
+    ]);
     const assignedEmployeeIds = new Set(assignedEmployeeRows.map(r => r.employeeId));
+    const lunchPerDay = psRow?.lunchIncentivePerDay ?? 125;
 
     const rows = await db.select({
       payroll: payrollRecords,
@@ -113,7 +117,12 @@ router.get("/", async (req, res) => {
     if (branchId) result = result.filter(r => r.payroll.branchId === parseInt(branchId));
     if (status) result = result.filter(r => r.payroll.status === status);
 
-    res.json(result.map(r => ({ ...r.payroll, employee: r.emp })));
+    res.json(result.map(r => {
+      const computedLunchIncentive = r.payroll.lunchIncentive && r.payroll.lunchIncentive > 0
+        ? 0
+        : Math.round(lunchPerDay * ((r.payroll.presentDays || 0) + ((r.payroll as any).halfDays || 0) * 0.5));
+      return { ...r.payroll, employee: r.emp, computedLunchIncentive };
+    }));
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: "Failed to fetch payroll" });

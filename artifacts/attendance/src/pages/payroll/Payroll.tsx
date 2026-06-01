@@ -1578,7 +1578,7 @@ export default function Payroll() {
             ...(lunchLateDed > 0 ? [{ label: "Less  :  Lunch Return Late",           value: fmtAmt(lunchLateDed), italic: true }] : []),
             ...(earlyExitDed > 0 ? [{ label: "Less  :  Early Exit / Short Hours",   value: fmtAmt(earlyExitDed), italic: true }] : []),
             { label: "Total for EPF / ETF",              value: fmtAmt(totalForEPF), bold: true },
-            ...(otPay    > 0 ? [{ label: `Add  :  Overtime  (${(r.overtimeHours || 0).toFixed(1)} hrs)`, value: fmtAmt(otPay),    italic: true }] : []),
+            ...(otPay    > 0 ? [{ label: `Add  :  Overtime  (${(r.overtimeHours || 0) % 1 === 0 ? Math.round(r.overtimeHours || 0) : (r.overtimeHours || 0).toFixed(1)}hrs)`, value: fmtAmt(otPay), italic: true }] : []),
             ...(holOtPay > 0 ? [{ label: "Add  :  Holiday / Off-Day Pay",                                value: fmtAmt(holOtPay), italic: true }] : []),
             ...(overtime === 0 ? [{ label: "Add  :  Overtime / Holiday Pay", value: "", italic: true }] : []),
             { label: "Add  :  Lunch Incentive", value: lunchInc > 0 ? fmtAmt(lunchInc) : "-", italic: true },
