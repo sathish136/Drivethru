@@ -18,6 +18,7 @@ async function runStartupMigrations() {
     `ALTER TABLE payroll_settings ADD COLUMN IF NOT EXISTS off_season_months text NOT NULL DEFAULT '[5,6,7,8,9]'`,
     `ALTER TABLE payroll_settings ADD COLUMN IF NOT EXISTS lunch_incentive_per_day real NOT NULL DEFAULT 125`,
     `ALTER TABLE shifts ADD COLUMN IF NOT EXISTS weekly_schedule text`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS off_season_payable_hours real NOT NULL DEFAULT 0`,
   ];
   for (const m of migrations) {
     try {
