@@ -644,7 +644,15 @@ router.post("/generate", async (req, res) => {
         const rawHrs = rec.totalHours ?? 0;
         const recInOffSeason = isOffSeason;
 
-        if (rec.status === "holiday") {
+        /* A record is treated as a holiday if either:
+           (a) the stored status is "holiday", OR
+           (b) the date falls on a known holiday AND the employee has actual punch hours.
+           Case (b) catches off-season records that are stored as "present" but fall on a
+           public/poya/statutory holiday — those must still earn holiday OT pay. */
+        const recDateIsHoliday = holidayDateMap.has(rec.date);
+        const treatAsHoliday   = rec.status === "holiday" || (recDateIsHoliday && rawHrs > 0 && rec.status !== "off_day");
+
+        if (treatAsHoliday) {
           /* Holiday pay: hours worked × hourly rate × holiday multiplier
              Rule-level holidayOtMultiplier overrides payroll-settings multiplier
              for the employee's department (except statutory stays at max of both). */
