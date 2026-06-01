@@ -1524,17 +1524,157 @@ export default function Payroll() {
       {showEnvelopePrint && (() => {
         const selectedRows = filtered.filter(r => selected.has(r.id));
         const monthLabel = `${MONTHS[month - 1]} ${year}`;
+
+        const fa = (v: number) => v > 0 ? v.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-";
+        const fw = (v: number) => v.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        function renderPayslipCard(r: PayrollRow, copyLabel: "OFFICE COPY" | "EMPLOYEE COPY") {
+          const transport     = r.transportAllowance || 0;
+          const housing       = r.housingAllowance || 0;
+          const otherAllow    = r.otherAllowances || 0;
+          const allowances    = transport + housing + otherAllow;
+          const subTotal      = r.basicSalary + allowances;
+          const noPayLeave    = r.absenceDeduction || 0;
+          const lateDed       = r.lateDeduction || 0;
+          const halfDayDed    = (r as any).halfDayDeduction || 0;
+          const llDed         = r.lunchLateDeduction || 0;
+          const earlyExitDed  = (r as any).incompleteDeduction || 0;
+          const totalForEPF   = subTotal - noPayLeave - lateDed - halfDayDed - llDed - earlyExitDed;
+          const overtimePay   = (r.overtimePay || 0) + ((r as any).holidayOtPay || 0);
+          const lunchInc      = (r as any).lunchIncentive || (r as any).computedLunchIncentive || 0;
+          const totalEarn     = totalForEPF + overtimePay + lunchInc;
+          const epf8          = r.epfEmployee || 0;
+          const loans         = r.loanDeduction || 0;
+          const otherDeds     = r.otherDeductions || 0;
+          const apit          = r.apit || 0;
+          const totalRec      = epf8 + loans + otherDeds + apit;
+          const balancePay    = totalEarn - totalRec;
+          const epf12         = r.epfEmployer || 0;
+          const etf3          = r.etfEmployer || 0;
+          const epfNo         = r.employee.epfNumber || r.employee.employeeId;
+          const isOffice      = copyLabel === "OFFICE COPY";
+          const lastDay       = new Date(r.year, r.month, 0);
+          const dateStr       = `${String(lastDay.getDate()).padStart(2,"0")}-${String(r.month).padStart(2,"0")}-${r.year}`;
+
+          const rows: [string, string, boolean, boolean?][] = [
+            ["Basic Salary", fw(r.basicSalary), false],
+            ...(transport > 0  ? [["  Transport Allow.", fa(transport),  false, true] as [string,string,boolean,boolean?]] : []),
+            ...(housing > 0    ? [["  Housing Allow.",   fa(housing),    false, true] as [string,string,boolean,boolean?]] : []),
+            ...(otherAllow > 0 ? [["  Other Allow.",     fa(otherAllow), false, true] as [string,string,boolean,boolean?]] : []),
+            ["Sub Total", fw(subTotal), false, false],
+            ...(noPayLeave  > 0 ? [["Less: No Pay Leave", fa(noPayLeave),  false] as [string,string,boolean]] : []),
+            ...(halfDayDed  > 0 ? [["Less: Half Day",     fa(halfDayDed), false] as [string,string,boolean]] : []),
+            ...(lateDed     > 0 ? [["Less: Late Arrival", fa(lateDed),    false] as [string,string,boolean]] : []),
+            ...(llDed       > 0 ? [["Less: Lunch Late",   fa(llDed),      false] as [string,string,boolean]] : []),
+            ...(earlyExitDed>0  ? [["Less: Short Hours",  fa(earlyExitDed),false] as [string,string,boolean]] : []),
+            ["Total for EPF / ETF", fw(totalForEPF), true],
+            ["Add: OT / Holiday Pay", overtimePay > 0 ? fa(overtimePay) : "-", false],
+            ["Add: Lunch Incentive",  lunchInc > 0 ? fa(lunchInc) : "-", false],
+            ["Total Earnings", fw(totalEarn), true],
+            ["Recoveries: EPF 8%", fa(epf8), false],
+            ...(loans > 0    ? [["  Advance / Loan",    fa(loans),    false, true] as [string,string,boolean,boolean?]] : []),
+            ...(otherDeds> 0 ? [["  Other Deductions",  fa(otherDeds),false, true] as [string,string,boolean,boolean?]] : []),
+            ...(apit > 0     ? [["  APIT",              fa(apit),     false, true] as [string,string,boolean,boolean?]] : []),
+            ["Less: Total Recoveries", fa(totalRec), false],
+          ];
+
+          return (
+            <div style={{ background: "white", borderRadius: "10px", overflow: "hidden", border: "1px solid #e2e8f0", display: "flex", flexDirection: "column" }}>
+              {/* Header */}
+              <div style={{ background: "linear-gradient(135deg,#0f172a,#1e3a8a)", padding: "9px 12px 7px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <img src={drivethruLogo} alt="" style={{ height: "22px" }} />
+                    <div>
+                      <p style={{ color: "#fff", fontWeight: "700", fontSize: "9.5px" }}>Drivethru (Pvt) Ltd</p>
+                      <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "8px" }}>Pay Sheet — {monthLabel}</p>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ background: isOffice ? "rgba(255,255,255,0.18)" : "rgba(251,191,36,0.3)", borderRadius: "10px", padding: "2px 8px", marginBottom: "2px", display: "inline-block" }}>
+                      <span style={{ color: isOffice ? "#fff" : "#fde68a", fontWeight: "700", fontSize: "8px", letterSpacing: "0.06em" }}>{copyLabel}</span>
+                    </div>
+                    <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "7.5px" }}>EPF: {epfNo}</p>
+                  </div>
+                </div>
+                <div style={{ marginTop: "5px", background: "rgba(255,255,255,0.1)", borderRadius: "5px", padding: "4px 8px" }}>
+                  <p style={{ color: "#fff", fontWeight: "700", fontSize: "10.5px" }}>{r.employee.fullName}</p>
+                  <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "8px" }}>{r.employee.designation} · ID: {r.employee.employeeId}</p>
+                </div>
+              </div>
+              {/* Body */}
+              <div style={{ padding: "7px 12px", flex: 1 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "9.5px" }}>
+                  <tbody>
+                    {rows.map(([label, val, bold, indent], i) => (
+                      <tr key={i} style={{ borderBottom: "1px solid #f1f5f9", background: bold ? "#eff6ff" : "transparent" }}>
+                        <td style={{ padding: "2.5px 4px", paddingLeft: indent ? "12px" : "4px", color: bold ? "#1e3a8a" : indent ? "#64748b" : "#475569", fontWeight: bold ? "700" : "400", fontSize: indent ? "8.5px" : "9.5px" }}>{label}</td>
+                        <td style={{ padding: "2.5px 4px", textAlign: "right", color: bold ? "#1e3a8a" : indent ? "#64748b" : "#374151", fontWeight: bold ? "700" : "400", whiteSpace: "nowrap", fontSize: indent ? "8.5px" : "9.5px" }}>{val}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {/* Balance */}
+                <div style={{ background: "#1e3a8a", borderRadius: "6px", padding: "5px 10px", marginTop: "5px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "9.5px", fontWeight: "700", color: "#fff" }}>Balance Received</span>
+                  <span style={{ fontSize: "13px", fontWeight: "800", color: "#fff" }}>Rs.{fw(balancePay)}</span>
+                </div>
+                {/* EPF/ETF strip */}
+                <div style={{ display: "flex", gap: "4px", marginTop: "4px" }}>
+                  {[["EPF 12%", epf12], ["EPF 8%", epf8], ["ETF 3%", etf3]].map(([lbl, val]) => (
+                    <div key={lbl as string} style={{ flex: 1, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "5px", padding: "3px 4px", textAlign: "center" }}>
+                      <p style={{ fontSize: "7.5px", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase" }}>{lbl as string}</p>
+                      <p style={{ fontSize: "9.5px", fontWeight: "700", color: "#334155" }}>{fa(val as number)}</p>
+                    </div>
+                  ))}
+                </div>
+                {/* Attendance row */}
+                <div style={{ display: "flex", gap: "4px", marginTop: "4px" }}>
+                  {[
+                    ["Work", r.workingDays],
+                    ["Present", r.presentDays],
+                    ["Absent", r.absentDays],
+                    ["Late", r.lateDays],
+                    ["OT hrs", (r.overtimeHours || 0).toFixed(1)],
+                  ].map(([lbl, val]) => (
+                    <div key={lbl as string} style={{ flex: 1, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "5px", padding: "3px 2px", textAlign: "center" }}>
+                      <p style={{ fontSize: "7px", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase" }}>{lbl as string}</p>
+                      <p style={{ fontSize: "9px", fontWeight: "700", color: "#1e3a8a" }}>{val as string | number}</p>
+                    </div>
+                  ))}
+                </div>
+                {/* Signature */}
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px" }}>
+                  <div>
+                    <div style={{ borderBottom: "1px dotted #94a3b8", width: "90px", height: "18px" }} />
+                    <p style={{ fontSize: "7.5px", color: "#94a3b8", textTransform: "uppercase", marginTop: "2px" }}>Signature</p>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ borderBottom: "1px dotted #94a3b8", width: "80px", height: "18px", display: "flex", alignItems: "flex-end", justifyContent: "flex-end" }}>
+                      <span style={{ fontSize: "8px", color: "#475569" }}>{dateStr}</span>
+                    </div>
+                    <p style={{ fontSize: "7.5px", color: "#94a3b8", textTransform: "uppercase", marginTop: "2px" }}>Date</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
         return (
           <div className="fixed inset-0 z-50 bg-slate-700/80 overflow-auto" style={{ fontFamily: "'Inter','Segoe UI',Arial,sans-serif" }}>
             {/* Toolbar */}
             <div className="print:hidden sticky top-0 bg-white border-b shadow-sm px-4 py-2 flex items-center gap-3 z-10">
-              <span className="text-sm font-semibold text-slate-700">Print Payslips — {selectedRows.length} employees — {monthLabel}</span>
+              <span className="text-sm font-semibold text-slate-700">
+                Print Payslips — {selectedRows.length} employees — {monthLabel}
+              </span>
+              <span className="text-xs text-slate-400 print:hidden">(Office Copy + Employee Copy per employee)</span>
               <div className="flex items-center gap-2 ml-auto">
                 <button
                   onClick={() => window.print()}
                   className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold"
                 >
-                  <Printer className="w-3.5 h-3.5" /> Print
+                  <Printer className="w-3.5 h-3.5" /> Print All
                 </button>
                 <button
                   onClick={() => setShowEnvelopePrint(false)}
@@ -1544,102 +1684,28 @@ export default function Payroll() {
                 </button>
               </div>
             </div>
-            {/* Payslip grid */}
-            <div className="p-4 grid grid-cols-2 gap-4 max-w-[900px] mx-auto" id="envelope-print-area">
-              {selectedRows.map(r => {
-                const allowances  = (r.transportAllowance || 0) + (r.housingAllowance || 0) + (r.otherAllowances || 0);
-                const subTotal    = r.basicSalary + allowances;
-                const noPayLeave  = r.absenceDeduction || 0;
-                const lateDed     = r.lateDeduction || 0;
-                const halfDayDed  = (r as any).halfDayDeduction || 0;
-                const llDed       = r.lunchLateDeduction || 0;
-                const totalForEPF = subTotal - noPayLeave - lateDed - halfDayDed - llDed;
-                const overtime    = (r.overtimePay || 0) + (r.holidayOtPay || 0);
-                const totalEarn   = totalForEPF + overtime;
-                const epf8        = r.epfEmployee || 0;
-                const loans       = r.loanDeduction || 0;
-                const otherDeds   = r.otherDeductions || 0;
-                const apit        = r.apit || 0;
-                const balancePay  = totalEarn - epf8 - loans - otherDeds - apit;
-                const epf12       = r.epfEmployer || 0;
-                const etf3        = r.etfEmployer || 0;
-                const epfNo       = r.employee.epfNumber || r.employee.employeeId;
-                const fa = (v: number) => v > 0 ? v.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-";
-                const fw = (v: number) => v.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                return (
-                  <div key={r.id} className="bg-white rounded-lg overflow-hidden shadow border border-slate-200" style={{ pageBreakInside: "avoid" }}>
-                    {/* Header */}
-                    <div style={{ background: "linear-gradient(135deg,#0f172a,#1e3a8a)", padding: "10px 14px 8px" }}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <img src={drivethruLogo} alt="" style={{ height: "24px" }} />
-                          <div>
-                            <p style={{ color: "#fff", fontWeight: "700", fontSize: "10px" }}>Drivethru (Pvt) Ltd</p>
-                            <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "9px" }}>Employee Pay Sheet — {monthLabel}</p>
-                          </div>
-                        </div>
-                        <div style={{ textAlign: "right" }}>
-                          <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "8px" }}>EPF No.</p>
-                          <p style={{ color: "#fff", fontWeight: "700", fontSize: "11px" }}>{epfNo}</p>
-                        </div>
-                      </div>
-                      <div style={{ marginTop: "6px", background: "rgba(255,255,255,0.1)", borderRadius: "6px", padding: "4px 10px" }}>
-                        <p style={{ color: "#fff", fontWeight: "700", fontSize: "11px" }}>{r.employee.fullName}</p>
-                        <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "9px" }}>{r.employee.designation} · ID: {r.employee.employeeId}</p>
-                      </div>
-                    </div>
-                    {/* Body */}
-                    <div style={{ padding: "8px 14px" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
-                        <tbody>
-                          {[
-                            ["Basic Salary", fw(r.basicSalary), false],
-                            ...(allowances > 0 ? [["Allowances", fw(allowances), false]] : []),
-                            ["Sub Total", fw(subTotal), true],
-                            ...(noPayLeave > 0 ? [["Less: Absence", fa(noPayLeave), false]] : []),
-                            ...(lateDed > 0 ? [["Less: Late", fa(lateDed), false]] : []),
-                            ...(halfDayDed > 0 ? [["Less: Half Day", fa(halfDayDed), false]] : []),
-                            ["Total for EPF", fw(totalForEPF), true],
-                            ...(overtime > 0 ? [["Add: OT/Holiday Pay", fa(overtime), false]] : []),
-                            ["Total Earnings", fw(totalEarn), true],
-                            ["EPF 8%", fa(epf8), false],
-                            ...(loans > 0 ? [["Advance / Loan", fa(loans), false]] : []),
-                            ...(otherDeds > 0 ? [["Other Deductions", fa(otherDeds), false]] : []),
-                            ...(apit > 0 ? [["APIT", fa(apit), false]] : []),
-                          ].map(([label, val, bold], i) => (
-                            <tr key={i} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                              <td style={{ padding: "3px 4px", color: bold ? "#1e3a8a" : "#475569", fontWeight: bold ? "700" : "400" }}>{label as string}</td>
-                              <td style={{ padding: "3px 4px", textAlign: "right", color: bold ? "#1e3a8a" : "#374151", fontWeight: bold ? "700" : "400" }}>{val as string}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      {/* Balance */}
-                      <div style={{ background: "#eff6ff", borderRadius: "6px", padding: "6px 10px", marginTop: "6px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontSize: "10px", fontWeight: "700", color: "#1e3a8a" }}>Balance Received</span>
-                        <span style={{ fontSize: "13px", fontWeight: "800", color: "#1e3a8a" }}>Rs.{fw(balancePay)}</span>
-                      </div>
-                      {/* EPF/ETF strip */}
-                      <div style={{ display: "flex", gap: "6px", marginTop: "5px" }}>
-                        {[["EPF 12%", epf12], ["EPF 8%", epf8], ["ETF 3%", etf3]].map(([lbl, val]) => (
-                          <div key={lbl as string} style={{ flex: 1, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "5px", padding: "3px 6px", textAlign: "center" }}>
-                            <p style={{ fontSize: "8px", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase" }}>{lbl as string}</p>
-                            <p style={{ fontSize: "10px", fontWeight: "700", color: "#334155" }}>{fa(val as number)}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+            {/* One row per employee: Office Copy | Employee Copy */}
+            <div className="p-4 space-y-3 max-w-[920px] mx-auto" id="envelope-print-area">
+              {selectedRows.map(r => (
+                <div key={r.id} style={{ display: "grid", gridTemplateColumns: "1fr 12px 1fr", gap: "0", pageBreakInside: "avoid", alignItems: "stretch" }}>
+                  {renderPayslipCard(r, "OFFICE COPY")}
+                  {/* Cut separator */}
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                    <div style={{ flex: 1, borderLeft: "2px dashed #cbd5e1" }} />
+                    <span style={{ fontSize: "9px", color: "#94a3b8", writingMode: "vertical-rl", textTransform: "uppercase", letterSpacing: "0.08em", userSelect: "none" }}>✂</span>
+                    <div style={{ flex: 1, borderLeft: "2px dashed #cbd5e1" }} />
                   </div>
-                );
-              })}
+                  {renderPayslipCard(r, "EMPLOYEE COPY")}
+                </div>
+              ))}
             </div>
             <style>{`
               @media print {
-                @page { size: A4; margin: 8mm; }
+                @page { size: A4 landscape; margin: 6mm; }
                 body > *:not([data-print-root]) { display: none !important; }
                 .print\\:hidden { display: none !important; }
-                #envelope-print-area { display: grid !important; grid-template-columns: 1fr 1fr; gap: 6mm; max-width: 100%; margin: 0; padding: 0; }
-                #envelope-print-area > * { box-shadow: none !important; border: 1px solid #cbd5e1 !important; page-break-inside: avoid; }
+                #envelope-print-area { padding: 0 !important; margin: 0 !important; }
+                #envelope-print-area > * { page-break-inside: avoid; margin-bottom: 4mm; }
               }
             `}</style>
           </div>
