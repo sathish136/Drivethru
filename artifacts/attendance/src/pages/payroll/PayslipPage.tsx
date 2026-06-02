@@ -289,7 +289,16 @@ export default function PayslipPage() {
     const mult = otMultiplier != null ? otMultiplier.toFixed(2) : "×";
     formulaRows.push({ label: "Overtime Pay", formula: `${row.overtimeHours.toFixed(2)} OT hrs × Rs.${hourlyRate.toFixed(2)}/hr × ${mult}`, result: `+ Rs.${(row.overtimePay || 0).toLocaleString()}`, highlight: true });
   }
-  if ((row.holidayOtPay || 0) > 0) formulaRows.push({ label: "Holiday / Off-Day Pay", formula: "Hours worked × hourly rate × holiday multiplier", result: `+ Rs.${(row.holidayOtPay || 0).toLocaleString()}` });
+  if ((row.holidayOtPay || 0) > 0) {
+    const holOtHrs = (row.overtimePay || 0) === 0 ? (row.overtimeHours || 0) : 0;
+    const computedMult = holOtHrs > 0 && hourlyRate > 0
+      ? ((row.holidayOtPay || 0) / (holOtHrs * hourlyRate)).toFixed(2)
+      : null;
+    const holFormula = holOtHrs > 0 && computedMult
+      ? `${holOtHrs.toFixed(1)} OT hrs × Rs.${hourlyRate.toFixed(2)}/hr × ${computedMult}`
+      : "Hours worked × hourly rate × holiday multiplier";
+    formulaRows.push({ label: "Holiday / Off-Day Pay", formula: holFormula, result: `+ Rs.${(row.holidayOtPay || 0).toLocaleString()}`, highlight: true });
+  }
 
   if (isEpfEtfExempt) {
     formulaRows.push({ label: "EPF / ETF", formula: "Employee exempt — no statutory contributions deducted or contributed", result: "Exempt", highlight: true });
