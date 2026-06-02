@@ -217,7 +217,12 @@ export default function PayslipPage() {
       ? [{ label: `Add  :  Overtime  (${(row.overtimeHours || 0).toFixed(1)} hrs)`, value: fmtAmt(row.overtimePay || 0), italic: true }]
       : []),
     ...((row.holidayOtPay || 0) > 0
-      ? [{ label: "Add  :  Holiday / Off-Day Pay", value: fmtAmt(row.holidayOtPay || 0), italic: true }]
+      ? [{
+          label: (row.overtimePay || 0) === 0 && (row.overtimeHours || 0) > 0
+            ? `Add  :  Holiday / Off-Day Pay  (${(row.overtimeHours || 0).toFixed(1)} hrs)`
+            : "Add  :  Holiday / Off-Day Pay",
+          value: fmtAmt(row.holidayOtPay || 0), italic: true,
+        }]
       : []),
     ...(overtime === 0 ? [{ label: "Add  :  Overtime / Holiday Pay", value: "", italic: true }] : []),
     { label: "Total Earnings",          value: fmtAmt(totalEarnings), borderTop: true },
