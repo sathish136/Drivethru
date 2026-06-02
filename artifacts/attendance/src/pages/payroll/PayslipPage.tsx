@@ -291,11 +291,10 @@ export default function PayslipPage() {
   }
   if ((row.holidayOtPay || 0) > 0) {
     const holOtHrs = (row.overtimePay || 0) === 0 ? (row.overtimeHours || 0) : 0;
-    const computedMult = holOtHrs > 0 && hourlyRate > 0
-      ? ((row.holidayOtPay || 0) / (holOtHrs * hourlyRate)).toFixed(2)
-      : null;
-    const holFormula = holOtHrs > 0 && computedMult
-      ? `${holOtHrs.toFixed(1)} OT hrs × Rs.${hourlyRate.toFixed(2)}/hr × ${computedMult}`
+    const holFormula = holOtHrs > 0 && hourlyRate > 0
+      ? isNightWatcher
+        ? `${holOtHrs.toFixed(1)} OT hrs × Rs.${hourlyRate.toFixed(2)}/hr × 1.5  ⚠ Regenerate to correct (old record has bug)`
+        : `${holOtHrs.toFixed(1)} hrs × Rs.${hourlyRate.toFixed(2)}/hr × holiday multiplier`
       : "Hours worked × hourly rate × holiday multiplier";
     formulaRows.push({ label: "Holiday / Off-Day Pay", formula: holFormula, result: `+ Rs.${(row.holidayOtPay || 0).toLocaleString()}`, highlight: true });
   }
