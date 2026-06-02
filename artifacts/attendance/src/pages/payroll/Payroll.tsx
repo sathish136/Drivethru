@@ -168,7 +168,7 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
     ...(lateDeduction > 0 ? [{ label: `Less  :  Late Arrival${lateDayLabel}`, value: fmtAmt(lateDeduction), italic: true }] : []),
     ...(lunchLateDed > 0 ? [{ label: "Less  :  Lunch Return Late", value: fmtAmt(lunchLateDed), italic: true }] : []),
     { label: "Total for EPF / ETF",     value: fmtAmt(totalForEPF), bold: true },
-    { label: "Add  :  Overtime",        value: overtime > 0 ? fmtAmt(overtime) : "", italic: true },
+    { label: overtime > 0 ? `Add  :  Overtime  (${(row.overtimeHours || 0).toFixed(1)} hrs)` : "Add  :  Overtime", value: overtime > 0 ? fmtAmt(overtime) : "", italic: true },
     { label: "Total Earnings",          value: fmtAmt(totalEarnings), borderTop: true },
     { label: "Recoveries  :  EPF 8%",   value: fmtAmt(epf8) },
     ...(loans > 0       ? [{ label: "Loans",              value: fmtAmt(loans),    indent: true }] : []),
