@@ -55,12 +55,19 @@ const SL_HOLIDAYS: Record<number, Array<{ date: string; name: string; localName:
   ],
 };
 
+function normalizeHolidayType(t: string | null | undefined): "statutory" | "poya" | "public" {
+  const s = (t ?? "").toLowerCase();
+  if (s === "statutory" || s === "national") return "statutory";
+  if (s === "poya"      || s === "religious") return "poya";
+  return "public";
+}
+
 router.get("/", async (req, res) => {
   try {
     const all = await db.select().from(holidays).orderBy(holidays.date);
     const year = req.query.year ? Number(req.query.year) : null;
     const filtered = year ? all.filter(h => h.date.startsWith(String(year))) : all;
-    res.json(filtered.map(h => ({ ...h, createdAt: h.createdAt.toISOString() })));
+    res.json(filtered.map(h => ({ ...h, type: normalizeHolidayType(h.type), createdAt: h.createdAt.toISOString() })));
   } catch (e) { res.status(500).json({ message: "Error", success: false }); }
 });
 
@@ -76,7 +83,7 @@ router.put("/:id", async (req, res) => {
   try {
     const { name, date, type, description } = req.body;
     const [holiday] = await db.update(holidays)
-      .set({ name, date, type: type || "public", description })
+      .set({ name, date, type: normalizeHolidayType(type), description })
       .where(eq(holidays.id, Number(req.params.id)))
       .returning();
     if (!holiday) return res.status(404).json({ message: "Not found" });
