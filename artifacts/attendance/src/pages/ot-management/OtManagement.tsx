@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
 import {
   Clock, CheckCircle2, Banknote, AlertCircle, Search,
-  ChevronDown, RotateCcw, Pencil, X, Check, Building2,
-  TrendingUp, CalendarDays, Users,
+  ChevronDown, ChevronRight, RotateCcw, Pencil, X, Check,
+  Building2, CalendarDays, Users, TrendingUp, Info,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -17,6 +17,7 @@ function fmt(n: number) {
   return "Rs. " + Math.round(n).toLocaleString("en-LK");
 }
 function fmtHrs(h: number) {
+  if (!h) return "0.00 h";
   return h.toFixed(2) + " h";
 }
 
@@ -56,11 +57,19 @@ interface OtRow {
 
 interface Branch { id: number; name: string; }
 
+interface EditState {
+  regHours: string;
+  regAmt: string;
+  holHours: string;
+  holAmt: string;
+  notes: string;
+}
+
 function StatusBadge({ status }: { status: OtStatus }) {
   const map: Record<OtStatus, { cls: string; label: string }> = {
-    pending:  { cls: "bg-amber-100 text-amber-700 border border-amber-200",    label: "Pending"  },
+    pending:  { cls: "bg-amber-100 text-amber-700 border border-amber-200",       label: "Pending"  },
     approved: { cls: "bg-emerald-100 text-emerald-700 border border-emerald-200", label: "Approved" },
-    paid:     { cls: "bg-blue-100 text-blue-700 border border-blue-200",       label: "Paid"     },
+    paid:     { cls: "bg-blue-100 text-blue-700 border border-blue-200",          label: "Paid"     },
   };
   const c = map[status] ?? map.pending;
   return (
@@ -70,21 +79,278 @@ function StatusBadge({ status }: { status: OtStatus }) {
   );
 }
 
-/* ── Inline edit state per-row ── */
-interface EditState {
-  regHours: string;
-  regAmt: string;
-  holHours: string;
-  holAmt: string;
-  notes: string;
+/* ── Detail panel shown when a row is expanded ─────────────── */
+function DetailPanel({
+  row, editing, editState, setEditState, saving,
+  onStartEdit, onSave, onCancel, onRemoveOverride, onApprove, onPay, actionLoading,
+}: {
+  row: OtRow;
+  editing: boolean;
+  editState: EditState | null;
+  setEditState: (fn: (s: EditState | null) => EditState | null) => void;
+  saving: boolean;
+  onStartEdit: () => void;
+  onSave: () => void;
+  onCancel: () => void;
+  onRemoveOverride: () => void;
+  onApprove: () => void;
+  onPay: () => void;
+  actionLoading: boolean;
+}) {
+  const regOtAmt   = row.isManualOverride && row.adjustedRegularOtAmount  != null ? row.adjustedRegularOtAmount  : row.autoRegularOtAmount;
+  const holOtAmt   = row.isManualOverride && row.adjustedHolidayOtAmount  != null ? row.adjustedHolidayOtAmount  : row.autoHolidayOtAmount;
+  const regOtHrs   = row.isManualOverride && row.adjustedRegularOtHours   != null ? row.adjustedRegularOtHours   : row.autoRegularOtHours;
+  const holOtHrs   = row.isManualOverride && row.adjustedHolidayOtHours   != null ? row.adjustedHolidayOtHours   : row.autoHolidayOtHours;
+
+  const regHourlyRate = row.basicSalary > 0 ? (row.basicSalary / 240 * 1.5).toFixed(2) : "—";
+  const holHourlyRate = row.basicSalary > 0 ? (row.basicSalary / 240).toFixed(2) : "—";
+
+  return (
+    <tr>
+      <td colSpan={6} className="px-0 pb-0">
+        <div className="mx-3 mb-3 rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50/60 to-white shadow-sm overflow-hidden">
+
+          {/* ── Header bar ── */}
+          <div className="flex items-center justify-between px-4 py-2 bg-blue-50 border-b border-blue-100">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-blue-800">{row.employeeName}</span>
+              <span className="text-[10px] text-blue-500">#{row.employeeCode}</span>
+              <span className="text-[10px] text-gray-400">·</span>
+              <span className="text-[10px] text-gray-500">{row.department}</span>
+              <span className="text-[10px] text-gray-400">·</span>
+              <span className="flex items-center gap-0.5 text-[10px] text-gray-500">
+                <Building2 className="w-3 h-3" />{row.branchName}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-[10px] text-gray-500">
+              <Info className="w-3 h-3" />
+              Basic: {fmt(row.basicSalary)}
+            </div>
+          </div>
+
+          {/* ── OT breakdown grid ── */}
+          <div className="grid grid-cols-2 gap-0 divide-x divide-gray-100">
+
+            {/* Regular OT */}
+            <div className="p-4">
+              <div className="flex items-center gap-1.5 mb-3">
+                <TrendingUp className="w-3.5 h-3.5 text-blue-500" />
+                <span className="text-xs font-bold text-gray-700">Regular OT</span>
+                {row.isManualOverride && row.adjustedRegularOtHours != null && (
+                  <span className="text-[9px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full">OVERRIDE</span>
+                )}
+              </div>
+
+              {editing ? (
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-[10px] font-semibold text-gray-500 block mb-1">Hours</label>
+                    <input
+                      type="number" min="0" step="0.5"
+                      value={editState!.regHours}
+                      onChange={e => setEditState(s => s ? { ...s, regHours: e.target.value } : s)}
+                      className="w-full px-2.5 py-1.5 text-sm border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold text-gray-500 block mb-1">Amount (Rs.)</label>
+                    <input
+                      type="number" min="0" step="1"
+                      value={editState!.regAmt}
+                      onChange={e => setEditState(s => s ? { ...s, regAmt: e.target.value } : s)}
+                      className="w-full px-2.5 py-1.5 text-sm border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[11px] text-gray-500">Hours</span>
+                    <span className="text-sm font-bold text-gray-900">{fmtHrs(regOtHrs)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[11px] text-gray-500">Amount</span>
+                    <span className="text-sm font-bold text-blue-700">{fmt(regOtAmt)}</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-1 border-t border-gray-100">
+                    <span className="text-[10px] text-gray-400">Hourly rate</span>
+                    <span className="text-[10px] text-gray-400">Rs. {regHourlyRate}</span>
+                  </div>
+                  {row.isManualOverride && row.adjustedRegularOtHours != null && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] text-gray-400">Auto (original)</span>
+                      <span className="text-[10px] text-gray-400 line-through">{fmtHrs(row.autoRegularOtHours)} / {fmt(row.autoRegularOtAmount)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Holiday OT */}
+            <div className="p-4">
+              <div className="flex items-center gap-1.5 mb-3">
+                <CalendarDays className="w-3.5 h-3.5 text-orange-500" />
+                <span className="text-xs font-bold text-gray-700">Holiday OT</span>
+                {row.isManualOverride && row.adjustedHolidayOtHours != null && (
+                  <span className="text-[9px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full">OVERRIDE</span>
+                )}
+              </div>
+
+              {editing ? (
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-[10px] font-semibold text-gray-500 block mb-1">Hours</label>
+                    <input
+                      type="number" min="0" step="0.5"
+                      value={editState!.holHours}
+                      onChange={e => setEditState(s => s ? { ...s, holHours: e.target.value } : s)}
+                      className="w-full px-2.5 py-1.5 text-sm border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold text-gray-500 block mb-1">Amount (Rs.)</label>
+                    <input
+                      type="number" min="0" step="1"
+                      value={editState!.holAmt}
+                      onChange={e => setEditState(s => s ? { ...s, holAmt: e.target.value } : s)}
+                      className="w-full px-2.5 py-1.5 text-sm border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[11px] text-gray-500">Hours</span>
+                    <span className="text-sm font-bold text-gray-900">{fmtHrs(holOtHrs)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[11px] text-gray-500">Amount</span>
+                    <span className="text-sm font-bold text-orange-600">{fmt(holOtAmt)}</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-1 border-t border-gray-100">
+                    <span className="text-[10px] text-gray-400">Hourly rate (×1.5–2.0)</span>
+                    <span className="text-[10px] text-gray-400">Rs. {holHourlyRate} base</span>
+                  </div>
+                  {row.isManualOverride && row.adjustedHolidayOtHours != null && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] text-gray-400">Auto (original)</span>
+                      <span className="text-[10px] text-gray-400 line-through">{fmtHrs(row.autoHolidayOtHours)} / {fmt(row.autoHolidayOtAmount)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Notes + Total + Action bar ── */}
+          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-gray-50 border-t border-gray-100">
+            <div className="flex items-center gap-3 flex-1">
+              {/* Notes */}
+              {editing ? (
+                <div className="flex items-center gap-2 flex-1">
+                  <label className="text-[10px] font-semibold text-gray-500 whitespace-nowrap">Notes:</label>
+                  <input
+                    type="text"
+                    value={editState!.notes}
+                    onChange={e => setEditState(s => s ? { ...s, notes: e.target.value } : s)}
+                    placeholder="Reason for adjustment..."
+                    className="flex-1 px-2.5 py-1.5 text-xs border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  />
+                </div>
+              ) : (
+                row.notes
+                  ? <span className="text-[11px] text-gray-500 italic">"{row.notes}"</span>
+                  : <span className="text-[11px] text-gray-400">No notes</span>
+              )}
+            </div>
+
+            {/* Total */}
+            <div className="text-right shrink-0">
+              <div className="text-[10px] text-gray-400">Total OT</div>
+              <div className="text-base font-extrabold text-gray-900">{fmt(row.effectiveTotalOtAmount)}</div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {editing ? (
+                <>
+                  <button
+                    onClick={onSave}
+                    disabled={saving}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    {saving ? "Saving…" : "Save Override"}
+                  </button>
+                  <button
+                    onClick={onCancel}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-semibold rounded-lg transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  {row.status !== "paid" && (
+                    <button
+                      onClick={onStartEdit}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-semibold rounded-lg transition-colors"
+                    >
+                      <Pencil className="w-3 h-3" />
+                      Adjust
+                    </button>
+                  )}
+                  {row.isManualOverride && row.status !== "paid" && (
+                    <button
+                      onClick={onRemoveOverride}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-700 text-xs font-semibold rounded-lg transition-colors"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Revert
+                    </button>
+                  )}
+                  {row.status === "pending" && (
+                    <button
+                      onClick={onApprove}
+                      disabled={actionLoading}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      {actionLoading ? "…" : "Approve"}
+                    </button>
+                  )}
+                  {row.status === "approved" && (
+                    <button
+                      onClick={onPay}
+                      disabled={actionLoading}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      <Banknote className="w-3.5 h-3.5" />
+                      {actionLoading ? "…" : "Mark Paid"}
+                    </button>
+                  )}
+                  {row.status === "paid" && (
+                    <span className="text-xs text-blue-600 font-semibold">✓ Paid</span>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
 }
+
+/* ═══════════════════════════════════════════════════════════ */
 
 export default function OtManagement() {
   const now = new Date();
-  const [year,    setYear]    = useState(now.getFullYear());
-  const [month,   setMonth]   = useState(now.getMonth() + 1);
+  const [year,     setYear]     = useState(now.getFullYear());
+  const [month,    setMonth]    = useState(now.getMonth() + 1);
   const [branchId, setBranchId] = useState<number | null>(null);
-  const [search,  setSearch]  = useState("");
+  const [search,   setSearch]   = useState("");
 
   const [rows,     setRows]     = useState<OtRow[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -92,10 +358,10 @@ export default function OtManagement() {
   const [error,    setError]    = useState<string | null>(null);
   const [success,  setSuccess]  = useState<string | null>(null);
 
-  /* per-row editing state */
-  const [editingId, setEditingId]     = useState<number | null>(null); /* employeeId being edited */
-  const [editState, setEditState]     = useState<EditState | null>(null);
-  const [saving,    setSaving]        = useState(false);
+  const [expandedId,    setExpandedId]    = useState<number | null>(null);
+  const [editingId,     setEditingId]     = useState<number | null>(null);
+  const [editState,     setEditState]     = useState<EditState | null>(null);
+  const [saving,        setSaving]        = useState(false);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
 
   function showMsg(msg: string, isError = false) {
@@ -104,7 +370,6 @@ export default function OtManagement() {
     setTimeout(() => { setError(null); setSuccess(null); }, 3500);
   }
 
-  /* ── Load branches ── */
   useEffect(() => {
     fetch(apiUrl("/branches"))
       .then(r => r.json())
@@ -112,7 +377,6 @@ export default function OtManagement() {
       .catch(() => {});
   }, []);
 
-  /* ── Load OT data ── */
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -129,19 +393,16 @@ export default function OtManagement() {
 
   useEffect(() => { load(); }, [load]);
 
-  /* ── Summary cards ── */
-  const summary = useMemo(() => {
-    const totalRegHours  = rows.reduce((s, r) => s + r.effectiveRegularOtHours, 0);
-    const totalHolHours  = rows.reduce((s, r) => s + r.effectiveHolidayOtHours, 0);
-    const totalAmount    = rows.reduce((s, r) => s + r.effectiveTotalOtAmount, 0);
-    const pendingCount   = rows.filter(r => r.status === "pending").length;
-    const approvedCount  = rows.filter(r => r.status === "approved").length;
-    const paidCount      = rows.filter(r => r.status === "paid").length;
-    const overrideCount  = rows.filter(r => r.isManualOverride).length;
-    return { totalRegHours, totalHolHours, totalAmount, pendingCount, approvedCount, paidCount, overrideCount };
-  }, [rows]);
+  const summary = useMemo(() => ({
+    totalRegHours:  rows.reduce((s, r) => s + r.effectiveRegularOtHours, 0),
+    totalHolHours:  rows.reduce((s, r) => s + r.effectiveHolidayOtHours, 0),
+    totalAmount:    rows.reduce((s, r) => s + r.effectiveTotalOtAmount, 0),
+    pendingCount:   rows.filter(r => r.status === "pending").length,
+    approvedCount:  rows.filter(r => r.status === "approved").length,
+    paidCount:      rows.filter(r => r.status === "paid").length,
+    overrideCount:  rows.filter(r => r.isManualOverride).length,
+  }), [rows]);
 
-  /* ── Filtered rows ── */
   const filtered = useMemo(() => {
     if (!search.trim()) return rows;
     const q = search.toLowerCase();
@@ -152,90 +413,82 @@ export default function OtManagement() {
     );
   }, [rows, search]);
 
-  /* ── Start editing a row ── */
+  function toggleExpand(empId: number) {
+    if (expandedId === empId) {
+      setExpandedId(null);
+      if (editingId === empId) { setEditingId(null); setEditState(null); }
+    } else {
+      setExpandedId(empId);
+      setEditingId(null);
+      setEditState(null);
+    }
+  }
+
   function startEdit(row: OtRow) {
     setEditingId(row.employeeId);
     setEditState({
-      regHours: String(row.isManualOverride && row.adjustedRegularOtHours != null ? row.adjustedRegularOtHours : row.autoRegularOtHours),
+      regHours: String(row.isManualOverride && row.adjustedRegularOtHours  != null ? row.adjustedRegularOtHours  : row.autoRegularOtHours),
       regAmt:   String(row.isManualOverride && row.adjustedRegularOtAmount != null ? row.adjustedRegularOtAmount : row.autoRegularOtAmount),
-      holHours: String(row.isManualOverride && row.adjustedHolidayOtHours != null ? row.adjustedHolidayOtHours : row.autoHolidayOtHours),
+      holHours: String(row.isManualOverride && row.adjustedHolidayOtHours  != null ? row.adjustedHolidayOtHours  : row.autoHolidayOtHours),
       holAmt:   String(row.isManualOverride && row.adjustedHolidayOtAmount != null ? row.adjustedHolidayOtAmount : row.autoHolidayOtAmount),
       notes:    row.notes ?? "",
     });
   }
 
-  function cancelEdit() {
-    setEditingId(null);
-    setEditState(null);
-  }
+  function cancelEdit() { setEditingId(null); setEditState(null); }
 
-  /* ── Save override ── */
   async function saveOverride(row: OtRow) {
     if (!editState) return;
     setSaving(true);
     try {
-      const body = {
-        year, month,
-        isManualOverride: true,
-        autoRegularOtHours:  row.autoRegularOtHours,
-        autoRegularOtAmount: row.autoRegularOtAmount,
-        autoHolidayOtHours:  row.autoHolidayOtHours,
-        autoHolidayOtAmount: row.autoHolidayOtAmount,
-        adjustedRegularOtHours:  parseFloat(editState.regHours) || 0,
-        adjustedRegularOtAmount: parseFloat(editState.regAmt)   || 0,
-        adjustedHolidayOtHours:  parseFloat(editState.holHours) || 0,
-        adjustedHolidayOtAmount: parseFloat(editState.holAmt)   || 0,
-        notes: editState.notes,
-      };
       const r = await fetch(apiUrl(`/ot-management/${row.employeeId}`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          year, month,
+          isManualOverride: true,
+          autoRegularOtHours:  row.autoRegularOtHours,
+          autoRegularOtAmount: row.autoRegularOtAmount,
+          autoHolidayOtHours:  row.autoHolidayOtHours,
+          autoHolidayOtAmount: row.autoHolidayOtAmount,
+          adjustedRegularOtHours:  parseFloat(editState.regHours) || 0,
+          adjustedRegularOtAmount: parseFloat(editState.regAmt)   || 0,
+          adjustedHolidayOtHours:  parseFloat(editState.holHours) || 0,
+          adjustedHolidayOtAmount: parseFloat(editState.holAmt)   || 0,
+          notes: editState.notes,
+        }),
       });
       const d = await r.json();
-      if (d.success) {
-        showMsg("OT override saved");
-        cancelEdit();
-        load();
-      } else showMsg(d.message ?? "Save failed", true);
+      if (d.success) { showMsg("OT override saved"); cancelEdit(); load(); }
+      else showMsg(d.message ?? "Save failed", true);
     } catch { showMsg("Save failed", true); }
     setSaving(false);
   }
 
-  /* ── Remove override ── */
   async function removeOverride(row: OtRow) {
-    if (!confirm(`Remove manual override for ${row.employeeName}? Auto-calculated values will be used.`)) return;
-    try {
-      await fetch(apiUrl(`/ot-management/${row.employeeId}/override?year=${year}&month=${month}`), { method: "DELETE" });
-      showMsg("Override removed — using auto-calculated values");
-      load();
-    } catch { showMsg("Failed to remove override", true); }
+    if (!confirm(`Remove manual override for ${row.employeeName}?`)) return;
+    await fetch(apiUrl(`/ot-management/${row.employeeId}/override?year=${year}&month=${month}`), { method: "DELETE" });
+    showMsg("Override removed");
+    load();
   }
 
-  /* ── Approve ── */
   async function approveRow(row: OtRow) {
     setActionLoading(row.employeeId);
     try {
-      const body = {
-        year, month,
-        autoRegularOtHours:  row.autoRegularOtHours,
-        autoRegularOtAmount: row.autoRegularOtAmount,
-        autoHolidayOtHours:  row.autoHolidayOtHours,
-        autoHolidayOtAmount: row.autoHolidayOtAmount,
-      };
       const r = await fetch(apiUrl(`/ot-management/${row.employeeId}/approve`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ year, month,
+          autoRegularOtHours: row.autoRegularOtHours, autoRegularOtAmount: row.autoRegularOtAmount,
+          autoHolidayOtHours: row.autoHolidayOtHours, autoHolidayOtAmount: row.autoHolidayOtAmount }),
       });
       const d = await r.json();
       if (d.success) { showMsg("OT approved"); load(); }
-      else showMsg(d.message ?? "Approve failed", true);
+      else showMsg(d.message ?? "Failed", true);
     } catch { showMsg("Approve failed", true); }
     setActionLoading(null);
   }
 
-  /* ── Mark as paid ── */
   async function payRow(row: OtRow) {
     setActionLoading(row.employeeId);
     try {
@@ -251,7 +504,6 @@ export default function OtManagement() {
     setActionLoading(null);
   }
 
-  /* ── Approve all pending ── */
   async function approveAll() {
     const pending = rows.filter(r => r.status === "pending");
     if (!pending.length) { showMsg("No pending OT records", true); return; }
@@ -261,13 +513,9 @@ export default function OtManagement() {
       await fetch(apiUrl(`/ot-management/${row.employeeId}/approve`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          year, month,
-          autoRegularOtHours: row.autoRegularOtHours,
-          autoRegularOtAmount: row.autoRegularOtAmount,
-          autoHolidayOtHours: row.autoHolidayOtHours,
-          autoHolidayOtAmount: row.autoHolidayOtAmount,
-        }),
+        body: JSON.stringify({ year, month,
+          autoRegularOtHours: row.autoRegularOtHours, autoRegularOtAmount: row.autoRegularOtAmount,
+          autoHolidayOtHours: row.autoHolidayOtHours, autoHolidayOtAmount: row.autoHolidayOtAmount }),
       }).catch(() => {});
     }
     showMsg(`Approved ${pending.length} employees`);
@@ -278,14 +526,14 @@ export default function OtManagement() {
 
   return (
     <div className="space-y-4 max-w-full">
-      {/* ── Header ── */}
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-base font-bold text-gray-900 flex items-center gap-2">
             <Clock className="w-4 h-4 text-primary" />
             OT Management
           </h1>
-          <p className="text-xs text-gray-500 mt-0.5">Review, adjust, and approve overtime per employee per month</p>
+          <p className="text-xs text-gray-500 mt-0.5">Click any row to expand details · Adjust and approve overtime per employee</p>
         </div>
         <button
           onClick={approveAll}
@@ -296,74 +544,55 @@ export default function OtManagement() {
         </button>
       </div>
 
-      {/* ── Flash messages ── */}
       {error   && <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700"><AlertCircle className="w-3.5 h-3.5 shrink-0" />{error}</div>}
       {success && <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-700"><CheckCircle2 className="w-3.5 h-3.5 shrink-0" />{success}</div>}
 
-      {/* ── Filters ── */}
+      {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3">
         <div className="flex flex-wrap gap-3 items-end">
-          {/* Month */}
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Month</label>
             <div className="relative">
-              <select
-                value={month}
-                onChange={e => setMonth(Number(e.target.value))}
-                className="pl-2 pr-7 py-1.5 text-xs border border-gray-200 rounded-lg bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30"
-              >
+              <select value={month} onChange={e => setMonth(Number(e.target.value))}
+                className="pl-2 pr-7 py-1.5 text-xs border border-gray-200 rounded-lg bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30">
                 {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
               </select>
               <ChevronDown className="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
           </div>
-          {/* Year */}
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Year</label>
             <div className="relative">
-              <select
-                value={year}
-                onChange={e => setYear(Number(e.target.value))}
-                className="pl-2 pr-7 py-1.5 text-xs border border-gray-200 rounded-lg bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30"
-              >
+              <select value={year} onChange={e => setYear(Number(e.target.value))}
+                className="pl-2 pr-7 py-1.5 text-xs border border-gray-200 rounded-lg bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30">
                 {years.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
               <ChevronDown className="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
           </div>
-          {/* Branch */}
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Branch</label>
             <div className="relative">
-              <select
-                value={branchId ?? ""}
-                onChange={e => setBranchId(e.target.value ? Number(e.target.value) : null)}
-                className="pl-2 pr-7 py-1.5 text-xs border border-gray-200 rounded-lg bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 min-w-[160px]"
-              >
+              <select value={branchId ?? ""} onChange={e => setBranchId(e.target.value ? Number(e.target.value) : null)}
+                className="pl-2 pr-7 py-1.5 text-xs border border-gray-200 rounded-lg bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 min-w-[160px]">
                 <option value="">All Branches</option>
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
               <ChevronDown className="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
           </div>
-          {/* Search */}
           <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
             <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Search</label>
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Name, ID, department..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
+              <input type="text" placeholder="Name, ID, department…" value={search} onChange={e => setSearch(e.target.value)}
+                className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30" />
             </div>
           </div>
         </div>
       </div>
 
-      {/* ── Summary Cards ── */}
+      {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -402,243 +631,144 @@ export default function OtManagement() {
             </div>
             <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Status</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-bold text-amber-600">{summary.pendingCount} Pending</span>
-            <span className="text-gray-300">|</span>
+            <span className="text-gray-300">·</span>
             <span className="text-xs font-bold text-emerald-600">{summary.approvedCount} Approved</span>
-            <span className="text-gray-300">|</span>
+            <span className="text-gray-300">·</span>
             <span className="text-xs font-bold text-blue-600">{summary.paidCount} Paid</span>
           </div>
           <p className="text-[10px] text-gray-400 mt-0.5">{MONTHS[month - 1]} {year}</p>
         </div>
       </div>
 
-      {/* ── Table ── */}
+      {/* Table */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="w-6 px-2 py-2.5" />
                 <th className="px-3 py-2.5 text-left font-semibold text-gray-600 text-[11px]">Employee</th>
-                <th className="px-3 py-2.5 text-left font-semibold text-gray-600 text-[11px]">Department</th>
-                <th className="px-3 py-2.5 text-right font-semibold text-gray-600 text-[11px]">Regular OT</th>
-                <th className="px-3 py-2.5 text-right font-semibold text-gray-600 text-[11px]">Holiday OT</th>
-                <th className="px-3 py-2.5 text-right font-semibold text-gray-600 text-[11px]">Total OT</th>
-                <th className="px-3 py-2.5 text-center font-semibold text-gray-600 text-[11px]">Override</th>
+                <th className="px-3 py-2.5 text-left font-semibold text-gray-600 text-[11px]">Department / Branch</th>
+                <th className="px-3 py-2.5 text-right font-semibold text-gray-600 text-[11px]">Total OT Amount</th>
                 <th className="px-3 py-2.5 text-center font-semibold text-gray-600 text-[11px]">Status</th>
-                <th className="px-3 py-2.5 text-center font-semibold text-gray-600 text-[11px]">Actions</th>
+                <th className="px-3 py-2.5 text-center font-semibold text-gray-600 text-[11px]">Quick Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {loading ? (
-                <tr><td colSpan={8} className="text-center py-10 text-gray-400">Loading OT data…</td></tr>
+                <tr><td colSpan={6} className="text-center py-10 text-gray-400">Loading OT data…</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={8} className="text-center py-10 text-gray-400">No employees found</td></tr>
+                <tr><td colSpan={6} className="text-center py-10 text-gray-400">No employees found</td></tr>
               ) : filtered.map(row => {
-                const isEditing = editingId === row.employeeId;
+                const isExpanded = expandedId === row.employeeId;
+                const isEditing  = editingId  === row.employeeId;
+                const hasOt      = row.effectiveTotalOtAmount > 0;
 
                 return (
-                  <tr key={row.employeeId} className={`hover:bg-gray-50 transition-colors ${row.isManualOverride ? "bg-amber-50/30" : ""}`}>
-                    {/* Employee */}
-                    <td className="px-3 py-2.5">
-                      <div className="font-semibold text-gray-900 truncate max-w-[130px]">{row.employeeName}</div>
-                      <div className="text-[10px] text-gray-400">{row.employeeCode}</div>
-                    </td>
+                  <Fragment key={row.employeeId}>
+                    {/* ── Compact row ── */}
+                    <tr
+                      onClick={() => toggleExpand(row.employeeId)}
+                      className={`cursor-pointer border-b border-gray-100 transition-colors
+                        ${isExpanded ? "bg-blue-50/50 border-b-0" : "hover:bg-gray-50"}
+                        ${row.isManualOverride ? "border-l-2 border-l-amber-400" : ""}`}
+                    >
+                      {/* Expand chevron */}
+                      <td className="pl-3 pr-1 py-3 text-gray-400">
+                        {isExpanded
+                          ? <ChevronDown className="w-3.5 h-3.5 text-blue-500" />
+                          : <ChevronRight className="w-3.5 h-3.5" />}
+                      </td>
 
-                    {/* Department */}
-                    <td className="px-3 py-2.5">
-                      <div className="text-gray-700 truncate max-w-[100px]">{row.department}</div>
-                      <div className="text-[10px] text-gray-400 flex items-center gap-0.5">
-                        <Building2 className="w-3 h-3" />{row.branchName}
-                      </div>
-                    </td>
+                      {/* Name */}
+                      <td className="px-3 py-3">
+                        <div className="font-semibold text-gray-900">{row.employeeName}</div>
+                        <div className="text-[10px] text-gray-400">{row.employeeCode}</div>
+                      </td>
 
-                    {/* Regular OT */}
-                    <td className="px-3 py-2.5 text-right">
-                      {isEditing ? (
-                        <div className="flex flex-col items-end gap-1">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.5"
-                            value={editState!.regHours}
-                            onChange={e => setEditState(s => s ? { ...s, regHours: e.target.value } : s)}
-                            className="w-20 px-2 py-1 text-right text-xs border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-200"
-                            placeholder="Hours"
-                          />
-                          <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={editState!.regAmt}
-                            onChange={e => setEditState(s => s ? { ...s, regAmt: e.target.value } : s)}
-                            className="w-24 px-2 py-1 text-right text-xs border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-200"
-                            placeholder="Amount"
-                          />
+                      {/* Dept / Branch */}
+                      <td className="px-3 py-3">
+                        <div className="text-gray-700">{row.department}</div>
+                        <div className="text-[10px] text-gray-400 flex items-center gap-0.5">
+                          <Building2 className="w-3 h-3" />{row.branchName}
                         </div>
-                      ) : (
-                        <div>
-                          <div className={`font-semibold ${row.isManualOverride ? "text-amber-700" : "text-gray-800"}`}>
-                            {fmtHrs(row.effectiveRegularOtHours)}
-                          </div>
-                          <div className="text-[10px] text-gray-500">{fmt(row.effectiveRegularOtAmount)}</div>
-                          {row.isManualOverride && row.adjustedRegularOtHours != null && (
-                            <div className="text-[9px] text-gray-400 line-through">auto: {fmtHrs(row.autoRegularOtHours)}</div>
-                          )}
-                        </div>
-                      )}
-                    </td>
+                      </td>
 
-                    {/* Holiday OT */}
-                    <td className="px-3 py-2.5 text-right">
-                      {isEditing ? (
-                        <div className="flex flex-col items-end gap-1">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.5"
-                            value={editState!.holHours}
-                            onChange={e => setEditState(s => s ? { ...s, holHours: e.target.value } : s)}
-                            className="w-20 px-2 py-1 text-right text-xs border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-200"
-                            placeholder="Hours"
-                          />
-                          <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={editState!.holAmt}
-                            onChange={e => setEditState(s => s ? { ...s, holAmt: e.target.value } : s)}
-                            className="w-24 px-2 py-1 text-right text-xs border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-200"
-                            placeholder="Amount"
-                          />
+                      {/* Total OT */}
+                      <td className="px-3 py-3 text-right">
+                        <div className={`font-bold ${hasOt ? "text-gray-900" : "text-gray-400"}`}>
+                          {fmt(row.effectiveTotalOtAmount)}
                         </div>
-                      ) : (
-                        <div>
-                          <div className={`font-semibold ${row.isManualOverride ? "text-amber-700" : "text-orange-600"}`}>
-                            {fmtHrs(row.effectiveHolidayOtHours)}
-                          </div>
-                          <div className="text-[10px] text-gray-500">{fmt(row.effectiveHolidayOtAmount)}</div>
-                          {row.isManualOverride && row.adjustedHolidayOtHours != null && (
-                            <div className="text-[9px] text-gray-400 line-through">auto: {fmtHrs(row.autoHolidayOtHours)}</div>
-                          )}
-                        </div>
-                      )}
-                    </td>
+                        {row.isManualOverride && (
+                          <div className="text-[9px] text-amber-600 font-semibold">OVERRIDE</div>
+                        )}
+                        {!hasOt && (
+                          <div className="text-[10px] text-gray-400">No OT</div>
+                        )}
+                      </td>
 
-                    {/* Total OT */}
-                    <td className="px-3 py-2.5 text-right">
-                      {isEditing ? (
-                        <div className="space-y-1">
-                          <div className="text-[10px] text-gray-400">Notes:</div>
-                          <input
-                            type="text"
-                            value={editState!.notes}
-                            onChange={e => setEditState(s => s ? { ...s, notes: e.target.value } : s)}
-                            className="w-28 px-2 py-1 text-xs border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-200"
-                            placeholder="Reason..."
-                          />
-                        </div>
-                      ) : (
-                        <div>
-                          <div className="font-bold text-gray-900">{fmt(row.effectiveTotalOtAmount)}</div>
-                          {row.notes && <div className="text-[10px] text-gray-400 truncate max-w-[100px]">{row.notes}</div>}
-                        </div>
-                      )}
-                    </td>
+                      {/* Status */}
+                      <td className="px-3 py-3 text-center" onClick={e => e.stopPropagation()}>
+                        <StatusBadge status={row.status} />
+                      </td>
 
-                    {/* Override */}
-                    <td className="px-3 py-2.5 text-center">
-                      {isEditing ? (
-                        <div className="flex items-center justify-center gap-1">
+                      {/* Quick action — stops propagation so row expand doesn't trigger */}
+                      <td className="px-3 py-3 text-center" onClick={e => e.stopPropagation()}>
+                        {row.status === "pending" && (
                           <button
-                            onClick={() => saveOverride(row)}
-                            disabled={saving}
-                            className="p-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded transition-colors"
-                            title="Save override"
+                            onClick={() => approveRow(row)}
+                            disabled={actionLoading === row.employeeId}
+                            className="px-2.5 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 text-[11px] font-semibold rounded-lg transition-colors disabled:opacity-50"
                           >
-                            <Check className="w-3.5 h-3.5" />
+                            {actionLoading === row.employeeId ? "…" : "Approve"}
                           </button>
+                        )}
+                        {row.status === "approved" && (
                           <button
-                            onClick={cancelEdit}
-                            className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded transition-colors"
-                            title="Cancel"
+                            onClick={() => payRow(row)}
+                            disabled={actionLoading === row.employeeId}
+                            className="px-2.5 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-[11px] font-semibold rounded-lg transition-colors disabled:opacity-50"
                           >
-                            <X className="w-3.5 h-3.5" />
+                            {actionLoading === row.employeeId ? "…" : "Mark Paid"}
                           </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center gap-1">
-                          {row.status !== "paid" && (
-                            <button
-                              onClick={() => startEdit(row)}
-                              className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded transition-colors"
-                              title="Manually adjust OT"
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </button>
-                          )}
-                          {row.isManualOverride && row.status !== "paid" && (
-                            <button
-                              onClick={() => removeOverride(row)}
-                              className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-600 rounded transition-colors"
-                              title="Revert to auto-calculated"
-                            >
-                              <RotateCcw className="w-3 h-3" />
-                            </button>
-                          )}
-                          {row.isManualOverride && (
-                            <span className="text-[9px] text-amber-600 font-semibold">OVERRIDE</span>
-                          )}
-                        </div>
-                      )}
-                    </td>
+                        )}
+                        {row.status === "paid" && (
+                          <span className="text-[11px] text-blue-500 font-semibold">✓ Paid</span>
+                        )}
+                      </td>
+                    </tr>
 
-                    {/* Status */}
-                    <td className="px-3 py-2.5 text-center">
-                      <StatusBadge status={row.status} />
-                    </td>
-
-                    {/* Actions */}
-                    <td className="px-3 py-2.5 text-center">
-                      {!isEditing && (
-                        <div className="flex items-center justify-center gap-1">
-                          {row.status === "pending" && (
-                            <button
-                              onClick={() => approveRow(row)}
-                              disabled={actionLoading === row.employeeId}
-                              className="px-2 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 text-[10px] font-semibold rounded transition-colors disabled:opacity-50"
-                            >
-                              {actionLoading === row.employeeId ? "…" : "Approve"}
-                            </button>
-                          )}
-                          {row.status === "approved" && (
-                            <button
-                              onClick={() => payRow(row)}
-                              disabled={actionLoading === row.employeeId}
-                              className="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-[10px] font-semibold rounded transition-colors disabled:opacity-50"
-                            >
-                              {actionLoading === row.employeeId ? "…" : "Mark Paid"}
-                            </button>
-                          )}
-                          {row.status === "paid" && (
-                            <span className="text-[10px] text-blue-500 font-semibold">✓ Paid</span>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
+                    {/* ── Expanded detail panel ── */}
+                    {isExpanded && (
+                      <DetailPanel
+                        key={`detail-${row.employeeId}`}
+                        row={row}
+                        editing={isEditing}
+                        editState={editState}
+                        setEditState={setEditState}
+                        saving={saving}
+                        onStartEdit={() => startEdit(row)}
+                        onSave={() => saveOverride(row)}
+                        onCancel={cancelEdit}
+                        onRemoveOverride={() => removeOverride(row)}
+                        onApprove={() => approveRow(row)}
+                        onPay={() => payRow(row)}
+                        actionLoading={actionLoading === row.employeeId}
+                      />
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>
           </table>
         </div>
 
-        {/* ── Footer legend ── */}
-        <div className="px-4 py-2 border-t border-gray-100 bg-gray-50 flex items-center gap-4 text-[10px] text-gray-500">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>Manual override active</span>
-          <span className="flex items-center gap-1"><Pencil className="w-3 h-3" /> Edit to override auto-calculated values</span>
-          <span className="flex items-center gap-1"><RotateCcw className="w-3 h-3" /> Revert to auto-calculation</span>
-          <span className="ml-auto font-medium">{filtered.length} of {rows.length} employees</span>
+        <div className="px-4 py-2 border-t border-gray-100 bg-gray-50 flex items-center gap-3 text-[10px] text-gray-500">
+          <span>Click a row to expand full OT details</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block"></span> Amber left-border = manual override active</span>
+          <span className="ml-auto font-medium">{filtered.length} of {rows.length} employees · {MONTHS[month - 1]} {year}</span>
         </div>
       </div>
     </div>
