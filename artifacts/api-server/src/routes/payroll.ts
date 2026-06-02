@@ -687,7 +687,10 @@ router.post("/generate", async (req, res) => {
           (rec.status === "holiday" || (recDateIsHoliday && rawHrs > 0 && rec.status !== "off_day"));
 
         if (treatAsHoliday) {
-          /* Holiday pay: hours worked × hourly rate × holiday multiplier
+          /* Holiday pay: hours worked × (basic ÷ 240) × holiday multiplier
+             Standard monthly hours basis: 240 = 30 days × 8 hrs.
+             This rate is fixed and independent of how many working days the
+             month has — applies consistently in both regular and off-season months.
              Rule-level holidayOtMultiplier overrides payroll-settings multiplier
              for the employee's department (except statutory stays at max of both). */
           const hType = holidayDateMap.get(rec.date) ?? "public";
@@ -698,9 +701,10 @@ router.post("/generate", async (req, res) => {
           const mult = ruleHolidayOtMult != null
             ? (hType === "statutory" ? Math.max(ruleHolidayOtMult, cfgMult) : ruleHolidayOtMult)
             : cfgMult;
+          const holidayHourlyRate = basicSalary / 240;
           if (rawHrs > 0) {
             holidayOtHours += rawHrs;
-            holidayOtPay += Math.round(rawHrs * hourlyRate * mult);
+            holidayOtPay += Math.round(rawHrs * holidayHourlyRate * mult);
           }
 
         } else if (rec.status === "off_day") {
