@@ -46,6 +46,7 @@ interface PayrollRow {
   housingAllowance: number;
   otherAllowances: number;
   overtimePay: number;
+  holidayOtPay?: number;
   grossSalary: number;
   epfEmployee: number;
   epfEmployer: number;
@@ -141,7 +142,7 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
   const lunchLateDed    = row.lunchLateDeduction || 0;
   /* totalForEPF matches backend: both late deductions already reduce grossSalary before EPF is computed */
   const totalForEPF     = subTotal - noPayLeave - lateDeduction - lunchLateDed;
-  const overtime        = row.overtimePay || 0;
+  const overtime        = (row.overtimePay || 0) + (row.holidayOtPay || 0);
   const totalEarnings   = totalForEPF + overtime;
 
   const epf8          = row.epfEmployee || 0;
@@ -378,7 +379,7 @@ function PayrollDetailModal({ row, onClose }: { row: PayrollRow; onClose: () => 
   const lateDeduction = row.lateDeduction || 0;
   const lunchLateDed = row.lunchLateDeduction || 0;
   const totalForEPF = subTotal - noPayLeave - lateDeduction - lunchLateDed;
-  const overtime = row.overtimePay || 0;
+  const overtime = (row.overtimePay || 0) + (row.holidayOtPay || 0);
   const totalEarnings = totalForEPF + overtime;
   const epf8 = row.epfEmployee || 0;
   const loans = row.loanDeduction || 0;
@@ -1319,7 +1320,7 @@ export default function Payroll() {
                   const allowances = (row.transportAllowance || 0) + (row.housingAllowance || 0) + (row.otherAllowances || 0);
                   const subTotal = row.basicSalary + allowances;
                   const totalForEPF = subTotal - (row.absenceDeduction || 0) - (row.lateDeduction || 0);
-                  const totalEarnings = totalForEPF + (row.overtimePay || 0);
+                  const totalEarnings = totalForEPF + (row.overtimePay || 0) + (row.holidayOtPay || 0);
                   return (
                     <React.Fragment key={row.id}>
                       <tr
@@ -1446,7 +1447,7 @@ export default function Payroll() {
                                   {(row.absenceDeduction || 0) > 0 && <div className="flex justify-between text-red-600"><span>No-Pay Leave</span><span>−{fmt(row.absenceDeduction)}</span></div>}
                                   {(row.lateDeduction || 0) > 0 && <div className="flex justify-between text-amber-600"><span>Late Deduction ({row.lateDays}d)</span><span>−{fmt(row.lateDeduction)}</span></div>}
                                   <div className="flex justify-between border-t border-border/60 pt-1 font-semibold"><span>For EPF / ETF</span><span>{fmt(totalForEPF)}</span></div>
-                                  {(row.overtimePay || 0) > 0 && <div className="flex justify-between text-violet-700"><span>Overtime ({row.overtimeHours.toFixed(1)}h)</span><span>+{fmt(row.overtimePay)}</span></div>}
+                                  {((row.overtimePay || 0) + (row.holidayOtPay || 0)) > 0 && <div className="flex justify-between text-violet-700"><span>Overtime ({row.overtimeHours.toFixed(1)}h)</span><span>+{fmt((row.overtimePay || 0) + (row.holidayOtPay || 0))}</span></div>}
                                   <div className="flex justify-between border-t-2 border-emerald-300 pt-1 font-bold text-emerald-700"><span>Total Earnings</span><span>{fmt(totalEarnings)}</span></div>
                                 </div>
                               </div>

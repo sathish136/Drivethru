@@ -10,6 +10,7 @@ import {
   loadDeptRules, findRule, effectiveHours, calcOtHours, lateCutoffMins,
   timeToMins, calcLunchLateMinutes, calcTimeBasedOtHours,
   isNightShiftRecord, calcNightWatcherPolicyOtHours, calcNightWatcherOtFromAllPunches,
+  DEFAULT_RULE,
 } from "../lib/hr-rules.js";
 import { processSalaryRow, resolveDayShift, type WeekOffInfo } from "../lib/salary-engine.js";
 
@@ -403,7 +404,7 @@ router.post("/generate", async (req, res) => {
       /* ── Look up HR department rule for this employee ── */
       const empShiftName     = emp.shiftId ? shiftMap.get(emp.shiftId)?.name ?? null : null;
       const rule = findRule(deptRules, emp.department ?? "", empShiftName);
-      const reqHoursPerDay   = rule.minHours;                          // required hrs for full pay
+      const reqHoursPerDay   = (rule.minHours && rule.minHours > 0) ? rule.minHours : DEFAULT_RULE.minHours; // required hrs for full pay
       const otAfterHrsRule   = rule.otAfterHours ?? rule.minHours;     // OT threshold (hours)
       const isOtEligible     = rule.otEligible;
       const isFlexible       = rule.flexible;                          // exempt from incomplete deduction
