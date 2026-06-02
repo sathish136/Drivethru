@@ -23,6 +23,7 @@ import incentivesRouter from "./incentives.js";
 import backupRouter from "./backup.js";
 import weekoffsRouter from "./weekoffs.js";
 import manualSalaryRouter from "./manual-salary.js";
+import otManagementRouter from "./ot-management.js";
 
 const router: IRouter = Router();
 
@@ -50,5 +51,6 @@ router.use("/incentives", incentivesRouter);
 router.use("/backup", backupRouter);
 router.use("/weekoffs", weekoffsRouter);
 router.use("/manual-salary", manualSalaryRouter);
+router.use("/ot-management", otManagementRouter);
 
 export default router;

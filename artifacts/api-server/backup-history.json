@@ -1,5 +1,14 @@
 [
   {
+    "id": "2981e495-7bd3-4a92-8530-9c60460d631c",
+    "timestamp": "2026-06-02T08:30:16.278Z",
+    "type": "scheduled",
+    "trigger": "Scheduled 14:00",
+    "sizeKb": 224,
+    "status": "success",
+    "recipient": "techhacktamil000@gmail.com"
+  },
+  {
     "id": "3ba74f8d-c3ec-44ad-8d7e-d4eb049476ce",
     "timestamp": "2026-05-28T12:35:10.497Z",
     "type": "manual",

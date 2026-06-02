@@ -133,3 +133,32 @@ export const staffIncentives = pgTable("staff_incentives", {
 
 export const insertStaffIncentiveSchema = createInsertSchema(staffIncentives).omit({ id: true, createdAt: true, updatedAt: true });
 export type StaffIncentive = typeof staffIncentives.$inferSelect;
+
+/* ── OT Adjustments ─────────────────────────────────────── */
+
+export const otAdjustments = pgTable("ot_adjustments", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employee_id").notNull().references(() => employees.id),
+  year: integer("year").notNull(),
+  month: integer("month").notNull(),
+
+  autoRegularOtHours:   real("auto_regular_ot_hours").notNull().default(0),
+  autoRegularOtAmount:  real("auto_regular_ot_amount").notNull().default(0),
+  autoHolidayOtHours:   real("auto_holiday_ot_hours").notNull().default(0),
+  autoHolidayOtAmount:  real("auto_holiday_ot_amount").notNull().default(0),
+
+  isManualOverride:         boolean("is_manual_override").notNull().default(false),
+  adjustedRegularOtHours:   real("adjusted_regular_ot_hours"),
+  adjustedRegularOtAmount:  real("adjusted_regular_ot_amount"),
+  adjustedHolidayOtHours:   real("adjusted_holiday_ot_hours"),
+  adjustedHolidayOtAmount:  real("adjusted_holiday_ot_amount"),
+
+  notes:  text("notes"),
+  status: text("status").notNull().$type<"pending" | "approved" | "paid">().default("pending"),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertOtAdjustmentSchema = createInsertSchema(otAdjustments).omit({ id: true, createdAt: true, updatedAt: true });
+export type OtAdjustment = typeof otAdjustments.$inferSelect;

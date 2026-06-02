@@ -19,6 +19,25 @@ async function runStartupMigrations() {
     `ALTER TABLE payroll_settings ADD COLUMN IF NOT EXISTS lunch_incentive_per_day real NOT NULL DEFAULT 125`,
     `ALTER TABLE shifts ADD COLUMN IF NOT EXISTS weekly_schedule text`,
     `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS off_season_payable_hours real NOT NULL DEFAULT 0`,
+    `CREATE TABLE IF NOT EXISTS ot_adjustments (
+      id SERIAL PRIMARY KEY,
+      employee_id INTEGER NOT NULL REFERENCES employees(id),
+      year INTEGER NOT NULL,
+      month INTEGER NOT NULL,
+      auto_regular_ot_hours REAL NOT NULL DEFAULT 0,
+      auto_regular_ot_amount REAL NOT NULL DEFAULT 0,
+      auto_holiday_ot_hours REAL NOT NULL DEFAULT 0,
+      auto_holiday_ot_amount REAL NOT NULL DEFAULT 0,
+      is_manual_override BOOLEAN NOT NULL DEFAULT false,
+      adjusted_regular_ot_hours REAL,
+      adjusted_regular_ot_amount REAL,
+      adjusted_holiday_ot_hours REAL,
+      adjusted_holiday_ot_amount REAL,
+      notes TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
   ];
   for (const m of migrations) {
     try {
