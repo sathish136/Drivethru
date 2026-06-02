@@ -507,8 +507,8 @@ export default function Holidays() {
                   </Select>
                   <div className="mt-1.5 flex items-center gap-1.5">
                     <span className="text-[10px] text-muted-foreground">Working OT rate:</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${TYPE_META[editing.type].otColor}`}>
-                      {TYPE_META[editing.type].otRate} OT applies
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${(TYPE_META[editing.type] ?? TYPE_META.public).otColor}`}>
+                      {(TYPE_META[editing.type] ?? TYPE_META.public).otRate} OT applies
                     </span>
                   </div>
                 </div>
