@@ -190,6 +190,7 @@ export default function SalaryReport() {
       const apit = n(r.apit);
       const balancePay =
         totalEarnings - n(r.epfEmployee) - payDeduction - apit;
+      const net = balancePay - advance;
       return {
         r,
         allowances,
@@ -201,6 +202,7 @@ export default function SalaryReport() {
         advance,
         apit,
         balancePay,
+        net,
       };
     });
     const headers = [
@@ -217,6 +219,7 @@ export default function SalaryReport() {
       "Advance",
       "APIT",
       "Balance Pay",
+      "Net",
       "EPF 12%",
       "ETF 3%",
     ];
@@ -234,6 +237,7 @@ export default function SalaryReport() {
       d.advance,
       d.apit,
       d.balancePay,
+      d.net,
       n(d.r.epfEmployer),
       n(d.r.etfEmployer),
     ]);
@@ -250,6 +254,7 @@ export default function SalaryReport() {
         adv: a.adv + d.advance,
         apit: a.apit + d.apit,
         bal: a.bal + d.balancePay,
+        net: a.net + d.net,
         epf12: a.epf12 + n(d.r.epfEmployer),
         etf3: a.etf3 + n(d.r.etfEmployer),
       }),
@@ -265,6 +270,7 @@ export default function SalaryReport() {
         adv: 0,
         apit: 0,
         bal: 0,
+        net: 0,
         epf12: 0,
         etf3: 0,
       },
@@ -283,6 +289,7 @@ export default function SalaryReport() {
       tot.adv,
       tot.apit,
       tot.bal,
+      tot.net,
       tot.epf12,
       tot.etf3,
     ];
@@ -429,12 +436,12 @@ export default function SalaryReport() {
           lunchInc,
           totalEarnings,
           payDeduction,
-          totalForEPF,
-          advance,
-          apit,
-          balancePay,
-        };
-      });
+          totalForEPF,      advance,
+      apit,
+      balancePay,
+      net: balancePay - advance,
+    };
+  });
       const tot = d2.reduce(
         (a, d) => ({
           basic: a.basic + n(d.r.basicSalary),
@@ -473,7 +480,7 @@ export default function SalaryReport() {
           <th class="l">#</th><th class="l">EPF #</th><th class="l">Name</th>
           <th>Basic Salary</th><th>OT Hrs</th><th>OT Amount</th><th>Lunch Inc.</th><th>Total Earnings</th>
           <th>EPF 8%</th><th>Total for EPF</th><th>Advance</th>
-          <th>APIT</th><th>Balance Pay</th><th>EPF 12%</th><th>ETF 3%</th>
+          <th>APIT</th><th>Balance Pay</th><th>Net</th><th>EPF 12%</th><th>ETF 3%</th>
         </tr></thead>
         <tbody>${d2
           .map(
@@ -491,6 +498,7 @@ export default function SalaryReport() {
           <td class="${d.advance > 0 ? "amber" : ""}">${fmt(d.advance)}</td>
           <td class="${d.apit > 0 ? "red" : ""}">${fmt(d.apit)}</td>
           <td class="b primary">${fmt(d.balancePay)}</td>
+          <td class="b" style="color:#15803d;font-weight:700">${fmt(d.balancePay - d.advance)}</td>
           <td class="sm">${fmt(d.r.epfEmployer)}</td>
           <td class="sm">${fmt(d.r.etfEmployer)}</td>
         </tr>`,
@@ -508,6 +516,7 @@ export default function SalaryReport() {
           <td>${fmt(tot.adv)}</td>
           <td>${fmt(tot.apit)}</td>
           <td>${fmt(tot.bal)}</td>
+          <td>${fmt(tot.bal - tot.adv)}</td>
           <td>${fmt(tot.epf12)}</td>
           <td>${fmt(tot.etf3)}</td>
         </tr></tfoot>
@@ -663,6 +672,7 @@ export default function SalaryReport() {
       advance: acc.advance + r.advance,
       apit: acc.apit + r.apit,
       balancePay: acc.balancePay + r.balancePay,
+      net: acc.net + r.net,
       epf12: acc.epf12 + n(r.epfEmployer),
       etf3: acc.etf3 + n(r.etfEmployer),
     }),
@@ -988,6 +998,14 @@ export default function SalaryReport() {
                       <th
                         className={colHead
                           .replace("text-slate-600", "text-slate-200")
+                          .replace("border-slate-300", "border-slate-600")
+                          .replace("text-slate-200", "text-emerald-300")}
+                      >
+                        Net
+                      </th>
+                      <th
+                        className={colHead
+                          .replace("text-slate-600", "text-slate-200")
                           .replace("border-slate-300", "border-slate-600")}
                       >
                         EPF 12%
@@ -1069,6 +1087,9 @@ export default function SalaryReport() {
                         <td className={cell + " font-bold text-primary"}>
                           {amtNum(r.balancePay)}
                         </td>
+                        <td className={cell + " font-bold text-emerald-700"}>
+                          {amtNum(r.net)}
+                        </td>
                         <td className={cell + " text-slate-500 text-[10px]"}>
                           {amtNum(n(r.epfEmployer))}
                         </td>
@@ -1118,6 +1139,9 @@ export default function SalaryReport() {
                       </td>
                       <td className={totalCell + " bg-slate-800 text-white"}>
                         {amtNum(totals.balancePay)}
+                      </td>
+                      <td className={totalCell + " bg-emerald-800 text-white font-bold"}>
+                        {amtNum(totals.net)}
                       </td>
                       <td
                         className={
