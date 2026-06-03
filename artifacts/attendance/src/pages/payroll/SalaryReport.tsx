@@ -6,6 +6,7 @@ import {
   Download,
   FileSpreadsheet,
   Building2,
+  Zap,
 } from "lucide-react";
 import drivethruLogo from "@/assets/drivethru-wave-logo.png";
 import * as XLSX from "xlsx";
@@ -102,6 +103,7 @@ export default function SalaryReport() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchTab, setBranchTab] = useState<number | null>(null); // null = All
   const [loading, setLoading] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -118,6 +120,20 @@ export default function SalaryReport() {
       setLoading(false);
     }
   }, [month, year]);
+
+  const regeneratePayroll = useCallback(async () => {
+    setRegenerating(true);
+    try {
+      await fetch(apiUrl("/payroll/generate"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month, year }),
+      });
+      await fetchData();
+    } finally {
+      setRegenerating(false);
+    }
+  }, [month, year, fetchData]);
 
   useEffect(() => {
     fetchData();
@@ -712,13 +728,24 @@ export default function SalaryReport() {
           </select>
           <button
             onClick={fetchData}
-            disabled={loading}
+            disabled={loading || regenerating}
             className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-lg text-sm bg-white hover:bg-slate-50 disabled:opacity-50"
           >
             <RefreshCw
               className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`}
             />
-            {loading ? "Loadingâ€¦" : "Refresh"}
+            {loading ? "Loading…" : "Refresh"}
+          </button>
+          <button
+            onClick={regeneratePayroll}
+            disabled={loading || regenerating}
+            title="Recalculate payroll from attendance — use this after changing holidays, OT settings, or attendance records"
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-amber-400 rounded-lg text-sm bg-amber-50 hover:bg-amber-100 text-amber-800 font-medium disabled:opacity-50"
+          >
+            <Zap
+              className={`w-3.5 h-3.5 ${regenerating ? "animate-pulse" : ""}`}
+            />
+            {regenerating ? "Recalculating…" : "Recalculate"}
           </button>
         </div>
         <div className="flex items-center gap-2 ml-auto">
