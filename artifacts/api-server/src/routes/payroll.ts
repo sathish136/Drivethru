@@ -639,14 +639,18 @@ router.post("/generate", async (req, res) => {
         offSeasonPayableHrs  = Math.round(offSeasonPayableHrs * 100) / 100;
       }
 
+      /* ── EPF/ETF-exempt employees (Directors/shareholders) get full salary
+         with no attendance-based deductions — they are treated as always present. ── */
+      const isEpfEtfExempt = cfg.epfEtfExemptIds.includes(emp.id);
+
       /* ── STANDARD deductions ────────────────────────────────────────── */
-      /* Morning late: applies to all employees EXCEPT during off-season (non-NW).
-         Night Watcher late deductions always apply (year-round policy). */
-      const morningLateMinutes = (!isOffSeason)
+      /* Morning late: applies to all employees EXCEPT during off-season (non-NW)
+         and EPF-exempt employees. */
+      const morningLateMinutes = (!isOffSeason && !isEpfEtfExempt)
         ? presentRecs.reduce((sum, rec) => sum + salaryRowFor(rec).lateMinutes, 0)
         : 0;
-      /* Lunch return late: Night Watchers have no lunch break — kept excluded for NW */
-      const lunchLateMinutes = (!isNightWatcherPayroll && !isOffSeason) ? [...presentRecs, ...lateRecs].reduce((sum, rec) => {
+      /* Lunch return late: Night Watchers and EPF-exempt employees are excluded */
+      const lunchLateMinutes = (!isNightWatcherPayroll && !isOffSeason && !isEpfEtfExempt) ? [...presentRecs, ...lateRecs].reduce((sum, rec) => {
         return sum + calcLunchLateMinutes(rec.outTime1, rec.inTime2, rule);
       }, 0) : 0;
       const totalLateMinutes = morningLateMinutes + lunchLateMinutes;
@@ -654,20 +658,19 @@ router.post("/generate", async (req, res) => {
       const lunchLateDeduction = Math.round(lunchLateMinutes * minuteRate);
 
       /* ── Absence deduction ─────────────────────────────── */
-      /* Off-season: difference between contractual basic and hours-earned basic stored here
-         so the standard gross formula (basic − absenceDeduction + allowances + OT) stays valid.
-         NW: no absence deduction (handled via nwLeaveDeduction separately). */
-      const absenceDeduction = isNightWatcherPayroll ? 0
+      /* EPF-exempt employees: no absence deduction (always paid full basic).
+         NW: handled via nwLeaveDeduction. Off-season: hours-based. */
+      const absenceDeduction = (isNightWatcherPayroll || isEpfEtfExempt) ? 0
         : isOffSeason ? Math.max(0, Math.round(basicSalary - offSeasonEarnedBasic))
         : Math.round(dailyRate * absentDays);
 
       /* ── Half-day deduction ────────────────────────────── */
-      const halfDayDeduction = (isNightWatcherPayroll || isOffSeason) ? 0 : Math.round(halfDaysCount * (dailyRate / 2));
+      const halfDayDeduction = (isNightWatcherPayroll || isOffSeason || isEpfEtfExempt) ? 0 : Math.round(halfDaysCount * (dailyRate / 2));
 
       /* ── Incomplete hours deduction (rules-based, skipped in off season) ─ */
       let incompleteDeduction = 0;
       let totalIncompleteMinutes = 0;
-      if (!isFlexible && !isNightWatcherPayroll && !isOffSeason) {
+      if (!isFlexible && !isNightWatcherPayroll && !isOffSeason && !isEpfEtfExempt) {
         for (const rec of [...presentRecs, ...halfDayRecs]) {
           const rawHrs = rec.totalHours ?? 0;
           if (rawHrs === 0) continue;
