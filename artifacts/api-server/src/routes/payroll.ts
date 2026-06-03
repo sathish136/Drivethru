@@ -800,14 +800,15 @@ router.post("/generate", async (req, res) => {
       }
 
       /* ── EPF / ETF ──
-       * Night Watcher: contributions on salary after deduction ONLY (not on OT)
-       * All others:    contributions on actual earned gross
+       * EPF/ETF is always calculated on Basic Salary only (not on OT or allowances).
+       * Night Watcher: use salary-after-deduction as the effective basic base.
+       * All others:    use basicSalary directly.
+       * Employee balance pay (netSalary) deducts only EPF 8% — EPF 12% and ETF 3%
+       * are employer contributions and do NOT reduce the employee's take-home pay.
        */
       const epfBase = isNightWatcherPayroll
         ? Math.max(0, nwSalaryAfterDeduction)
-        : isOffSeason
-        ? Math.max(0, offSeasonEarnedBasic)
-        : Math.max(0, grossSalary);
+        : Math.max(0, basicSalary);
       if (structData) {
         epfEmployee = Math.round(epfBase * 0.08);
         epfEmployer = Math.round(epfBase * 0.12);
