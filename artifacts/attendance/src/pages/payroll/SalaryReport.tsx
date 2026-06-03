@@ -644,6 +644,7 @@ export default function SalaryReport() {
     const apit = n(r.apit);
     const balancePay =
       totalEarnings - n(r.epfEmployee) - payDeduction - apit;
+    const net = totalEarnings - n(r.epfEmployee) - advance - apit;
     return {
       ...r,
       allowances,
@@ -655,6 +656,7 @@ export default function SalaryReport() {
       advance,
       apit,
       balancePay,
+      net,
     };
   });
 
