@@ -190,7 +190,7 @@ export default function SalaryReport() {
       const apit = n(r.apit);
       const balancePay =
         totalEarnings - n(r.epfEmployee) - payDeduction - apit;
-      const net = balancePay - advance;
+      const net = totalEarnings - n(r.epfEmployee) - advance - apit;
       return {
         r,
         allowances,
@@ -439,7 +439,7 @@ export default function SalaryReport() {
           totalForEPF,      advance,
       apit,
       balancePay,
-      net: balancePay - advance,
+      net: totalEarnings - n(r.epfEmployee) - advance - apit,
     };
   });
       const tot = d2.reduce(
@@ -498,7 +498,7 @@ export default function SalaryReport() {
           <td class="${d.advance > 0 ? "amber" : ""}">${fmt(d.advance)}</td>
           <td class="${d.apit > 0 ? "red" : ""}">${fmt(d.apit)}</td>
           <td class="b primary">${fmt(d.balancePay)}</td>
-          <td class="b" style="color:#15803d;font-weight:700">${fmt(d.balancePay - d.advance)}</td>
+          <td class="b" style="color:#15803d;font-weight:700">${fmt(d.net)}</td>
           <td class="sm">${fmt(d.r.epfEmployer)}</td>
           <td class="sm">${fmt(d.r.etfEmployer)}</td>
         </tr>`,
@@ -516,7 +516,7 @@ export default function SalaryReport() {
           <td>${fmt(tot.adv)}</td>
           <td>${fmt(tot.apit)}</td>
           <td>${fmt(tot.bal)}</td>
-          <td>${fmt(tot.bal - tot.adv)}</td>
+          <td>${fmt(tot.earn - tot.epf8 - tot.adv - tot.apit)}</td>
           <td>${fmt(tot.epf12)}</td>
           <td>${fmt(tot.etf3)}</td>
         </tr></tfoot>
