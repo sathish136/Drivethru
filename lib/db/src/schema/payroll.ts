@@ -115,6 +115,23 @@ export const staffLoans = pgTable("staff_loans", {
 export const insertStaffLoanSchema = createInsertSchema(staffLoans).omit({ id: true, createdAt: true, updatedAt: true });
 export type StaffLoan = typeof staffLoans.$inferSelect;
 
+/* ── Loan EMI Ledger ─────────────────────────────────────── */
+/* Tracks each EMI payment per loan per month (payroll or manual).
+   This makes payroll generation idempotent – regenerating the same
+   month will first reverse the previous ledger entries before
+   re-applying deductions. */
+export const loanEmiLedger = pgTable("loan_emi_ledger", {
+  id: serial("id").primaryKey(),
+  loanId: integer("loan_id").notNull().references(() => staffLoans.id, { onDelete: "cascade" }),
+  month: integer("month").notNull(),
+  year: integer("year").notNull(),
+  amount: real("amount").notNull(),
+  source: text("source").notNull().$type<"payroll" | "manual">().default("payroll"),
+  note: text("note"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type LoanEmiLedger = typeof loanEmiLedger.$inferSelect;
+
 /* ── Staff Incentives ───────────────────────────────────── */
 
 export const staffIncentives = pgTable("staff_incentives", {

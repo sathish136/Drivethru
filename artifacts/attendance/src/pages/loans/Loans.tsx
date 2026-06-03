@@ -43,6 +43,17 @@ interface Summary {
   totalMonthlyDeduction: number;
 }
 
+interface LedgerEntry {
+  id: number;
+  loanId: number;
+  month: number;
+  year: number;
+  amount: number;
+  source: "payroll" | "manual";
+  note: string | null;
+  createdAt: string;
+}
+
 const EMPTY_FORM = {
   employeeId: "",
   type: "loan" as "loan" | "advance",
@@ -51,6 +62,13 @@ const EMPTY_FORM = {
   startMonth: String(new Date().getMonth() + 1),
   startYear: String(new Date().getFullYear()),
   description: "",
+};
+
+const EMPTY_PAY_FORM = {
+  amount: "",
+  month: String(new Date().getMonth() + 1),
+  year: String(new Date().getFullYear()),
+  note: "",
 };
 
 function addMonths(month: number, year: number, n: number) {
@@ -87,8 +105,15 @@ export default function Loans() {
   const [search, setSearch] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<LoanRow | null>(null);
   const [detailLoan, setDetailLoan] = useState<LoanRow | null>(null);
+  const [ledger, setLedger] = useState<LedgerEntry[]>([]);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
   const [empSearch, setEmpSearch] = useState("");
   const [showEmpDrop, setShowEmpDrop] = useState(false);
+
+  /* Manual pay modal */
+  const [payLoan, setPayLoan] = useState<LoanRow | null>(null);
+  const [payForm, setPayForm] = useState({ ...EMPTY_PAY_FORM });
+  const [paying, setPaying] = useState(false);
 
   const fmt = (n: number) =>
     "Rs. " + n.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -172,6 +197,31 @@ export default function Loans() {
     setShowModal(true);
   };
 
+  const openPayModal = (l: LoanRow) => {
+    setPayLoan(l);
+    setPayForm({
+      amount: String(l.monthlyInstallment),
+      month: String(new Date().getMonth() + 1),
+      year: String(new Date().getFullYear()),
+      note: "",
+    });
+  };
+
+  const openDetail = async (l: LoanRow) => {
+    setDetailLoan(l);
+    setLedger([]);
+    setLedgerLoading(true);
+    try {
+      const res = await fetch(getApiUrl(`loans/${l.id}/ledger`));
+      const data = await res.json();
+      setLedger(Array.isArray(data) ? data : []);
+    } catch {
+      setLedger([]);
+    } finally {
+      setLedgerLoading(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!form.employeeId || !form.totalAmount || !form.monthlyInstallment) {
       alert("Please fill all required fields.");
@@ -204,6 +254,33 @@ export default function Loans() {
       alert("Save failed. Please try again.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handlePay = async () => {
+    if (!payLoan) return;
+    const amount = Number(payForm.amount);
+    if (!amount || amount <= 0) { alert("Enter a valid amount."); return; }
+    if (!payForm.month || !payForm.year) { alert("Select month and year."); return; }
+    setPaying(true);
+    try {
+      const res = await fetch(getApiUrl(`loans/${payLoan.id}/pay`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount,
+          month: Number(payForm.month),
+          year: Number(payForm.year),
+          note: payForm.note || null,
+        }),
+      });
+      if (!res.ok) { const err = await res.json(); alert(err.error || "Payment failed"); return; }
+      setPayLoan(null);
+      await fetchAll();
+    } catch {
+      alert("Payment failed. Please try again.");
+    } finally {
+      setPaying(false);
     }
   };
 
@@ -425,15 +502,22 @@ export default function Loans() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 flex-wrap">
                             <button
-                              onClick={() => setDetailLoan(l)}
+                              onClick={() => openDetail(l)}
                               className="text-xs text-muted-foreground hover:text-primary font-medium px-2 py-1 rounded hover:bg-primary/10 transition-colors"
                             >
                               Schedule
                             </button>
                             {l.status === "active" && (
                               <>
+                                <button
+                                  onClick={() => openPayModal(l)}
+                                  className="text-xs text-emerald-600 font-semibold px-2 py-1 rounded hover:bg-emerald-50 border border-emerald-200 transition-colors"
+                                  title="Record a manual EMI payment"
+                                >
+                                  Pay EMI
+                                </button>
                                 <button onClick={() => openEdit(l)} className="text-xs text-primary font-medium px-2 py-1 rounded hover:bg-primary/10 transition-colors">
                                   Edit
                                 </button>
@@ -442,11 +526,12 @@ export default function Loans() {
                                 </button>
                               </>
                             )}
-                            {l.status !== "active" && (
-                              <button onClick={() => setConfirmDelete(l)} className="text-xs text-muted-foreground hover:text-foreground font-medium px-2 py-1 rounded hover:bg-muted transition-colors">
-                                Delete
-                              </button>
-                            )}
+                            <button
+                              onClick={() => setConfirmDelete(l)}
+                              className="text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                            >
+                              Delete
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -740,6 +825,105 @@ export default function Loans() {
         </div>
       )}
 
+      {/* ─── Manual Pay EMI Modal ─── */}
+      {payLoan && (
+        <div className="fixed inset-0 z-50 bg-foreground/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPayLoan(null)}>
+          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-foreground">Manual EMI Payment</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">{payLoan.employeeName}</p>
+              </div>
+              <button onClick={() => setPayLoan(null)} className="p-2 rounded-lg hover:bg-muted transition-colors">
+                <svg className="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Loan info */}
+              <div className="bg-muted rounded-xl p-3 grid grid-cols-2 gap-3 text-center text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground">Remaining</p>
+                  <p className="font-bold text-red-600">{fmt(payLoan.remainingBalance)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Monthly EMI</p>
+                  <p className="font-bold text-primary">{fmt(payLoan.monthlyInstallment)}</p>
+                </div>
+              </div>
+
+              {/* Amount */}
+              <div>
+                <label className="block text-sm font-semibold text-foreground mb-1.5">
+                  Payment Amount (Rs.) <span className="text-primary">*</span>
+                </label>
+                <input
+                  type="number" min="1" max={payLoan.remainingBalance}
+                  value={payForm.amount}
+                  onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))}
+                  className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder={String(payLoan.monthlyInstallment)}
+                />
+              </div>
+
+              {/* Month / Year */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-semibold text-foreground mb-1.5">Month</label>
+                  <select
+                    value={payForm.month}
+                    onChange={e => setPayForm(f => ({ ...f, month: e.target.value }))}
+                    className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-foreground mb-1.5">Year</label>
+                  <select
+                    value={payForm.year}
+                    onChange={e => setPayForm(f => ({ ...f, year: e.target.value }))}
+                    className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Note */}
+              <div>
+                <label className="block text-sm font-semibold text-foreground mb-1.5">Note (optional)</label>
+                <input
+                  type="text"
+                  value={payForm.note}
+                  onChange={e => setPayForm(f => ({ ...f, note: e.target.value }))}
+                  className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
+                  placeholder="e.g. Cash payment received"
+                />
+              </div>
+            </div>
+
+            <div className="px-6 pb-6 flex gap-3">
+              <button
+                onClick={() => setPayLoan(null)}
+                className="flex-1 border border-border text-foreground py-2.5 rounded-xl text-sm font-semibold hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePay}
+                disabled={paying || !payForm.amount || Number(payForm.amount) <= 0}
+                className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {paying ? "Recording..." : "Record Payment"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── Schedule Detail Modal ─── */}
       {detailLoan && (
         <div className="fixed inset-0 z-50 bg-foreground/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setDetailLoan(null)}>
@@ -783,6 +967,37 @@ export default function Loans() {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-3">
+              {/* Payment ledger */}
+              {ledger.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Payment History</p>
+                  <div className="space-y-1.5">
+                    {ledger.map(entry => (
+                      <div key={entry.id} className="flex items-center justify-between text-xs bg-muted/60 rounded-lg px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${entry.source === "manual" ? "bg-violet-100 text-violet-700" : "bg-blue-100 text-blue-700"}`}>
+                            {entry.source}
+                          </span>
+                          <span className="font-medium text-foreground">{MONTHS[entry.month - 1]?.slice(0, 3)} {entry.year}</span>
+                          {entry.note && <span className="text-muted-foreground">· {entry.note}</span>}
+                        </div>
+                        <span className="font-semibold text-emerald-600">{fmt(entry.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="border-t border-border mt-3 mb-3" />
+                </div>
+              )}
+              {ledgerLoading && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+                  <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Loading history...
+                </div>
+              )}
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Schedule</p>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-xs text-muted-foreground uppercase border-b border-border">
@@ -831,8 +1046,8 @@ export default function Loans() {
         <div className="fixed inset-0 z-50 bg-foreground/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-card border border-border rounded-2xl shadow-2xl p-6 max-w-sm w-full">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center flex-shrink-0">
-                <svg className="w-5 h-5 text-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
@@ -843,12 +1058,15 @@ export default function Loans() {
             </div>
             <p className="text-sm text-muted-foreground bg-muted rounded-lg p-3">
               Permanently delete the <strong className="text-foreground">{confirmDelete.type}</strong> record for <strong className="text-foreground">{confirmDelete.employeeName}</strong>?
+              {confirmDelete.status === "active" && (
+                <span className="block mt-1 text-amber-600 text-xs">This loan is still active. Future payroll runs will no longer deduct it.</span>
+              )}
             </p>
             <div className="flex gap-3 mt-5">
               <button onClick={() => setConfirmDelete(null)} className="flex-1 border border-border text-foreground py-2.5 rounded-xl text-sm font-semibold hover:bg-muted transition-colors">
                 Cancel
               </button>
-              <button onClick={handleDelete} className="flex-1 bg-foreground text-background py-2.5 rounded-xl text-sm font-semibold hover:opacity-80 transition-opacity">
+              <button onClick={handleDelete} className="flex-1 bg-red-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:opacity-80 transition-opacity">
                 Delete
               </button>
             </div>

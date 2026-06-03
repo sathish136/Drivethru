@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { staffLoans } from "@workspace/db/schema";
+import { staffLoans, loanEmiLedger } from "@workspace/db/schema";
 import { employees } from "@workspace/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 
 const router = Router();
 
@@ -58,6 +58,19 @@ router.get("/summary", async (_req, res) => {
   }
 });
 
+/* GET /loans/:id/ledger — payment history */
+router.get("/:id/ledger", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const entries = await db.select().from(loanEmiLedger)
+      .where(eq(loanEmiLedger.loanId, id))
+      .orderBy(desc(loanEmiLedger.createdAt));
+    res.json(entries);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch ledger" });
+  }
+});
+
 /* POST /loans — create new loan/advance */
 router.post("/", async (req, res) => {
   try {
@@ -84,6 +97,51 @@ router.post("/", async (req, res) => {
   }
 });
 
+/* POST /loans/:id/pay — manual EMI payment */
+router.post("/:id/pay", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { amount, month, year, note } = req.body;
+    if (!amount || !month || !year) {
+      return res.status(400).json({ error: "amount, month and year are required" });
+    }
+    const payAmount = Number(amount);
+    if (payAmount <= 0) return res.status(400).json({ error: "Amount must be greater than 0" });
+
+    const [loan] = await db.select().from(staffLoans).where(eq(staffLoans.id, id));
+    if (!loan) return res.status(404).json({ error: "Loan not found" });
+    if (loan.status !== "active") return res.status(400).json({ error: "Loan is not active" });
+    if (loan.remainingBalance <= 0) return res.status(400).json({ error: "Loan is already fully paid" });
+
+    const actualPayment = Math.min(payAmount, loan.remainingBalance);
+    const newPaid    = Math.round((loan.paidAmount + actualPayment) * 100) / 100;
+    const newBalance = Math.max(0, Math.round((loan.remainingBalance - actualPayment) * 100) / 100);
+    const newStatus  = newBalance <= 0 ? "completed" : "active";
+
+    await db.update(staffLoans).set({
+      paidAmount: newPaid,
+      remainingBalance: newBalance,
+      status: newStatus,
+      updatedAt: new Date(),
+    }).where(eq(staffLoans.id, id));
+
+    await db.insert(loanEmiLedger).values({
+      loanId: id,
+      month: Number(month),
+      year: Number(year),
+      amount: actualPayment,
+      source: "manual",
+      note: note || null,
+    });
+
+    const [updated] = await db.select().from(staffLoans).where(eq(staffLoans.id, id));
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to record payment" });
+  }
+});
+
 /* PUT /loans/:id */
 router.put("/:id", async (req, res) => {
   try {
@@ -101,7 +159,10 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-/* DELETE /loans/:id */
+/* DELETE /loans/:id — deletes the record (cascade removes ledger entries).
+   For loans that had payroll deductions, the balances are restored so the
+   deduction history in past payroll records is preserved but the loan no
+   longer accumulates future deductions. */
 router.delete("/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);

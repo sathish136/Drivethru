@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import {
   payrollRecords, employees, attendanceRecords, payrollSettings,
   salaryStructures, employeeSalaryAssignments, holidays, shifts, staffLoans,
-  weekoffSchedules, biometricLogs,
+  weekoffSchedules, biometricLogs, loanEmiLedger,
 } from "@workspace/db/schema";
 import { eq, and, inArray, gte, lte, sql } from "drizzle-orm";
 import {
@@ -361,6 +361,37 @@ router.post("/generate", async (req, res) => {
       }
     }
 
+    /* ── Restore loan balances from any prior payroll run for this month ──
+       This makes payroll generation idempotent: regenerating the same month
+       first reverses the previous EMI deductions before applying fresh ones. */
+    const priorLedger = await db
+      .select({ ledgerId: loanEmiLedger.id, loanId: loanEmiLedger.loanId, amount: loanEmiLedger.amount, source: loanEmiLedger.source })
+      .from(loanEmiLedger)
+      .innerJoin(staffLoans, eq(loanEmiLedger.loanId, staffLoans.id))
+      .where(and(
+        eq(loanEmiLedger.month, month),
+        eq(loanEmiLedger.year, year),
+        eq(loanEmiLedger.source, "payroll"),
+        inArray(staffLoans.employeeId, empIds),
+      ));
+    if (priorLedger.length > 0) {
+      for (const entry of priorLedger) {
+        const [loan] = await db.select().from(staffLoans).where(eq(staffLoans.id, entry.loanId));
+        if (loan) {
+          const restoredPaid    = Math.max(0, Math.round((loan.paidAmount - entry.amount) * 100) / 100);
+          const restoredBalance = Math.round((loan.remainingBalance + entry.amount) * 100) / 100;
+          await db.update(staffLoans).set({
+            paidAmount: restoredPaid,
+            remainingBalance: restoredBalance,
+            status: restoredBalance > 0 ? "active" : loan.status,
+            updatedAt: new Date(),
+          }).where(eq(staffLoans.id, loan.id));
+        }
+      }
+      await db.delete(loanEmiLedger)
+        .where(inArray(loanEmiLedger.id, priorLedger.map(e => e.ledgerId)));
+    }
+
     /* ── Fetch active loans for target employees ── */
     const activeLoans = await db.select().from(staffLoans)
       .where(and(eq(staffLoans.status, "active"), inArray(staffLoans.employeeId, empIds)));
@@ -372,7 +403,7 @@ router.post("/generate", async (req, res) => {
 
     const wdCount = workingDaysInMonth(year, month);
     const generated: any[] = [];
-    const loanUpdates: { id: number; paidAmount: number; remainingBalance: number; status: string }[] = [];
+    const loanUpdates: { id: number; paidAmount: number; remainingBalance: number; status: string; installment: number }[] = [];
 
     await db.delete(payrollRecords).where(
       and(
@@ -817,6 +848,7 @@ router.post("/generate", async (req, res) => {
           paidAmount: newPaid,
           remainingBalance: newBalance,
           status: newBalance <= 0 ? "completed" : "active",
+          installment,
         });
       }
       loanDeduction = Math.round(loanDeduction);
@@ -891,6 +923,7 @@ router.post("/generate", async (req, res) => {
     }
 
     /* ── Update loan balances after payroll is saved ── */
+    const ledgerEntries: { loanId: number; month: number; year: number; amount: number; source: "payroll" | "manual" }[] = [];
     for (const update of loanUpdates) {
       await db.update(staffLoans).set({
         paidAmount: update.paidAmount,
@@ -898,6 +931,10 @@ router.post("/generate", async (req, res) => {
         status: update.status as "active" | "completed" | "cancelled",
         updatedAt: new Date(),
       }).where(eq(staffLoans.id, update.id));
+      ledgerEntries.push({ loanId: update.id, month, year, amount: update.installment, source: "payroll" });
+    }
+    if (ledgerEntries.length > 0) {
+      await db.insert(loanEmiLedger).values(ledgerEntries);
     }
 
     res.json({ success: true, count: generated.length, message: `Payroll generated for ${generated.length} employees` });
