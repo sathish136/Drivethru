@@ -1,5 +1,14 @@
 [
   {
+    "id": "9af71373-56e5-446a-a8b1-06487d042cd3",
+    "timestamp": "2026-06-03T08:30:03.567Z",
+    "type": "scheduled",
+    "trigger": "Scheduled 14:00",
+    "sizeKb": null,
+    "status": "failed",
+    "error": "pg_dump failed (code 1): pg_dump: error: connection to server at \"122.165.225.42\", port 5432 failed: No route to host\n\tIs the server running on that host and accepting TCP/IP connections?\n"
+  },
+  {
     "id": "2981e495-7bd3-4a92-8530-9c60460d631c",
     "timestamp": "2026-06-02T08:30:16.278Z",
     "type": "scheduled",
