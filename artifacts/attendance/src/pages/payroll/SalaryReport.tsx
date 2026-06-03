@@ -690,6 +690,7 @@ export default function SalaryReport() {
       advance: 0,
       apit: 0,
       balancePay: 0,
+      net: 0,
       epf12: 0,
       etf3: 0,
     },
