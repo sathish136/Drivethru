@@ -67,6 +67,7 @@ router.get("/:id/ledger", async (req, res) => {
       .orderBy(desc(loanEmiLedger.createdAt));
     res.json(entries);
   } catch (err) {
+    console.error("[ledger]", err);
     res.status(500).json({ error: "Failed to fetch ledger" });
   }
 });

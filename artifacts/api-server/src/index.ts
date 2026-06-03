@@ -38,6 +38,18 @@ async function runStartupMigrations() {
       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMP NOT NULL DEFAULT NOW()
     )`,
+    `CREATE TABLE IF NOT EXISTS loan_emi_ledger (
+      id SERIAL PRIMARY KEY,
+      loan_id INTEGER NOT NULL REFERENCES staff_loans(id) ON DELETE CASCADE,
+      month INTEGER NOT NULL,
+      year INTEGER NOT NULL,
+      amount REAL NOT NULL,
+      source TEXT NOT NULL DEFAULT 'payroll',
+      note TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_loan_emi_ledger_loan_month ON loan_emi_ledger(loan_id, month, year)`,
+    `CREATE INDEX IF NOT EXISTS idx_loan_emi_ledger_month_year ON loan_emi_ledger(month, year)`,
   ];
   for (const m of migrations) {
     try {

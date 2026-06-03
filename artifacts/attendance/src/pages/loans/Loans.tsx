@@ -144,7 +144,8 @@ export default function Loans() {
     setDetailLoan(l); setDetailLedger([]); setDetailLoading(true);
     try {
       const r = await fetch(api(`loans/${l.id}/ledger`));
-      setDetailLedger(Array.isArray(await r.json()) ? await r.json() : []);
+      const data = await r.json();
+      setDetailLedger(Array.isArray(data) ? data : []);
     } catch { setDetailLedger([]); } finally { setDetailLoading(false); }
   };
 
