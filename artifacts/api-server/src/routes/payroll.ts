@@ -703,8 +703,9 @@ router.post("/generate", async (req, res) => {
             : cfgMult;
           const holidayHourlyRate = basicSalary / 240;
           if (rawHrs > 0) {
-            holidayOtHours += rawHrs;
-            holidayOtPay += Math.round(rawHrs * holidayHourlyRate * mult);
+            const payableHrs = Math.min(rawHrs, 8); // cap at 8 hrs regardless of actual hours worked
+            holidayOtHours += payableHrs;
+            holidayOtPay += Math.round(payableHrs * holidayHourlyRate * mult);
           }
 
         } else if (rec.status === "off_day") {
