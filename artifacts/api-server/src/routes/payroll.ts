@@ -1028,10 +1028,67 @@ router.patch("/bulk-status", async (req, res) => {
   }
 });
 
+/* ── Shared helper: reverse payroll-sourced loan ledger entries ──────────
+   Called whenever a payroll record is deleted (single or bulk).
+   Restores paidAmount / remainingBalance on the affected loans. */
+async function reverseLoanLedgerForPayroll(
+  records: { employeeId: number; month: number; year: number }[]
+) {
+  for (const { employeeId, month, year } of records) {
+    const empLoans = await db
+      .select({ id: staffLoans.id })
+      .from(staffLoans)
+      .where(eq(staffLoans.employeeId, employeeId));
+    const loanIds = empLoans.map(l => l.id);
+    if (loanIds.length === 0) continue;
+
+    const entries = await db
+      .select()
+      .from(loanEmiLedger)
+      .where(
+        and(
+          eq(loanEmiLedger.month, month),
+          eq(loanEmiLedger.year, year),
+          eq(loanEmiLedger.source, "payroll"),
+          inArray(loanEmiLedger.loanId, loanIds),
+        )
+      );
+
+    for (const entry of entries) {
+      const [loan] = await db
+        .select()
+        .from(staffLoans)
+        .where(eq(staffLoans.id, entry.loanId));
+      if (!loan) continue;
+      const restoredPaid    = Math.max(0, Math.round((loan.paidAmount    - entry.amount) * 100) / 100);
+      const restoredBalance =             Math.round((loan.remainingBalance + entry.amount) * 100) / 100;
+      await db.update(staffLoans).set({
+        paidAmount:       restoredPaid,
+        remainingBalance: restoredBalance,
+        status:           restoredBalance > 0 ? "active" : loan.status,
+        updatedAt:        new Date(),
+      }).where(eq(staffLoans.id, loan.id));
+    }
+
+    if (entries.length > 0) {
+      await db.delete(loanEmiLedger)
+        .where(inArray(loanEmiLedger.id, entries.map(e => e.id)));
+    }
+  }
+}
+
 router.delete("/bulk", async (req, res) => {
   try {
     const { ids } = req.body as { ids: number[] };
     if (!ids || ids.length === 0) return res.status(400).json({ message: "No IDs provided" });
+
+    /* Fetch records before deleting so we can reverse loan ledger entries */
+    const rows = await db
+      .select({ employeeId: payrollRecords.employeeId, month: payrollRecords.month, year: payrollRecords.year })
+      .from(payrollRecords)
+      .where(inArray(payrollRecords.id, ids));
+    await reverseLoanLedgerForPayroll(rows);
+
     await db.delete(payrollRecords).where(inArray(payrollRecords.id, ids));
     res.json({ success: true, deleted: ids.length });
   } catch (e) {
@@ -1058,6 +1115,11 @@ router.patch("/:id/status", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    const [record] = await db
+      .select({ employeeId: payrollRecords.employeeId, month: payrollRecords.month, year: payrollRecords.year })
+      .from(payrollRecords)
+      .where(eq(payrollRecords.id, id));
+    if (record) await reverseLoanLedgerForPayroll([record]);
     await db.delete(payrollRecords).where(eq(payrollRecords.id, id));
     res.json({ success: true });
   } catch (e) {

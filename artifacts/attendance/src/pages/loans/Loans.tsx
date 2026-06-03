@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-function getApiUrl(path: string) { return `${BASE}/api/${path}`; }
+function api(path: string) { return `${BASE}/api/${path}`; }
 
 const MONTHS = [
   "January","February","March","April","May","June",
@@ -9,111 +9,80 @@ const MONTHS = [
 ];
 
 interface Employee {
-  id: number;
-  employeeId: string;
-  fullName: string;
-  designation: string;
-  department: string;
+  id: number; employeeId: string; fullName: string; designation: string; department: string;
 }
-
 interface LoanRow {
-  id: number;
-  type: "loan" | "advance";
-  totalAmount: number;
-  monthlyInstallment: number;
-  startMonth: number;
-  startYear: number;
-  paidAmount: number;
-  remainingBalance: number;
+  id: number; type: "loan" | "advance";
+  totalAmount: number; monthlyInstallment: number;
+  startMonth: number; startYear: number;
+  paidAmount: number; remainingBalance: number;
   status: "active" | "completed" | "cancelled";
-  description: string | null;
-  createdAt: string;
-  employeeId: number;
-  employeeCode: string;
-  employeeName: string;
-  designation: string;
-  department: string;
+  description: string | null; createdAt: string;
+  employeeId: number; employeeCode: string; employeeName: string; department: string;
 }
-
 interface Summary {
-  activeCount: number;
-  totalLoans: number;
-  totalAdvances: number;
-  totalOutstanding: number;
-  totalMonthlyDeduction: number;
+  activeCount: number; totalLoans: number; totalAdvances: number;
+  totalOutstanding: number; totalMonthlyDeduction: number;
 }
-
 interface LedgerEntry {
-  id: number;
-  loanId: number;
-  month: number;
-  year: number;
-  amount: number;
-  source: "payroll" | "manual";
-  note: string | null;
-  createdAt: string;
+  id: number; loanId: number; month: number; year: number;
+  amount: number; source: "payroll" | "manual"; note: string | null; createdAt: string;
 }
 
 const EMPTY_FORM = {
-  employeeId: "",
-  type: "loan" as "loan" | "advance",
-  totalAmount: "",
-  monthlyInstallment: "",
+  employeeId: "", type: "loan" as "loan" | "advance",
+  totalAmount: "", monthlyInstallment: "",
   startMonth: String(new Date().getMonth() + 1),
   startYear: String(new Date().getFullYear()),
   description: "",
-};
-
-const EMPTY_PAY_FORM = {
-  amount: "",
-  month: String(new Date().getMonth() + 1),
-  year: String(new Date().getFullYear()),
-  note: "",
 };
 
 function addMonths(month: number, year: number, n: number) {
   const d = new Date(year, month - 1 + n, 1);
   return { month: d.getMonth() + 1, year: d.getFullYear() };
 }
+function mkey(month: number, year: number) { return `${year}-${String(month).padStart(2,"0")}`; }
 
 function calcSchedule(totalAmount: number, installment: number, startMonth: number, startYear: number) {
   if (!totalAmount || !installment || installment <= 0) return [];
-  const months: { month: number; year: number; amount: number; balance: number }[] = [];
-  let remaining = totalAmount;
-  let i = 0;
-  while (remaining > 0 && i < 120) {
-    const amt = Math.min(remaining, installment);
-    remaining = Math.max(0, remaining - amt);
+  const out: { month: number; year: number; amount: number; balance: number }[] = [];
+  let rem = totalAmount; let i = 0;
+  while (rem > 0 && i < 120) {
+    const amt = Math.min(rem, installment);
+    rem = Math.max(0, rem - amt);
     const { month, year } = addMonths(startMonth, startYear, i);
-    months.push({ month, year, amount: amt, balance: remaining });
-    i++;
+    out.push({ month, year, amount: amt, balance: rem }); i++;
   }
-  return months;
+  return out;
 }
 
 export default function Loans() {
-  const [loans, setLoans] = useState<LoanRow[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [editLoan, setEditLoan] = useState<LoanRow | null>(null);
-  const [form, setForm] = useState({ ...EMPTY_FORM });
-  const [saving, setSaving] = useState(false);
-  const [filterStatus, setFilterStatus] = useState("");
-  const [filterType, setFilterType] = useState("");
-  const [search, setSearch] = useState("");
+  const [loans, setLoans]       = useState<LoanRow[]>([]);
+  const [employees, setEmps]    = useState<Employee[]>([]);
+  const [summary, setSummary]   = useState<Summary | null>(null);
+  const [loading, setLoading]   = useState(true);
+  const [showModal, setShowModal]         = useState(false);
+  const [editLoan, setEditLoan]           = useState<LoanRow | null>(null);
+  const [form, setForm]                   = useState({ ...EMPTY_FORM });
+  const [saving, setSaving]               = useState(false);
+  const [filterStatus, setFilterStatus]   = useState("");
+  const [filterType, setFilterType]       = useState("");
+  const [search, setSearch]               = useState("");
   const [confirmDelete, setConfirmDelete] = useState<LoanRow | null>(null);
-  const [detailLoan, setDetailLoan] = useState<LoanRow | null>(null);
-  const [ledger, setLedger] = useState<LedgerEntry[]>([]);
-  const [ledgerLoading, setLedgerLoading] = useState(false);
-  const [empSearch, setEmpSearch] = useState("");
-  const [showEmpDrop, setShowEmpDrop] = useState(false);
+  const [detailLoan, setDetailLoan]       = useState<LoanRow | null>(null);
+  const [detailLedger, setDetailLedger]   = useState<LedgerEntry[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [empSearch, setEmpSearch]         = useState("");
+  const [showEmpDrop, setShowEmpDrop]     = useState(false);
 
-  /* Manual pay modal */
-  const [payLoan, setPayLoan] = useState<LoanRow | null>(null);
-  const [payForm, setPayForm] = useState({ ...EMPTY_PAY_FORM });
-  const [paying, setPaying] = useState(false);
+  /* ── Multi-EMI pay modal state ── */
+  const [payLoan, setPayLoan]           = useState<LoanRow | null>(null);
+  const [payLedger, setPayLedger]       = useState<LedgerEntry[]>([]);
+  const [payLedgerLoad, setPayLedgerLoad] = useState(false);
+  const [selected, setSelected]         = useState<Set<string>>(new Set());
+  const [amounts, setAmounts]           = useState<Record<string, string>>({});
+  const [bulkNote, setBulkNote]         = useState("");
+  const [bulkPaying, setBulkPaying]     = useState(false);
 
   const fmt = (n: number) =>
     "Rs. " + n.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -121,219 +90,196 @@ export default function Loans() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [loansRes, empsRes, sumRes] = await Promise.all([
-        fetch(getApiUrl("loans")),
-        fetch(getApiUrl("employees?limit=500&status=active")),
-        fetch(getApiUrl("loans/summary")),
+      const [lR, eR, sR] = await Promise.all([
+        fetch(api("loans")), fetch(api("employees?limit=500&status=active")), fetch(api("loans/summary")),
       ]);
-      const loansData = await loansRes.json();
-      const empsRaw = await empsRes.json();
-      const sumData = await sumRes.json();
+      const loansData = await lR.json();
+      const empsRaw   = await eR.json();
+      const sumData   = await sR.json();
       setLoans(Array.isArray(loansData) ? loansData : []);
       let empArr: Employee[] = [];
       if (Array.isArray(empsRaw)) empArr = empsRaw;
       else if (Array.isArray(empsRaw?.employees)) empArr = empsRaw.employees;
-      else if (Array.isArray(empsRaw?.data)) empArr = empsRaw.data;
-      setEmployees(empArr);
+      else if (Array.isArray(empsRaw?.data))      empArr = empsRaw.data;
+      setEmps(empArr);
       setSummary(sumData);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const totalMonths = useMemo(() => {
-    const ta = Number(form.totalAmount);
-    const mi = Number(form.monthlyInstallment);
-    if (!ta || !mi || mi <= 0) return 0;
-    return Math.ceil(ta / mi);
+    const ta = Number(form.totalAmount), mi = Number(form.monthlyInstallment);
+    return (!ta || !mi || mi <= 0) ? 0 : Math.ceil(ta / mi);
   }, [form.totalAmount, form.monthlyInstallment]);
 
-  const endMonthYear = useMemo(() => {
-    if (!totalMonths) return null;
-    return addMonths(Number(form.startMonth), Number(form.startYear), totalMonths - 1);
-  }, [totalMonths, form.startMonth, form.startYear]);
-
+  const endMonthYear = useMemo(() =>
+    totalMonths ? addMonths(Number(form.startMonth), Number(form.startYear), totalMonths - 1) : null,
+    [totalMonths, form.startMonth, form.startYear]
+  );
   const schedule = useMemo(() =>
     calcSchedule(Number(form.totalAmount), Number(form.monthlyInstallment), Number(form.startMonth), Number(form.startYear)),
     [form.totalAmount, form.monthlyInstallment, form.startMonth, form.startYear]
   );
-
   const filteredEmps = useMemo(() => {
     if (!empSearch.trim()) return employees.slice(0, 50);
     const q = empSearch.toLowerCase();
-    return employees.filter(e =>
-      e.fullName?.toLowerCase().includes(q) || e.employeeId?.toLowerCase().includes(q)
-    ).slice(0, 50);
+    return employees.filter(e => e.fullName?.toLowerCase().includes(q) || e.employeeId?.toLowerCase().includes(q)).slice(0, 50);
   }, [employees, empSearch]);
+  const selectedEmp = useMemo(() => employees.find(e => String(e.id) === form.employeeId), [employees, form.employeeId]);
+  const years = Array.from({ length: 7 }, (_, i) => new Date().getFullYear() - 2 + i);
 
-  const selectedEmp = useMemo(() =>
-    employees.find(e => String(e.id) === form.employeeId), [employees, form.employeeId]);
-
-  const openNew = () => {
-    setEditLoan(null);
-    setForm({ ...EMPTY_FORM });
-    setEmpSearch("");
-    setShowEmpDrop(false);
-    setShowModal(true);
-  };
-
+  /* Open add/edit */
+  const openNew = () => { setEditLoan(null); setForm({ ...EMPTY_FORM }); setEmpSearch(""); setShowEmpDrop(false); setShowModal(true); };
   const openEdit = (l: LoanRow) => {
     setEditLoan(l);
-    setForm({
-      employeeId: String(l.employeeId),
-      type: l.type,
-      totalAmount: String(l.totalAmount),
-      monthlyInstallment: String(l.monthlyInstallment),
-      startMonth: String(l.startMonth),
-      startYear: String(l.startYear),
-      description: l.description ?? "",
-    });
-    setEmpSearch("");
-    setShowEmpDrop(false);
-    setShowModal(true);
+    setForm({ employeeId: String(l.employeeId), type: l.type, totalAmount: String(l.totalAmount),
+      monthlyInstallment: String(l.monthlyInstallment), startMonth: String(l.startMonth),
+      startYear: String(l.startYear), description: l.description ?? "" });
+    setEmpSearch(""); setShowEmpDrop(false); setShowModal(true);
   };
 
-  const openPayModal = (l: LoanRow) => {
-    setPayLoan(l);
-    setPayForm({
-      amount: String(l.monthlyInstallment),
-      month: String(new Date().getMonth() + 1),
-      year: String(new Date().getFullYear()),
-      note: "",
-    });
-  };
-
+  /* Open detail / schedule */
   const openDetail = async (l: LoanRow) => {
-    setDetailLoan(l);
-    setLedger([]);
-    setLedgerLoading(true);
+    setDetailLoan(l); setDetailLedger([]); setDetailLoading(true);
     try {
-      const res = await fetch(getApiUrl(`loans/${l.id}/ledger`));
-      const data = await res.json();
-      setLedger(Array.isArray(data) ? data : []);
-    } catch {
-      setLedger([]);
-    } finally {
-      setLedgerLoading(false);
-    }
+      const r = await fetch(api(`loans/${l.id}/ledger`));
+      setDetailLedger(Array.isArray(await r.json()) ? await r.json() : []);
+    } catch { setDetailLedger([]); } finally { setDetailLoading(false); }
   };
 
+  /* ── Open multi-pay modal ── */
+  const openPay = async (l: LoanRow) => {
+    setPayLoan(l); setSelected(new Set()); setAmounts({}); setBulkNote(""); setPayLedger([]);
+    setPayLedgerLoad(true);
+    try {
+      const r = await fetch(api(`loans/${l.id}/ledger`));
+      const data = await r.json();
+      const entries: LedgerEntry[] = Array.isArray(data) ? data : [];
+      setPayLedger(entries);
+      /* Pre-select the first unpaid month by default */
+      const paidKeys = new Set(entries.map(e => mkey(e.month, e.year)));
+      const sched = calcSchedule(l.totalAmount, l.monthlyInstallment, l.startMonth, l.startYear);
+      const firstUnpaid = sched.find(s => !paidKeys.has(mkey(s.month, s.year)));
+      if (firstUnpaid) {
+        const k = mkey(firstUnpaid.month, firstUnpaid.year);
+        setSelected(new Set([k]));
+        setAmounts({ [k]: String(firstUnpaid.amount) });
+      }
+    } catch { setPayLedger([]); } finally { setPayLedgerLoad(false); }
+  };
+
+  /* Save add/edit */
   const handleSave = async () => {
-    if (!form.employeeId || !form.totalAmount || !form.monthlyInstallment) {
-      alert("Please fill all required fields.");
-      return;
-    }
-    if (Number(form.monthlyInstallment) <= 0 || Number(form.totalAmount) <= 0) {
-      alert("Amounts must be greater than 0.");
-      return;
-    }
+    if (!form.employeeId || !form.totalAmount || !form.monthlyInstallment) { alert("Fill all required fields."); return; }
+    if (Number(form.monthlyInstallment) <= 0 || Number(form.totalAmount) <= 0) { alert("Amounts must be > 0."); return; }
     setSaving(true);
     try {
-      const url = editLoan ? getApiUrl(`loans/${editLoan.id}`) : getApiUrl("loans");
+      const url    = editLoan ? api(`loans/${editLoan.id}`) : api("loans");
       const method = editLoan ? "PUT" : "POST";
-      const body = editLoan
+      const body   = editLoan
         ? { monthlyInstallment: Number(form.monthlyInstallment), description: form.description || null }
-        : {
-            employeeId: Number(form.employeeId),
-            type: form.type,
-            totalAmount: Number(form.totalAmount),
-            monthlyInstallment: Number(form.monthlyInstallment),
-            startMonth: Number(form.startMonth),
-            startYear: Number(form.startYear),
-            description: form.description || null,
-          };
+        : { employeeId: Number(form.employeeId), type: form.type, totalAmount: Number(form.totalAmount),
+            monthlyInstallment: Number(form.monthlyInstallment), startMonth: Number(form.startMonth),
+            startYear: Number(form.startYear), description: form.description || null };
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      if (!res.ok) { const err = await res.json(); alert(err.error || "Failed to save"); return; }
-      setShowModal(false);
-      await fetchAll();
-    } catch {
-      alert("Save failed. Please try again.");
-    } finally {
-      setSaving(false);
-    }
+      if (!res.ok) { const e = await res.json(); alert(e.error || "Failed to save"); return; }
+      setShowModal(false); await fetchAll();
+    } catch { alert("Save failed."); } finally { setSaving(false); }
   };
 
-  const handlePay = async () => {
-    if (!payLoan) return;
-    const amount = Number(payForm.amount);
-    if (!amount || amount <= 0) { alert("Enter a valid amount."); return; }
-    if (!payForm.month || !payForm.year) { alert("Select month and year."); return; }
-    setPaying(true);
-    try {
-      const res = await fetch(getApiUrl(`loans/${payLoan.id}/pay`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount,
-          month: Number(payForm.month),
-          year: Number(payForm.year),
-          note: payForm.note || null,
-        }),
-      });
-      if (!res.ok) { const err = await res.json(); alert(err.error || "Payment failed"); return; }
-      setPayLoan(null);
-      await fetchAll();
-    } catch {
-      alert("Payment failed. Please try again.");
-    } finally {
-      setPaying(false);
-    }
-  };
-
+  /* Cancel loan */
   const handleCancel = async (l: LoanRow) => {
     if (!confirm(`Cancel this ${l.type} for ${l.employeeName}?`)) return;
-    await fetch(getApiUrl(`loans/${l.id}`), {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "cancelled" }),
-    });
+    await fetch(api(`loans/${l.id}`), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "cancelled" }) });
     await fetchAll();
   };
 
+  /* Delete */
   const handleDelete = async () => {
     if (!confirmDelete) return;
-    await fetch(getApiUrl(`loans/${confirmDelete.id}`), { method: "DELETE" });
-    setConfirmDelete(null);
-    await fetchAll();
+    await fetch(api(`loans/${confirmDelete.id}`), { method: "DELETE" });
+    setConfirmDelete(null); await fetchAll();
   };
 
+  /* ── Bulk pay submit ── */
+  const handleBulkPay = async () => {
+    if (!payLoan || selected.size === 0) return;
+    const sched = calcSchedule(payLoan.totalAmount, payLoan.monthlyInstallment, payLoan.startMonth, payLoan.startYear);
+    const payments = sched
+      .filter(s => selected.has(mkey(s.month, s.year)))
+      .map(s => {
+        const k = mkey(s.month, s.year);
+        const amt = Number(amounts[k]) || s.amount;
+        return { month: s.month, year: s.year, amount: amt, note: bulkNote || undefined };
+      });
+    if (payments.length === 0) return;
+    setBulkPaying(true);
+    try {
+      const res = await fetch(api(`loans/${payLoan.id}/pay-bulk`), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payments }),
+      });
+      if (!res.ok) { const e = await res.json(); alert(e.error || "Payment failed"); return; }
+      const data = await res.json();
+      alert(`✓ Recorded ${data.recorded} payment${data.recorded !== 1 ? "s" : ""} successfully.`);
+      setPayLoan(null); await fetchAll();
+    } catch { alert("Payment failed."); } finally { setBulkPaying(false); }
+  };
+
+  /* Helpers for pay modal */
+  const paySchedule = useMemo(() =>
+    payLoan ? calcSchedule(payLoan.totalAmount, payLoan.monthlyInstallment, payLoan.startMonth, payLoan.startYear) : [],
+    [payLoan]
+  );
+  const paidKeys = useMemo(() => new Set(payLedger.map(e => mkey(e.month, e.year))), [payLedger]);
+  const unpaidSchedule = useMemo(() => paySchedule.filter(s => !paidKeys.has(mkey(s.month, s.year))), [paySchedule, paidKeys]);
+
+  const quickSelect = (n: number | "all") => {
+    const picks = n === "all" ? unpaidSchedule : unpaidSchedule.slice(0, n);
+    const newSel = new Set(picks.map(s => mkey(s.month, s.year)));
+    const newAmt: Record<string, string> = {};
+    for (const s of picks) newAmt[mkey(s.month, s.year)] = String(s.amount);
+    setSelected(newSel); setAmounts(newAmt);
+  };
+
+  const toggleMonth = (s: { month: number; year: number; amount: number }) => {
+    const k = mkey(s.month, s.year);
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(k)) { next.delete(k); } else { next.add(k); if (!amounts[k]) setAmounts(a => ({ ...a, [k]: String(s.amount) })); }
+      return next;
+    });
+  };
+
+  const totalSelected = useMemo(() =>
+    Array.from(selected).reduce((sum, k) => sum + (Number(amounts[k]) || 0), 0),
+    [selected, amounts]
+  );
+
+  /* Table helpers */
   const visible = loans.filter(l => {
     if (filterStatus && l.status !== filterStatus) return false;
-    if (filterType && l.type !== filterType) return false;
+    if (filterType   && l.type   !== filterType)   return false;
     if (search) {
       const q = search.toLowerCase();
       if (!l.employeeName?.toLowerCase().includes(q) && !l.employeeCode?.toLowerCase().includes(q)) return false;
     }
     return true;
   });
+  const pct       = (l: LoanRow) => l.totalAmount > 0 ? Math.min(100, Math.round((l.paidAmount / l.totalAmount) * 100)) : 0;
+  const loanMonths = (l: LoanRow) => l.monthlyInstallment > 0 ? Math.ceil(l.totalAmount / l.monthlyInstallment) : 0;
+  const loanEnd    = (l: LoanRow) => { const m = loanMonths(l); return m ? addMonths(l.startMonth, l.startYear, m - 1) : null; };
 
-  const pct = (l: LoanRow) =>
-    l.totalAmount > 0 ? Math.min(100, Math.round((l.paidAmount / l.totalAmount) * 100)) : 0;
-
-  const loanMonths = (l: LoanRow) =>
-    l.monthlyInstallment > 0 ? Math.ceil(l.totalAmount / l.monthlyInstallment) : 0;
-
-  const loanEndDate = (l: LoanRow) => {
-    const m = loanMonths(l);
-    if (!m) return null;
-    return addMonths(l.startMonth, l.startYear, m - 1);
-  };
-
-  const years = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 1 + i);
-
-  const statusBadge = (s: string) => {
-    if (s === "active")    return "bg-emerald-100 text-emerald-700 border border-emerald-200";
-    if (s === "completed") return "bg-blue-100 text-blue-700 border border-blue-200";
-    return "bg-red-100 text-red-600 border border-red-200";
-  };
-
+  const statusBadge = (s: string) =>
+    s === "active"    ? "bg-emerald-100 text-emerald-700 border border-emerald-200" :
+    s === "completed" ? "bg-blue-100 text-blue-700 border border-blue-200" :
+                        "bg-red-100 text-red-600 border border-red-200";
   const typeBadge = (t: string) =>
-    t === "loan"
-      ? "bg-amber-100 text-amber-700 border border-amber-200"
-      : "bg-violet-100 text-violet-700 border border-violet-200";
+    t === "loan" ? "bg-amber-100 text-amber-700 border border-amber-200"
+                 : "bg-violet-100 text-violet-700 border border-violet-200";
+  const sourceBadge = (s: string) =>
+    s === "payroll" ? "bg-blue-100 text-blue-700" : "bg-violet-100 text-violet-700";
 
   return (
     <div className="min-h-screen bg-background">
@@ -345,35 +291,26 @@ export default function Loans() {
             <h1 className="text-2xl font-bold text-foreground">Staff Loans & Advances</h1>
             <p className="text-sm text-muted-foreground mt-0.5">Manage employee loan and salary advance deductions</p>
           </div>
-          <button
-            onClick={openNew}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:opacity-90 active:opacity-80 transition-opacity shadow-sm"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-            </svg>
+          <button onClick={openNew} className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:opacity-90 shadow-sm transition-opacity">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
             Add Loan / Advance
           </button>
         </div>
 
-        {/* Summary Cards */}
+        {/* Summary */}
         {summary && (
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            <div className="bg-card border border-border rounded-xl p-4 shadow-sm">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Active Records</p>
-              <p className="text-3xl font-bold text-foreground mt-1">{summary.activeCount}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">total active</p>
-            </div>
-            <div className="bg-card border border-border rounded-xl p-4 shadow-sm">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Active Loans</p>
-              <p className="text-3xl font-bold text-primary mt-1">{summary.totalLoans}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">long-term</p>
-            </div>
-            <div className="bg-card border border-border rounded-xl p-4 shadow-sm">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Advances</p>
-              <p className="text-3xl font-bold text-primary mt-1">{summary.totalAdvances}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">salary advance</p>
-            </div>
+            {[
+              { label: "Active Records", val: summary.activeCount, sub: "total active", num: true },
+              { label: "Active Loans",   val: summary.totalLoans,   sub: "long-term",   num: true },
+              { label: "Advances",       val: summary.totalAdvances, sub: "salary advance", num: true },
+            ].map(c => (
+              <div key={c.label} className="bg-card border border-border rounded-xl p-4 shadow-sm">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{c.label}</p>
+                <p className="text-3xl font-bold text-primary mt-1">{c.val}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{c.sub}</p>
+              </div>
+            ))}
             <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 shadow-sm">
               <p className="text-xs text-primary uppercase tracking-wide font-medium">Total Outstanding</p>
               <p className="text-lg font-bold text-foreground mt-1 leading-tight">{fmt(summary.totalOutstanding)}</p>
@@ -390,32 +327,19 @@ export default function Loans() {
         {/* Filters */}
         <div className="bg-card border border-border rounded-xl p-3 flex flex-wrap gap-3 items-center shadow-sm">
           <div className="relative flex-1 min-w-[180px]">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              type="text"
-              placeholder="Search by name or employee ID..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full border border-border rounded-lg pl-9 pr-3 py-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
-            />
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            <input type="text" placeholder="Search by name or employee ID..." value={search} onChange={e => setSearch(e.target.value)}
+              className="w-full border border-border rounded-lg pl-9 pr-3 py-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground" />
           </div>
-          <select
-            value={filterStatus}
-            onChange={e => setFilterStatus(e.target.value)}
-            className="border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          >
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+            className="border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
             <option value="">All Status</option>
             <option value="active">Active</option>
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
           </select>
-          <select
-            value={filterType}
-            onChange={e => setFilterType(e.target.value)}
-            className="border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          >
+          <select value={filterType} onChange={e => setFilterType(e.target.value)}
+            className="border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
             <option value="">All Types</option>
             <option value="loan">Loan</option>
             <option value="advance">Advance</option>
@@ -431,9 +355,7 @@ export default function Loans() {
         ) : visible.length === 0 ? (
           <div className="bg-card border border-border rounded-xl p-16 text-center shadow-sm">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-muted rounded-full mb-4">
-              <svg className="w-8 h-8 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
+              <svg className="w-8 h-8 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
             </div>
             <p className="text-muted-foreground font-medium">No records found</p>
             <p className="text-muted-foreground text-sm mt-1">Add a loan or advance to get started</p>
@@ -444,16 +366,14 @@ export default function Loans() {
               <table className="min-w-full">
                 <thead>
                   <tr className="bg-muted border-b border-border">
-                    {["Employee","Type","Total Amount","Monthly Deduction","Duration","Start → End","Paid","Remaining","Progress","Status","Actions"].map(h => (
+                    {["Employee","Type","Total","Monthly EMI","Duration","Start → End","Paid","Remaining","Progress","Status","Actions"].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {visible.map(l => {
-                    const months = loanMonths(l);
-                    const end = loanEndDate(l);
-                    const progress = pct(l);
+                    const months = loanMonths(l); const end = loanEnd(l); const progress = pct(l);
                     return (
                       <tr key={l.id} className="hover:bg-muted/40 transition-colors">
                         <td className="px-4 py-3">
@@ -461,77 +381,48 @@ export default function Loans() {
                           <div className="text-xs text-muted-foreground mt-0.5">{l.employeeCode} · {l.department}</div>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${typeBadge(l.type)}`}>
-                            {l.type}
-                          </span>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${typeBadge(l.type)}`}>{l.type}</span>
                         </td>
                         <td className="px-4 py-3 text-sm font-semibold text-foreground">{fmt(l.totalAmount)}</td>
                         <td className="px-4 py-3">
                           <span className="text-sm font-medium text-primary">{fmt(l.monthlyInstallment)}</span>
                           <span className="text-xs text-muted-foreground">/mo</span>
                         </td>
-                        <td className="px-4 py-3">
-                          <span className="text-sm font-bold text-foreground">{months}</span>
-                          <span className="text-xs text-muted-foreground ml-1">mo</span>
-                        </td>
+                        <td className="px-4 py-3 text-sm font-bold text-foreground">{months}<span className="text-xs text-muted-foreground ml-1">mo</span></td>
                         <td className="px-4 py-3 text-xs whitespace-nowrap">
-                          <div className="font-medium text-foreground">{MONTHS[l.startMonth - 1]?.slice(0, 3)} {l.startYear}</div>
-                          {end && <div className="text-muted-foreground">→ {MONTHS[end.month - 1]?.slice(0, 3)} {end.year}</div>}
+                          <div className="font-medium text-foreground">{MONTHS[l.startMonth-1]?.slice(0,3)} {l.startYear}</div>
+                          {end && <div className="text-muted-foreground">→ {MONTHS[end.month-1]?.slice(0,3)} {end.year}</div>}
                         </td>
                         <td className="px-4 py-3 text-sm text-emerald-600 font-medium">{fmt(l.paidAmount)}</td>
                         <td className="px-4 py-3 text-sm font-bold text-red-600">{fmt(l.remainingBalance)}</td>
                         <td className="px-4 py-3">
                           <div className="w-28">
-                            <div className="flex justify-between items-center text-xs mb-1">
+                            <div className="flex justify-between text-xs mb-1">
                               <span className="text-muted-foreground font-medium">{progress}%</span>
-                              <span className="text-muted-foreground text-[10px]">
-                                {Math.round((l.paidAmount / (l.monthlyInstallment || 1)))} / {months}
-                              </span>
+                              <span className="text-muted-foreground text-[10px]">{Math.round(l.paidAmount/(l.monthlyInstallment||1))}/{months}</span>
                             </div>
                             <div className="w-full bg-muted rounded-full h-1.5">
-                              <div
-                                className="h-1.5 rounded-full bg-primary transition-all"
-                                style={{ width: `${progress}%` }}
-                              />
+                              <div className="h-1.5 rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} />
                             </div>
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${statusBadge(l.status)}`}>
-                            {l.status}
-                          </span>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${statusBadge(l.status)}`}>{l.status}</span>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1 flex-wrap">
-                            <button
-                              onClick={() => openDetail(l)}
-                              className="text-xs text-muted-foreground hover:text-primary font-medium px-2 py-1 rounded hover:bg-primary/10 transition-colors"
-                            >
-                              Schedule
-                            </button>
+                            <button onClick={() => openDetail(l)} className="text-xs text-muted-foreground hover:text-primary font-medium px-2 py-1 rounded hover:bg-primary/10 transition-colors">Schedule</button>
                             {l.status === "active" && (
                               <>
-                                <button
-                                  onClick={() => openPayModal(l)}
-                                  className="text-xs text-emerald-600 font-semibold px-2 py-1 rounded hover:bg-emerald-50 border border-emerald-200 transition-colors"
-                                  title="Record a manual EMI payment"
-                                >
+                                <button onClick={() => openPay(l)}
+                                  className="text-xs text-emerald-600 font-semibold px-2 py-1 rounded hover:bg-emerald-50 border border-emerald-200 transition-colors whitespace-nowrap">
                                   Pay EMI
                                 </button>
-                                <button onClick={() => openEdit(l)} className="text-xs text-primary font-medium px-2 py-1 rounded hover:bg-primary/10 transition-colors">
-                                  Edit
-                                </button>
-                                <button onClick={() => handleCancel(l)} className="text-xs text-muted-foreground hover:text-foreground font-medium px-2 py-1 rounded hover:bg-muted transition-colors">
-                                  Cancel
-                                </button>
+                                <button onClick={() => openEdit(l)} className="text-xs text-primary font-medium px-2 py-1 rounded hover:bg-primary/10 transition-colors">Edit</button>
+                                <button onClick={() => handleCancel(l)} className="text-xs text-muted-foreground hover:text-foreground font-medium px-2 py-1 rounded hover:bg-muted transition-colors">Cancel</button>
                               </>
                             )}
-                            <button
-                              onClick={() => setConfirmDelete(l)}
-                              className="text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
-                            >
-                              Delete
-                            </button>
+                            <button onClick={() => setConfirmDelete(l)} className="text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors">Delete</button>
                           </div>
                         </td>
                       </tr>
@@ -544,92 +435,54 @@ export default function Loans() {
         )}
       </div>
 
-      {/* ─── Add / Edit Modal ─── */}
+      {/* ═══════════════════════════════════════════════════════
+          ADD / EDIT MODAL
+      ═══════════════════════════════════════════════════════ */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-foreground/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
           <div className="bg-card rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-border" onClick={e => e.stopPropagation()}>
-            {/* Header */}
             <div className="sticky top-0 bg-card border-b border-border px-6 py-4 rounded-t-2xl flex items-center justify-between z-10">
               <div>
-                <h2 className="text-lg font-bold text-foreground">
-                  {editLoan ? "Edit Loan / Advance" : "New Loan / Advance"}
-                </h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {editLoan ? "Update installment amount or notes" : "Configure deduction details"}
-                </p>
+                <h2 className="text-lg font-bold text-foreground">{editLoan ? "Edit Loan / Advance" : "New Loan / Advance"}</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">{editLoan ? "Update installment or notes" : "Configure deduction details"}</p>
               </div>
               <button onClick={() => setShowModal(false)} className="p-2 rounded-lg hover:bg-muted transition-colors">
-                <svg className="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <svg className="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-
             <div className="p-6 space-y-5">
-              {/* Employee Picker */}
               {!editLoan && (
                 <div>
-                  <label className="block text-sm font-semibold text-foreground mb-1.5">
-                    Employee <span className="text-primary">*</span>
-                  </label>
+                  <label className="block text-sm font-semibold text-foreground mb-1.5">Employee <span className="text-primary">*</span></label>
                   <div className="relative">
-                    <div
-                      className="w-full border border-border rounded-xl px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between focus-within:ring-2 focus-within:ring-ring bg-background"
-                      onClick={() => setShowEmpDrop(v => !v)}
-                    >
-                      {selectedEmp ? (
-                        <div>
-                          <span className="font-medium text-foreground">{selectedEmp.fullName}</span>
-                          <span className="text-muted-foreground ml-2 text-xs">({selectedEmp.employeeId})</span>
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">Select employee...</span>
-                      )}
-                      <svg className={`w-4 h-4 text-muted-foreground transition-transform ${showEmpDrop ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
+                    <div className="w-full border border-border rounded-xl px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between bg-background" onClick={() => setShowEmpDrop(v => !v)}>
+                      {selectedEmp
+                        ? <div><span className="font-medium text-foreground">{selectedEmp.fullName}</span><span className="text-muted-foreground ml-2 text-xs">({selectedEmp.employeeId})</span></div>
+                        : <span className="text-muted-foreground">Select employee...</span>}
+                      <svg className={`w-4 h-4 text-muted-foreground transition-transform ${showEmpDrop ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                     </div>
                     {showEmpDrop && (
                       <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl shadow-lg overflow-hidden">
                         <div className="p-2 border-b border-border">
-                          <input
-                            autoFocus
-                            type="text"
-                            placeholder="Search name or ID..."
-                            value={empSearch}
-                            onChange={e => setEmpSearch(e.target.value)}
-                            className="w-full text-sm px-3 py-1.5 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
-                          />
+                          <input autoFocus type="text" placeholder="Search name or ID..." value={empSearch} onChange={e => setEmpSearch(e.target.value)}
+                            className="w-full text-sm px-3 py-1.5 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground" />
                         </div>
                         <div className="max-h-52 overflow-y-auto">
-                          {filteredEmps.length === 0 ? (
-                            <div className="p-4 text-sm text-muted-foreground text-center">No employees found</div>
-                          ) : filteredEmps.map(e => (
-                            <div
-                              key={e.id}
-                              onClick={() => { setForm(f => ({ ...f, employeeId: String(e.id) })); setShowEmpDrop(false); setEmpSearch(""); }}
-                              className={`px-4 py-2.5 cursor-pointer hover:bg-primary/8 transition-colors flex items-center justify-between ${form.employeeId === String(e.id) ? "bg-primary/10" : ""}`}
-                            >
-                              <div>
-                                <div className="text-sm font-medium text-foreground">{e.fullName}</div>
-                                <div className="text-xs text-muted-foreground">{e.designation} · {e.department}</div>
+                          {filteredEmps.length === 0
+                            ? <div className="p-4 text-sm text-muted-foreground text-center">No employees found</div>
+                            : filteredEmps.map(e => (
+                              <div key={e.id} onClick={() => { setForm(f => ({ ...f, employeeId: String(e.id) })); setShowEmpDrop(false); setEmpSearch(""); }}
+                                className={`px-4 py-2.5 cursor-pointer hover:bg-primary/8 transition-colors flex items-center justify-between ${form.employeeId === String(e.id) ? "bg-primary/10" : ""}`}>
+                                <div><div className="text-sm font-medium text-foreground">{e.fullName}</div><div className="text-xs text-muted-foreground">{e.designation} · {e.department}</div></div>
+                                <span className="text-xs text-muted-foreground font-mono">{e.employeeId}</span>
                               </div>
-                              <span className="text-xs text-muted-foreground font-mono">{e.employeeId}</span>
-                            </div>
-                          ))}
+                            ))}
                         </div>
-                        {employees.length > 50 && (
-                          <div className="p-2 border-t border-border text-center text-xs text-muted-foreground">
-                            Type to search all {employees.length} employees
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
                 </div>
               )}
-
-              {/* Edit: employee info */}
               {editLoan && (
                 <div className="bg-muted rounded-xl p-4 border border-border">
                   <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wide mb-1">Employee</p>
@@ -637,145 +490,75 @@ export default function Loans() {
                   <p className="text-sm text-muted-foreground">{editLoan.employeeCode} · {editLoan.department}</p>
                 </div>
               )}
-
-              {/* Type */}
               {!editLoan && (
                 <div>
-                  <label className="block text-sm font-semibold text-foreground mb-2">
-                    Type <span className="text-primary">*</span>
-                  </label>
+                  <label className="block text-sm font-semibold text-foreground mb-2">Type <span className="text-primary">*</span></label>
                   <div className="grid grid-cols-2 gap-3">
-                    {(["loan", "advance"] as const).map(t => (
-                      <label
-                        key={t}
-                        className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                          form.type === t
-                            ? t === "loan"
-                              ? "border-amber-400 bg-amber-50 shadow-sm"
-                              : "border-violet-400 bg-violet-50 shadow-sm"
-                            : "border-border hover:border-muted-foreground/30 hover:bg-muted/60"
-                        }`}
-                      >
+                    {(["loan","advance"] as const).map(t => (
+                      <label key={t} className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${form.type === t ? (t==="loan" ? "border-amber-400 bg-amber-50" : "border-violet-400 bg-violet-50") : "border-border hover:border-muted-foreground/30 hover:bg-muted/60"}`}>
                         <input type="radio" name="type" value={t} checked={form.type === t} onChange={() => setForm(f => ({ ...f, type: t }))} className="sr-only" />
-                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                          form.type === t
-                            ? t === "loan" ? "bg-amber-500 text-white" : "bg-violet-500 text-white"
-                            : "bg-muted text-muted-foreground"
-                        }`}>
-                          {t === "loan" ? (
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                            </svg>
-                          ) : (
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                          )}
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${form.type===t ? (t==="loan"?"bg-amber-500 text-white":"bg-violet-500 text-white") : "bg-muted text-muted-foreground"}`}>
+                          {t==="loan"
+                            ? <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                            : <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
                         </div>
                         <div>
-                          <p className={`font-semibold capitalize text-sm ${form.type === t ? (t === "loan" ? "text-amber-700" : "text-violet-700") : "text-foreground"}`}>{t}</p>
-                          <p className="text-xs text-muted-foreground">{t === "loan" ? "Long-term repayment" : "Salary advance"}</p>
+                          <p className={`font-semibold capitalize text-sm ${form.type===t ? (t==="loan"?"text-amber-700":"text-violet-700") : "text-foreground"}`}>{t}</p>
+                          <p className="text-xs text-muted-foreground">{t==="loan" ? "Long-term repayment" : "Salary advance"}</p>
                         </div>
                       </label>
                     ))}
                   </div>
                 </div>
               )}
-
-              {/* Amounts */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-foreground mb-1.5">
-                    Total Amount (Rs.) <span className="text-primary">*</span>
-                  </label>
-                  <input
-                    type="number" min="0"
-                    disabled={!!editLoan}
-                    value={form.totalAmount}
-                    onChange={e => setForm(f => ({ ...f, totalAmount: e.target.value }))}
-                    className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:bg-muted disabled:text-muted-foreground placeholder:text-muted-foreground"
-                    placeholder="e.g. 50000"
-                  />
+                  <label className="block text-sm font-semibold text-foreground mb-1.5">Total Amount (Rs.) <span className="text-primary">*</span></label>
+                  <input type="number" min="0" disabled={!!editLoan} value={form.totalAmount} onChange={e => setForm(f => ({ ...f, totalAmount: e.target.value }))}
+                    className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:bg-muted disabled:text-muted-foreground placeholder:text-muted-foreground" placeholder="e.g. 50000" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-foreground mb-1.5">
-                    Monthly Installment (Rs.) <span className="text-primary">*</span>
-                  </label>
-                  <input
-                    type="number" min="1"
-                    value={form.monthlyInstallment}
-                    onChange={e => setForm(f => ({ ...f, monthlyInstallment: e.target.value }))}
-                    className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
-                    placeholder="e.g. 5000"
-                  />
+                  <label className="block text-sm font-semibold text-foreground mb-1.5">Monthly Installment (Rs.) <span className="text-primary">*</span></label>
+                  <input type="number" min="1" value={form.monthlyInstallment} onChange={e => setForm(f => ({ ...f, monthlyInstallment: e.target.value }))}
+                    className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground" placeholder="e.g. 5000" />
                 </div>
               </div>
-
-              {/* Start Month/Year */}
               {!editLoan && (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-foreground mb-1.5">
-                      Deduction Starts <span className="text-primary">*</span>
-                    </label>
-                    <select
-                      value={form.startMonth}
-                      onChange={e => setForm(f => ({ ...f, startMonth: e.target.value }))}
-                      className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                    <label className="block text-sm font-semibold text-foreground mb-1.5">Deduction Starts <span className="text-primary">*</span></label>
+                    <select value={form.startMonth} onChange={e => setForm(f => ({ ...f, startMonth: e.target.value }))}
+                      className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
+                      {MONTHS.map((m, i) => <option key={i} value={i+1}>{m}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-foreground mb-1.5">Year</label>
-                    <select
-                      value={form.startYear}
-                      onChange={e => setForm(f => ({ ...f, startYear: e.target.value }))}
-                      className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                    >
+                    <select value={form.startYear} onChange={e => setForm(f => ({ ...f, startYear: e.target.value }))}
+                      className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
                       {years.map(y => <option key={y} value={y}>{y}</option>)}
                     </select>
                   </div>
                 </div>
               )}
-
-              {/* Computed Summary */}
               {form.totalAmount && form.monthlyInstallment && Number(form.monthlyInstallment) > 0 && (
                 <div className="bg-primary/8 border border-primary/20 rounded-xl p-4">
                   <p className="text-xs text-primary font-semibold uppercase tracking-wide mb-3">Repayment Plan</p>
                   <div className="grid grid-cols-3 gap-4 text-center">
-                    <div>
-                      <p className="text-2xl font-bold text-foreground">{totalMonths}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Total Months</p>
-                    </div>
-                    <div className="border-x border-primary/20">
-                      <p className="text-sm font-bold text-foreground">
-                        {MONTHS[Number(form.startMonth) - 1]?.slice(0, 3)} {form.startYear}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Starts</p>
-                    </div>
-                    <div>
-                      {endMonthYear && (
-                        <>
-                          <p className="text-sm font-bold text-foreground">
-                            {MONTHS[endMonthYear.month - 1]?.slice(0, 3)} {endMonthYear.year}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-0.5">Ends</p>
-                        </>
-                      )}
-                    </div>
+                    <div><p className="text-2xl font-bold text-foreground">{totalMonths}</p><p className="text-xs text-muted-foreground">Total Months</p></div>
+                    <div className="border-x border-primary/20"><p className="text-sm font-bold text-foreground">{MONTHS[Number(form.startMonth)-1]?.slice(0,3)} {form.startYear}</p><p className="text-xs text-muted-foreground">Starts</p></div>
+                    <div>{endMonthYear && <><p className="text-sm font-bold text-foreground">{MONTHS[endMonthYear.month-1]?.slice(0,3)} {endMonthYear.year}</p><p className="text-xs text-muted-foreground">Ends</p></>}</div>
                   </div>
-                  {/* Schedule preview */}
                   {schedule.length > 0 && (
                     <div className="mt-3 border-t border-primary/15 pt-3">
                       <p className="text-xs text-primary font-medium mb-2">Month-by-Month Deduction</p>
                       <div className="space-y-0.5 max-h-40 overflow-y-auto">
                         {schedule.map((s, idx) => (
                           <div key={idx} className="flex items-center text-xs py-1 border-b border-primary/10 last:border-0 gap-2">
-                            <span className="text-muted-foreground w-5 text-right flex-shrink-0">{idx + 1}</span>
-                            <span className="text-foreground font-medium flex-1">{MONTHS[s.month - 1]} {s.year}</span>
-                            <span className="text-primary font-semibold">Rs. {s.amount.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                            <span className="text-muted-foreground w-32 text-right">Bal: Rs. {s.balance.toLocaleString("en-LK", { maximumFractionDigits: 0 })}</span>
+                            <span className="text-muted-foreground w-5 text-right flex-shrink-0">{idx+1}</span>
+                            <span className="text-foreground font-medium flex-1">{MONTHS[s.month-1]} {s.year}</span>
+                            <span className="text-primary font-semibold">Rs. {s.amount.toLocaleString("en-LK",{minimumFractionDigits:2})}</span>
+                            <span className="text-muted-foreground w-32 text-right">Bal: Rs. {s.balance.toLocaleString("en-LK",{maximumFractionDigits:0})}</span>
                           </div>
                         ))}
                       </div>
@@ -783,148 +566,172 @@ export default function Loans() {
                   )}
                 </div>
               )}
-
-              {/* Description */}
               <div>
                 <label className="block text-sm font-semibold text-foreground mb-1.5">Notes / Purpose</label>
-                <textarea
-                  value={form.description}
-                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  rows={2}
-                  className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none placeholder:text-muted-foreground"
-                  placeholder="Optional notes..."
-                />
+                <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2}
+                  className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none placeholder:text-muted-foreground" placeholder="Optional notes..." />
               </div>
             </div>
-
-            {/* Footer */}
             <div className="sticky bottom-0 bg-card border-t border-border px-6 py-4 rounded-b-2xl flex gap-3">
-              <button
-                onClick={() => setShowModal(false)}
-                className="flex-1 border border-border text-foreground py-2.5 rounded-xl text-sm font-semibold hover:bg-muted transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving || !form.employeeId}
-                className="flex-1 bg-primary text-primary-foreground py-2.5 rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {saving ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Saving...
-                  </span>
-                ) : editLoan ? "Save Changes" : "Add Record"}
+              <button onClick={() => setShowModal(false)} className="flex-1 border border-border text-foreground py-2.5 rounded-xl text-sm font-semibold hover:bg-muted transition-colors">Cancel</button>
+              <button onClick={handleSave} disabled={saving || !form.employeeId}
+                className="flex-1 bg-primary text-primary-foreground py-2.5 rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed">
+                {saving ? "Saving..." : editLoan ? "Save Changes" : "Add Record"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ─── Manual Pay EMI Modal ─── */}
+      {/* ═══════════════════════════════════════════════════════
+          MULTI-EMI PAY MODAL
+      ═══════════════════════════════════════════════════════ */}
       {payLoan && (
         <div className="fixed inset-0 z-50 bg-foreground/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPayLoan(null)}>
-          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
               <div>
-                <h3 className="font-bold text-foreground">Manual EMI Payment</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">{payLoan.employeeName}</p>
+                <h3 className="font-bold text-foreground text-lg">Pay EMI Instalments</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold mr-1.5 capitalize ${typeBadge(payLoan.type)}`}>{payLoan.type}</span>
+                  {payLoan.employeeName} · {fmt(payLoan.remainingBalance)} remaining
+                </p>
               </div>
               <button onClick={() => setPayLoan(null)} className="p-2 rounded-lg hover:bg-muted transition-colors">
-                <svg className="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <svg className="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
-              {/* Loan info */}
-              <div className="bg-muted rounded-xl p-3 grid grid-cols-2 gap-3 text-center text-sm">
-                <div>
-                  <p className="text-xs text-muted-foreground">Remaining</p>
-                  <p className="font-bold text-red-600">{fmt(payLoan.remainingBalance)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Monthly EMI</p>
-                  <p className="font-bold text-primary">{fmt(payLoan.monthlyInstallment)}</p>
-                </div>
-              </div>
-
-              {/* Amount */}
-              <div>
-                <label className="block text-sm font-semibold text-foreground mb-1.5">
-                  Payment Amount (Rs.) <span className="text-primary">*</span>
-                </label>
-                <input
-                  type="number" min="1" max={payLoan.remainingBalance}
-                  value={payForm.amount}
-                  onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))}
-                  className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder={String(payLoan.monthlyInstallment)}
-                />
-              </div>
-
-              {/* Month / Year */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-semibold text-foreground mb-1.5">Month</label>
-                  <select
-                    value={payForm.month}
-                    onChange={e => setPayForm(f => ({ ...f, month: e.target.value }))}
-                    className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-foreground mb-1.5">Year</label>
-                  <select
-                    value={payForm.year}
-                    onChange={e => setPayForm(f => ({ ...f, year: e.target.value }))}
-                    className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    {years.map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              {/* Note */}
-              <div>
-                <label className="block text-sm font-semibold text-foreground mb-1.5">Note (optional)</label>
-                <input
-                  type="text"
-                  value={payForm.note}
-                  onChange={e => setPayForm(f => ({ ...f, note: e.target.value }))}
-                  className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
-                  placeholder="e.g. Cash payment received"
-                />
-              </div>
+            {/* Quick select */}
+            <div className="px-6 py-3 border-b border-border bg-muted/40 flex items-center gap-2 flex-wrap flex-shrink-0">
+              <span className="text-xs text-muted-foreground font-medium">Quick select:</span>
+              {[1,3,6].map(n => (
+                <button key={n} onClick={() => quickSelect(n)} disabled={unpaidSchedule.length < n}
+                  className="text-xs px-2.5 py-1 rounded-lg border border-border bg-background hover:bg-primary/10 hover:border-primary hover:text-primary font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                  Next {n} month{n>1?"s":""}
+                </button>
+              ))}
+              <button onClick={() => quickSelect("all")} disabled={unpaidSchedule.length === 0}
+                className="text-xs px-2.5 py-1 rounded-lg border border-primary/40 bg-primary/5 text-primary hover:bg-primary/15 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                All pending ({unpaidSchedule.length})
+              </button>
+              {selected.size > 0 && (
+                <button onClick={() => { setSelected(new Set()); setAmounts({}); }}
+                  className="text-xs px-2.5 py-1 rounded-lg border border-border text-muted-foreground hover:bg-muted font-medium transition-colors ml-auto">
+                  Clear
+                </button>
+              )}
             </div>
 
-            <div className="px-6 pb-6 flex gap-3">
-              <button
-                onClick={() => setPayLoan(null)}
-                className="flex-1 border border-border text-foreground py-2.5 rounded-xl text-sm font-semibold hover:bg-muted transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handlePay}
-                disabled={paying || !payForm.amount || Number(payForm.amount) <= 0}
-                className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {paying ? "Recording..." : "Record Payment"}
-              </button>
+            {/* Schedule list */}
+            <div className="flex-1 overflow-y-auto px-6 py-3">
+              {payLedgerLoad ? (
+                <div className="flex items-center justify-center h-32 gap-2 text-sm text-muted-foreground">
+                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                  Loading payment history...
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {paySchedule.map((s, idx) => {
+                    const k = mkey(s.month, s.year);
+                    const isPaid = paidKeys.has(k);
+                    const isSelected = selected.has(k);
+                    const ledEntry = payLedger.find(e => mkey(e.month, e.year) === k);
+                    return (
+                      <div key={k}
+                        onClick={() => !isPaid && toggleMonth(s)}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all ${
+                          isPaid
+                            ? "bg-emerald-50 border-emerald-200 opacity-70 cursor-default"
+                            : isSelected
+                            ? "bg-primary/8 border-primary cursor-pointer"
+                            : "bg-background border-border hover:border-primary/40 hover:bg-muted/40 cursor-pointer"
+                        }`}>
+                        {/* Checkbox */}
+                        <div className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border-2 transition-colors ${
+                          isPaid ? "border-emerald-400 bg-emerald-400" :
+                          isSelected ? "border-primary bg-primary" : "border-muted-foreground/30 bg-background"
+                        }`}>
+                          {(isPaid || isSelected) && (
+                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                          )}
+                        </div>
+                        {/* Month info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-foreground">{MONTHS[s.month-1]} {s.year}</span>
+                            <span className="text-xs text-muted-foreground">EMI #{idx+1}</span>
+                            {isPaid && ledEntry && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${sourceBadge(ledEntry.source)}`}>
+                                {ledEntry.source}
+                              </span>
+                            )}
+                          </div>
+                          {isPaid && ledEntry?.note && (
+                            <p className="text-xs text-muted-foreground truncate mt-0.5">{ledEntry.note}</p>
+                          )}
+                        </div>
+                        {/* Amount */}
+                        {isPaid ? (
+                          <span className="text-sm font-bold text-emerald-600 whitespace-nowrap">
+                            {fmt(ledEntry?.amount ?? s.amount)}
+                          </span>
+                        ) : isSelected ? (
+                          <input
+                            type="number" min="1" max={payLoan.remainingBalance}
+                            value={amounts[k] ?? s.amount}
+                            onClick={e => e.stopPropagation()}
+                            onChange={e => setAmounts(a => ({ ...a, [k]: e.target.value }))}
+                            className="w-32 border border-primary/30 rounded-lg px-2 py-1 text-xs bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-right font-semibold"
+                          />
+                        ) : (
+                          <span className="text-sm text-muted-foreground whitespace-nowrap">{fmt(s.amount)}</span>
+                        )}
+                        {/* Balance */}
+                        <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:block w-28 text-right">
+                          Bal: Rs. {Math.round(s.balance).toLocaleString("en-LK")}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Note + footer */}
+            <div className="px-6 py-4 border-t border-border flex-shrink-0 space-y-3">
+              <div className="flex items-center gap-3">
+                <input type="text" placeholder="Note for all selected payments (optional)..." value={bulkNote} onChange={e => setBulkNote(e.target.value)}
+                  className="flex-1 border border-border rounded-xl px-3 py-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground" />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  {selected.size > 0 && (
+                    <div>
+                      <span className="text-sm font-bold text-foreground">{selected.size} month{selected.size>1?"s":""} selected</span>
+                      <span className="text-sm text-muted-foreground ml-2">· Total: <strong className="text-primary">{fmt(totalSelected)}</strong></span>
+                    </div>
+                  )}
+                  {selected.size === 0 && <span className="text-sm text-muted-foreground">Select months above to record payments</span>}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setPayLoan(null)} className="px-4 py-2 border border-border text-foreground rounded-xl text-sm font-semibold hover:bg-muted transition-colors">Cancel</button>
+                  <button onClick={handleBulkPay} disabled={bulkPaying || selected.size === 0}
+                    className="px-5 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap">
+                    {bulkPaying ? "Recording..." : `Record ${selected.size > 0 ? selected.size : ""} Payment${selected.size !== 1 ? "s" : ""}`}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ─── Schedule Detail Modal ─── */}
+      {/* ═══════════════════════════════════════════════════════
+          SCHEDULE DETAIL MODAL
+      ═══════════════════════════════════════════════════════ */}
       {detailLoan && (
         <div className="fixed inset-0 z-50 bg-foreground/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setDetailLoan(null)}>
           <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
@@ -937,119 +744,82 @@ export default function Loans() {
                 </p>
               </div>
               <button onClick={() => setDetailLoan(null)} className="p-2 rounded-lg hover:bg-muted transition-colors">
-                <svg className="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <svg className="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
             <div className="px-6 py-3 bg-muted border-b border-border grid grid-cols-3 gap-3 text-center">
-              <div>
-                <p className="text-xs text-muted-foreground">Total</p>
-                <p className="font-bold text-foreground text-sm">{fmt(detailLoan.totalAmount)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Monthly</p>
-                <p className="font-bold text-primary text-sm">{fmt(detailLoan.monthlyInstallment)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Duration</p>
-                <p className="font-bold text-foreground text-sm">{loanMonths(detailLoan)} months</p>
-              </div>
+              <div><p className="text-xs text-muted-foreground">Total</p><p className="font-bold text-foreground text-sm">{fmt(detailLoan.totalAmount)}</p></div>
+              <div><p className="text-xs text-muted-foreground">Monthly</p><p className="font-bold text-primary text-sm">{fmt(detailLoan.monthlyInstallment)}</p></div>
+              <div><p className="text-xs text-muted-foreground">Duration</p><p className="font-bold text-foreground text-sm">{loanMonths(detailLoan)} months</p></div>
             </div>
-            <div className="px-6 py-2.5 bg-muted/60 border-b border-border grid grid-cols-2 gap-3 text-center">
-              <div>
-                <p className="text-xs text-muted-foreground">Starts</p>
-                <p className="font-semibold text-foreground text-sm">{MONTHS[detailLoan.startMonth - 1]} {detailLoan.startYear}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Ends</p>
-                {(() => { const e = loanEndDate(detailLoan); return e ? <p className="font-semibold text-foreground text-sm">{MONTHS[e.month - 1]} {e.year}</p> : <p className="text-muted-foreground text-sm">—</p>; })()}
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto px-6 py-3">
-              {/* Payment ledger */}
-              {ledger.length > 0 && (
-                <div className="mb-4">
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              {/* Payment history */}
+              {detailLoading && <div className="text-xs text-muted-foreground">Loading history...</div>}
+              {detailLedger.length > 0 && (
+                <div>
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Payment History</p>
                   <div className="space-y-1.5">
-                    {ledger.map(entry => (
-                      <div key={entry.id} className="flex items-center justify-between text-xs bg-muted/60 rounded-lg px-3 py-2">
+                    {detailLedger.map(e => (
+                      <div key={e.id} className="flex items-center justify-between text-xs bg-muted/60 rounded-lg px-3 py-2">
                         <div className="flex items-center gap-2">
-                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${entry.source === "manual" ? "bg-violet-100 text-violet-700" : "bg-blue-100 text-blue-700"}`}>
-                            {entry.source}
-                          </span>
-                          <span className="font-medium text-foreground">{MONTHS[entry.month - 1]?.slice(0, 3)} {entry.year}</span>
-                          {entry.note && <span className="text-muted-foreground">· {entry.note}</span>}
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${sourceBadge(e.source)}`}>{e.source}</span>
+                          <span className="font-medium text-foreground">{MONTHS[e.month-1]?.slice(0,3)} {e.year}</span>
+                          {e.note && <span className="text-muted-foreground">· {e.note}</span>}
                         </div>
-                        <span className="font-semibold text-emerald-600">{fmt(entry.amount)}</span>
+                        <span className="font-semibold text-emerald-600">{fmt(e.amount)}</span>
                       </div>
                     ))}
                   </div>
-                  <div className="border-t border-border mt-3 mb-3" />
+                  <div className="border-t border-border mt-3" />
                 </div>
               )}
-              {ledgerLoading && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
-                  <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Loading history...
-                </div>
-              )}
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Schedule</p>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs text-muted-foreground uppercase border-b border-border">
-                    <th className="pb-2 text-left font-semibold">#</th>
-                    <th className="pb-2 text-left font-semibold">Month</th>
-                    <th className="pb-2 text-right font-semibold">Deduction</th>
-                    <th className="pb-2 text-right font-semibold">Balance</th>
-                    <th className="pb-2 text-center font-semibold">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/50">
-                  {calcSchedule(detailLoan.totalAmount, detailLoan.monthlyInstallment, detailLoan.startMonth, detailLoan.startYear).map((s, idx) => {
-                    const cumPaid = (idx + 1) * detailLoan.monthlyInstallment;
-                    const isPaid = cumPaid <= detailLoan.paidAmount;
-                    const isCurrent = !isPaid && (cumPaid - detailLoan.monthlyInstallment) < detailLoan.paidAmount;
-                    return (
-                      <tr key={idx} className={isPaid ? "bg-primary/5" : isCurrent ? "bg-primary/10" : ""}>
-                        <td className="py-2 text-muted-foreground text-xs">{idx + 1}</td>
-                        <td className="py-2 font-medium text-foreground">{MONTHS[s.month - 1]?.slice(0, 3)} {s.year}</td>
-                        <td className="py-2 text-right font-semibold text-foreground text-xs">
-                          Rs. {s.amount.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                        <td className="py-2 text-right text-muted-foreground text-xs">
-                          Rs. {s.balance.toLocaleString("en-LK", { maximumFractionDigits: 0 })}
-                        </td>
-                        <td className="py-2 text-center text-xs">
-                          {isPaid
-                            ? <span className="text-primary font-medium">✓ Paid</span>
-                            : isCurrent
-                            ? <span className="text-primary font-bold">● Now</span>
-                            : <span className="text-muted-foreground">—</span>
-                          }
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              {/* Schedule */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Full Schedule</p>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-muted-foreground uppercase border-b border-border">
+                      <th className="pb-2 text-left font-semibold">#</th>
+                      <th className="pb-2 text-left font-semibold">Month</th>
+                      <th className="pb-2 text-right font-semibold">Amount</th>
+                      <th className="pb-2 text-right font-semibold">Balance</th>
+                      <th className="pb-2 text-center font-semibold">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/50">
+                    {calcSchedule(detailLoan.totalAmount, detailLoan.monthlyInstallment, detailLoan.startMonth, detailLoan.startYear).map((s, idx) => {
+                      const cumPaid = (idx+1) * detailLoan.monthlyInstallment;
+                      const isPaid    = cumPaid <= detailLoan.paidAmount;
+                      const isCurrent = !isPaid && (cumPaid - detailLoan.monthlyInstallment) < detailLoan.paidAmount;
+                      return (
+                        <tr key={idx} className={isPaid ? "bg-primary/5" : isCurrent ? "bg-primary/10" : ""}>
+                          <td className="py-2 text-muted-foreground text-xs">{idx+1}</td>
+                          <td className="py-2 font-medium text-foreground">{MONTHS[s.month-1]?.slice(0,3)} {s.year}</td>
+                          <td className="py-2 text-right font-semibold text-foreground text-xs">Rs. {s.amount.toLocaleString("en-LK",{minimumFractionDigits:2})}</td>
+                          <td className="py-2 text-right text-muted-foreground text-xs">Rs. {s.balance.toLocaleString("en-LK",{maximumFractionDigits:0})}</td>
+                          <td className="py-2 text-center text-xs">
+                            {isPaid ? <span className="text-primary font-medium">✓ Paid</span> : isCurrent ? <span className="text-primary font-bold">● Now</span> : <span className="text-muted-foreground">—</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ─── Delete Confirm ─── */}
+      {/* ═══════════════════════════════════════════════════════
+          DELETE CONFIRM
+      ═══════════════════════════════════════════════════════ */}
       {confirmDelete && (
         <div className="fixed inset-0 z-50 bg-foreground/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-card border border-border rounded-2xl shadow-2xl p-6 max-w-sm w-full">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
-                <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
+                <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
               </div>
               <div>
                 <h3 className="font-bold text-foreground">Delete Record?</h3>
@@ -1059,16 +829,12 @@ export default function Loans() {
             <p className="text-sm text-muted-foreground bg-muted rounded-lg p-3">
               Permanently delete the <strong className="text-foreground">{confirmDelete.type}</strong> record for <strong className="text-foreground">{confirmDelete.employeeName}</strong>?
               {confirmDelete.status === "active" && (
-                <span className="block mt-1 text-amber-600 text-xs">This loan is still active. Future payroll runs will no longer deduct it.</span>
+                <span className="block mt-1 text-amber-600 text-xs font-medium">Active loan — future payroll will no longer deduct this.</span>
               )}
             </p>
             <div className="flex gap-3 mt-5">
-              <button onClick={() => setConfirmDelete(null)} className="flex-1 border border-border text-foreground py-2.5 rounded-xl text-sm font-semibold hover:bg-muted transition-colors">
-                Cancel
-              </button>
-              <button onClick={handleDelete} className="flex-1 bg-red-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:opacity-80 transition-opacity">
-                Delete
-              </button>
+              <button onClick={() => setConfirmDelete(null)} className="flex-1 border border-border text-foreground py-2.5 rounded-xl text-sm font-semibold hover:bg-muted transition-colors">Cancel</button>
+              <button onClick={handleDelete} className="flex-1 bg-red-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:opacity-80 transition-opacity">Delete</button>
             </div>
           </div>
         </div>

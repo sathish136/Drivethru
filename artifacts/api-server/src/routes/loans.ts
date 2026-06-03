@@ -142,6 +142,64 @@ router.post("/:id/pay", async (req, res) => {
   }
 });
 
+/* POST /loans/:id/pay-bulk — record multiple EMI months at once */
+router.post("/:id/pay-bulk", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { payments } = req.body as {
+      payments: { month: number; year: number; amount: number; note?: string }[];
+    };
+    if (!Array.isArray(payments) || payments.length === 0) {
+      return res.status(400).json({ error: "payments array is required" });
+    }
+
+    const [loan] = await db.select().from(staffLoans).where(eq(staffLoans.id, id));
+    if (!loan) return res.status(404).json({ error: "Loan not found" });
+    if (loan.status !== "active") return res.status(400).json({ error: "Loan is not active" });
+
+    /* Fetch existing ledger to avoid duplicate entries for the same month */
+    const existingLedger = await db.select().from(loanEmiLedger).where(eq(loanEmiLedger.loanId, id));
+    const paidKeys = new Set(existingLedger.map(e => `${e.year}-${e.month}`));
+
+    let currentPaid    = loan.paidAmount;
+    let currentBalance = loan.remainingBalance;
+    const newEntries: { loanId: number; month: number; year: number; amount: number; source: "payroll" | "manual"; note: string | null }[] = [];
+
+    for (const p of payments) {
+      const key = `${p.year}-${p.month}`;
+      if (paidKeys.has(key)) continue; /* skip already-paid months */
+      if (currentBalance <= 0) break;
+
+      const amt = Math.min(Math.max(0, Number(p.amount)), currentBalance);
+      if (amt <= 0) continue;
+
+      currentPaid    = Math.round((currentPaid + amt) * 100) / 100;
+      currentBalance = Math.max(0, Math.round((currentBalance - amt) * 100) / 100);
+      newEntries.push({ loanId: id, month: Number(p.month), year: Number(p.year), amount: amt, source: "manual", note: p.note || null });
+    }
+
+    if (newEntries.length === 0) {
+      return res.status(400).json({ error: "No new payments to record (months may already be paid)" });
+    }
+
+    const newStatus = currentBalance <= 0 ? "completed" : "active";
+    await db.update(staffLoans).set({
+      paidAmount: currentPaid,
+      remainingBalance: currentBalance,
+      status: newStatus,
+      updatedAt: new Date(),
+    }).where(eq(staffLoans.id, id));
+
+    await db.insert(loanEmiLedger).values(newEntries);
+
+    const [updated] = await db.select().from(staffLoans).where(eq(staffLoans.id, id));
+    res.json({ updated, recorded: newEntries.length });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to record bulk payments" });
+  }
+});
+
 /* PUT /loans/:id */
 router.put("/:id", async (req, res) => {
   try {
