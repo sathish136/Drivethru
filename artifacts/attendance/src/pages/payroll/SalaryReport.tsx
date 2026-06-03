@@ -55,6 +55,7 @@ interface PayrollRow {
   overtimePay: number;
   holidayOtPay: number;
   grossSalary: number;
+  computedLunchIncentive?: number;
   epfEmployee: number;
   epfEmployer: number;
   etfEmployer: number;
@@ -176,7 +177,8 @@ export default function SalaryReport() {
       const allowances =
         n(r.transportAllowance) + n(r.housingAllowance) + n(r.otherAllowances);
       const otAmt = n(r.overtimePay) + n(r.holidayOtPay);
-      const totalEarnings = n(r.basicSalary) + allowances + otAmt;
+      const lunchInc = n(r.computedLunchIncentive);
+      const totalEarnings = n(r.basicSalary) + allowances + otAmt + lunchInc;
       const payDeduction =
         n(r.lateDeduction) +
         n(r.lunchLateDeduction) +
@@ -192,6 +194,7 @@ export default function SalaryReport() {
         r,
         allowances,
         otAmt,
+        lunchInc,
         totalEarnings,
         payDeduction,
         totalForEPF,
@@ -207,6 +210,7 @@ export default function SalaryReport() {
       "Basic Salary",
       "OT Hrs",
       "OT Amount",
+      "Lunch Inc.",
       "Total Earnings",
       "EPF 8%",
       "Deduction",
@@ -224,6 +228,7 @@ export default function SalaryReport() {
       n(d.r.basicSalary),
       d.r.overtimeHours > 0 ? d.r.overtimeHours : 0,
       d.otAmt > 0 ? d.otAmt : 0,
+      d.lunchInc > 0 ? d.lunchInc : 0,
       d.totalEarnings,
       n(d.r.epfEmployee),
       d.payDeduction,
@@ -239,6 +244,7 @@ export default function SalaryReport() {
         basic: a.basic + n(d.r.basicSalary),
         otHrs: a.otHrs + d.r.overtimeHours,
         otAmt: a.otAmt + d.otAmt,
+        lunchInc: a.lunchInc + d.lunchInc,
         earn: a.earn + d.totalEarnings,
         epf8: a.epf8 + n(d.r.epfEmployee),
         ded: a.ded + d.payDeduction,
@@ -253,6 +259,7 @@ export default function SalaryReport() {
         basic: 0,
         otHrs: 0,
         otAmt: 0,
+        lunchInc: 0,
         earn: 0,
         epf8: 0,
         ded: 0,
@@ -271,6 +278,7 @@ export default function SalaryReport() {
       tot.basic,
       tot.otHrs,
       tot.otAmt,
+      tot.lunchInc,
       tot.earn,
       tot.epf8,
       tot.ded,
@@ -404,7 +412,8 @@ export default function SalaryReport() {
           n(r.housingAllowance) +
           n(r.otherAllowances);
         const otAmt = n(r.overtimePay) + n(r.holidayOtPay);
-        const totalEarnings = n(r.basicSalary) + allowances + otAmt;
+        const lunchInc = n(r.computedLunchIncentive);
+        const totalEarnings = n(r.basicSalary) + allowances + otAmt + lunchInc;
         const payDeduction =
           n(r.lateDeduction) +
           n(r.lunchLateDeduction) +
@@ -420,6 +429,7 @@ export default function SalaryReport() {
           r,
           allowances,
           otAmt,
+          lunchInc,
           totalEarnings,
           payDeduction,
           totalForEPF,
@@ -433,6 +443,7 @@ export default function SalaryReport() {
           basic: a.basic + n(d.r.basicSalary),
           otHrs: a.otHrs + d.r.overtimeHours,
           otAmt: a.otAmt + d.otAmt,
+          lunchInc: a.lunchInc + d.lunchInc,
           earn: a.earn + d.totalEarnings,
           epf8: a.epf8 + n(d.r.epfEmployee),
           ded: a.ded + d.payDeduction,
@@ -447,6 +458,7 @@ export default function SalaryReport() {
           basic: 0,
           otHrs: 0,
           otAmt: 0,
+          lunchInc: 0,
           earn: 0,
           epf8: 0,
           ded: 0,
@@ -462,7 +474,7 @@ export default function SalaryReport() {
       tableHtml = `<table>
         <thead><tr class="hdr">
           <th class="l">#</th><th class="l">EPF #</th><th class="l">Name</th>
-          <th>Basic Salary</th><th>OT Hrs</th><th>OT Amount</th><th>Total Earnings</th>
+          <th>Basic Salary</th><th>OT Hrs</th><th>OT Amount</th><th>Lunch Inc.</th><th>Total Earnings</th>
           <th>EPF 8%</th><th>Deduction</th><th>Total for EPF</th><th>Advance</th>
           <th>APIT</th><th>Balance Pay</th><th>EPF 12%</th><th>ETF 3%</th>
         </tr></thead>
@@ -475,6 +487,7 @@ export default function SalaryReport() {
           <td>${fmt(d.r.basicSalary)}</td>
           <td>${d.r.overtimeHours > 0 ? d.r.overtimeHours.toFixed(1) : "-"}</td>
           <td class="${d.otAmt > 0 ? "hi" : ""}">${fmt(d.otAmt)}</td>
+          <td class="${d.lunchInc > 0 ? "teal" : ""}">${fmt(d.lunchInc)}</td>
           <td class="b">${fmt(d.totalEarnings)}</td>
           <td class="red">${fmt(d.r.epfEmployee)}</td>
           <td class="${d.payDeduction > 0 ? "red" : ""}">${fmt(d.payDeduction)}</td>
@@ -492,6 +505,7 @@ export default function SalaryReport() {
           <td>${fmt(tot.basic)}</td>
           <td>${tot.otHrs > 0 ? tot.otHrs.toFixed(1) : "-"}</td>
           <td>${fmt(tot.otAmt)}</td>
+          <td>${fmt(tot.lunchInc)}</td>
           <td>${fmt(tot.earn)}</td>
           <td>${fmt(tot.epf8)}</td>
           <td>${fmt(tot.ded)}</td>
@@ -571,6 +585,7 @@ export default function SalaryReport() {
         td.red { color: #dc2626; }
         td.amber { color: #b45309; background: #fef3c7; }
         td.hi { color: #7c3aed; font-weight: 600; }
+        td.teal { color: #0f766e; font-weight: 600; }
         td.primary { color: #1e3a8a; font-weight: 700; }
         tr.alt td { background: #f8fafc; }
         tr.tot td { background: #1e293b; color: #fff; font-weight: 700; font-size: 9.5px; border-top: 2px solid #475569; padding: 5px 4px; }
@@ -612,7 +627,8 @@ export default function SalaryReport() {
     const allowances =
       n(r.transportAllowance) + n(r.housingAllowance) + n(r.otherAllowances);
     const otAmt = n(r.overtimePay) + n(r.holidayOtPay);
-    const totalEarnings = n(r.basicSalary) + allowances + otAmt;
+    const lunchInc = n(r.computedLunchIncentive);
+    const totalEarnings = n(r.basicSalary) + allowances + otAmt + lunchInc;
     const payDeduction =
       n(r.lateDeduction) +
       n(r.lunchLateDeduction) +
@@ -628,6 +644,7 @@ export default function SalaryReport() {
       ...r,
       allowances,
       otAmt,
+      lunchInc,
       totalEarnings,
       payDeduction,
       totalForEPF,
@@ -643,6 +660,7 @@ export default function SalaryReport() {
       basic: acc.basic + r.basicSalary,
       otHrs: acc.otHrs + r.overtimeHours,
       otAmt: acc.otAmt + r.otAmt,
+      lunchInc: acc.lunchInc + r.lunchInc,
       totalEarnings: acc.totalEarnings + r.totalEarnings,
       epf8: acc.epf8 + n(r.epfEmployee),
       payDed: acc.payDed + r.payDeduction,
@@ -657,6 +675,7 @@ export default function SalaryReport() {
       basic: 0,
       otHrs: 0,
       otAmt: 0,
+      lunchInc: 0,
       totalEarnings: 0,
       epf8: 0,
       payDed: 0,
@@ -927,6 +946,13 @@ export default function SalaryReport() {
                           .replace("text-slate-600", "text-slate-200")
                           .replace("border-slate-300", "border-slate-600")}
                       >
+                        Lunch Inc.
+                      </th>
+                      <th
+                        className={colHead
+                          .replace("text-slate-600", "text-slate-200")
+                          .replace("border-slate-300", "border-slate-600")}
+                      >
                         Total Earnings
                       </th>
                       <th
@@ -1020,6 +1046,14 @@ export default function SalaryReport() {
                         >
                           {amtNum(r.otAmt)}
                         </td>
+                        <td
+                          className={
+                            cell +
+                            (r.lunchInc > 0 ? " text-teal-700 font-medium" : "")
+                          }
+                        >
+                          {amtNum(r.lunchInc)}
+                        </td>
                         <td className={cell + " font-medium"}>
                           {amtNum(r.totalEarnings)}
                         </td>
@@ -1082,6 +1116,9 @@ export default function SalaryReport() {
                       </td>
                       <td className={totalCell + " bg-slate-800 text-white"}>
                         {amtNum(totals.otAmt)}
+                      </td>
+                      <td className={totalCell + " bg-slate-800 text-white"}>
+                        {amtNum(totals.lunchInc)}
                       </td>
                       <td className={totalCell + " bg-slate-800 text-white"}>
                         {amtNum(totals.totalEarnings)}
