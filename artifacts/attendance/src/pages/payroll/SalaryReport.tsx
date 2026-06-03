@@ -213,7 +213,6 @@ export default function SalaryReport() {
       "Lunch Inc.",
       "Total Earnings",
       "EPF 8%",
-      "Deduction",
       "Total for EPF",
       "Advance",
       "APIT",
@@ -231,7 +230,6 @@ export default function SalaryReport() {
       d.lunchInc > 0 ? d.lunchInc : 0,
       d.totalEarnings,
       n(d.r.epfEmployee),
-      d.payDeduction,
       d.totalForEPF,
       d.advance,
       d.apit,
@@ -281,7 +279,6 @@ export default function SalaryReport() {
       tot.lunchInc,
       tot.earn,
       tot.epf8,
-      tot.ded,
       tot.forEPF,
       tot.adv,
       tot.apit,
@@ -475,7 +472,7 @@ export default function SalaryReport() {
         <thead><tr class="hdr">
           <th class="l">#</th><th class="l">EPF #</th><th class="l">Name</th>
           <th>Basic Salary</th><th>OT Hrs</th><th>OT Amount</th><th>Lunch Inc.</th><th>Total Earnings</th>
-          <th>EPF 8%</th><th>Deduction</th><th>Total for EPF</th><th>Advance</th>
+          <th>EPF 8%</th><th>Total for EPF</th><th>Advance</th>
           <th>APIT</th><th>Balance Pay</th><th>EPF 12%</th><th>ETF 3%</th>
         </tr></thead>
         <tbody>${d2
@@ -490,7 +487,6 @@ export default function SalaryReport() {
           <td class="${d.lunchInc > 0 ? "teal" : ""}">${fmt(d.lunchInc)}</td>
           <td class="b">${fmt(d.totalEarnings)}</td>
           <td class="red">${fmt(d.r.epfEmployee)}</td>
-          <td class="${d.payDeduction > 0 ? "red" : ""}">${fmt(d.payDeduction)}</td>
           <td class="b">${fmt(d.totalForEPF)}</td>
           <td class="${d.advance > 0 ? "amber" : ""}">${fmt(d.advance)}</td>
           <td class="${d.apit > 0 ? "red" : ""}">${fmt(d.apit)}</td>
@@ -508,7 +504,6 @@ export default function SalaryReport() {
           <td>${fmt(tot.lunchInc)}</td>
           <td>${fmt(tot.earn)}</td>
           <td>${fmt(tot.epf8)}</td>
-          <td>${fmt(tot.ded)}</td>
           <td>${fmt(tot.forEPF)}</td>
           <td>${fmt(tot.adv)}</td>
           <td>${fmt(tot.apit)}</td>
@@ -967,13 +962,6 @@ export default function SalaryReport() {
                           .replace("text-slate-600", "text-slate-200")
                           .replace("border-slate-300", "border-slate-600")}
                       >
-                        Deduction
-                      </th>
-                      <th
-                        className={colHead
-                          .replace("text-slate-600", "text-slate-200")
-                          .replace("border-slate-300", "border-slate-600")}
-                      >
                         Total for EPF
                       </th>
                       <th
@@ -1060,13 +1048,6 @@ export default function SalaryReport() {
                         <td className={cell + " text-red-600"}>
                           {amtNum(n(r.epfEmployee))}
                         </td>
-                        <td
-                          className={
-                            cell + (r.payDeduction > 0 ? " text-red-600" : "")
-                          }
-                        >
-                          {amtNum(r.payDeduction)}
-                        </td>
                         <td className={cell + " font-medium"}>
                           {amtNum(r.totalForEPF)}
                         </td>
@@ -1125,9 +1106,6 @@ export default function SalaryReport() {
                       </td>
                       <td className={totalCell + " bg-slate-800 text-white"}>
                         {amtNum(totals.epf8)}
-                      </td>
-                      <td className={totalCell + " bg-slate-800 text-white"}>
-                        {amtNum(totals.payDed)}
                       </td>
                       <td className={totalCell + " bg-slate-800 text-white"}>
                         {amtNum(totals.totalForEPF)}
