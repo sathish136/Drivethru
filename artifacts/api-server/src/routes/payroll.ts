@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import {
   payrollRecords, employees, attendanceRecords, payrollSettings,
   salaryStructures, employeeSalaryAssignments, holidays, shifts, staffLoans,
-  weekoffSchedules, biometricLogs, loanEmiLedger,
+  weekoffSchedules, biometricLogs, loanEmiLedger, otAdjustments,
 } from "@workspace/db/schema";
 import { eq, and, inArray, gte, lte, sql } from "drizzle-orm";
 import {
@@ -405,6 +405,12 @@ router.post("/generate", async (req, res) => {
     const generated: any[] = [];
     const loanUpdates: { id: number; paidAmount: number; remainingBalance: number; status: string; installment: number }[] = [];
 
+    /* ── Load OT adjustments (manual overrides from OT Management) ── */
+    const otAdjs = await db.select().from(otAdjustments)
+      .where(and(eq(otAdjustments.year, year), eq(otAdjustments.month, month), inArray(otAdjustments.employeeId, empIds)));
+    const otAdjMap = new Map<number, typeof otAdjs[0]>();
+    for (const adj of otAdjs) otAdjMap.set(adj.employeeId, adj);
+
     await db.delete(payrollRecords).where(
       and(
         eq(payrollRecords.month, month),
@@ -776,6 +782,15 @@ router.post("/generate", async (req, res) => {
             regularOtPay   += Math.round(ot * hourlyRate * effectiveOtMult);
           }
         }
+      }
+
+      /* ── Apply manual OT adjustment from OT Management page ── */
+      const otAdj = otAdjMap.get(emp.id);
+      if (otAdj?.isManualOverride) {
+        if (otAdj.adjustedRegularOtHours != null) regularOtHours = otAdj.adjustedRegularOtHours;
+        if (otAdj.adjustedRegularOtAmount != null) regularOtPay   = otAdj.adjustedRegularOtAmount;
+        if (otAdj.adjustedHolidayOtHours  != null) holidayOtHours = otAdj.adjustedHolidayOtHours;
+        if (otAdj.adjustedHolidayOtAmount != null) holidayOtPay   = otAdj.adjustedHolidayOtAmount;
       }
 
       /* ── Manager gets fixed allowance instead of regular OT ── */
