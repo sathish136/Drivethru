@@ -218,7 +218,7 @@ export default function PayslipPage() {
       : []),
     ...((row.holidayOtPay || 0) > 0
       ? [{
-          label: (row.overtimePay || 0) === 0 && (row.overtimeHours || 0) > 0
+          label: (row.overtimeHours || 0) > 0 && (row.overtimePay || 0) === 0
             ? `Add  :  Holiday / Off-Day Pay  (${(row.overtimeHours || 0).toFixed(1)} hrs)`
             : "Add  :  Holiday / Off-Day Pay",
           value: fmtAmt(row.holidayOtPay || 0), italic: true,
