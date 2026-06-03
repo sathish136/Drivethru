@@ -189,7 +189,7 @@ export default function SalaryReport() {
       const advance = n(r.loanDeduction);
       const apit = n(r.apit);
       const balancePay =
-        totalEarnings - n(r.epfEmployee) - payDeduction - advance - apit;
+        totalEarnings - n(r.epfEmployee) - payDeduction - apit;
       return {
         r,
         allowances,
@@ -424,7 +424,7 @@ export default function SalaryReport() {
         const advance = n(r.loanDeduction);
         const apit = n(r.apit);
         const balancePay =
-          totalEarnings - n(r.epfEmployee) - payDeduction - advance - apit;
+          totalEarnings - n(r.epfEmployee) - payDeduction - apit;
         return {
           r,
           allowances,
@@ -639,7 +639,7 @@ export default function SalaryReport() {
     const advance = n(r.loanDeduction);
     const apit = n(r.apit);
     const balancePay =
-      totalEarnings - n(r.epfEmployee) - payDeduction - advance - apit;
+      totalEarnings - n(r.epfEmployee) - payDeduction - apit;
     return {
       ...r,
       allowances,
