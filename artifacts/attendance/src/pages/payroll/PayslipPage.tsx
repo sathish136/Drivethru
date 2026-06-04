@@ -128,29 +128,26 @@ export default function PayslipPage() {
   const housing      = row.housingAllowance || 0;
   const otherAllow   = row.otherAllowances || 0;
   const allowances   = transport + housing + otherAllow;
-  const subTotal     = row.basicSalary + allowances;
+  const basicSalary  = row.basicSalary || 0;
+  const subTotal     = basicSalary + allowances;
   const noPayLeave   = row.absenceDeduction || 0;
   const halfDayDed   = row.halfDayDeduction || 0;
   const lateDeduction  = row.lateDeduction || 0;
   const lunchLateDed   = row.lunchLateDeduction || 0;
   const earlyExitDed   = row.incompleteDeduction || 0;
-  const payDeduction = noPayLeave + halfDayDed + lateDeduction + lunchLateDed + earlyExitDed;
-  const totalForEPF  = subTotal - payDeduction;
+  const totalForEPF  = subTotal - noPayLeave - halfDayDed - lateDeduction - lunchLateDed - earlyExitDed;
   const overtime     = (row.overtimePay || 0) + (row.holidayOtPay || 0);
   const lunchInc     = row.computedLunchIncentive || 0;
-
-  // Total Earnings matches report: Basic + Allowances + OT + Lunch (deductions shown separately)
-  const totalEarnings = row.basicSalary + allowances + overtime + lunchInc;
+  // Total Earnings: totalForEPF + OT + Lunch Incentive
+  const totalEarnings = totalForEPF + overtime + lunchInc;
 
   const epf8         = row.epfEmployee || 0;
   const loans        = row.loanDeduction || row.activeLoanInstallment || 0;
   const otherDeds    = row.otherDeductions || 0;
   const apit         = row.apit || 0;
-  // Balance Pay = Total Earnings − EPF 8% − Pay Deductions − APIT  (matches report)
-  const balancePay   = totalEarnings - epf8 - payDeduction - apit;
-  // NET = Total Earnings − EPF 8% − Advance/Loans − APIT  (matches report)
-  const net          = totalEarnings - epf8 - loans - otherDeds - apit;
   const totalRecoveries = epf8 + loans + otherDeds + apit;
+  // NET Salary = what the employee actually receives
+  const netSalary    = totalEarnings - totalRecoveries;
 
   const epf12 = row.epfEmployer || 0;
   const etf3  = row.etfEmployer || 0;
@@ -213,10 +210,17 @@ export default function PayslipPage() {
 
   type SlipRow = { label: string; value?: string; indent?: boolean; bold?: boolean; italic?: boolean; borderTop?: boolean; borderBottom?: boolean; green?: boolean };
   const slipRows: SlipRow[] = [
-    { label: "Basic Salary",            value: fmtAmt(row.basicSalary) },
+    { label: "Basic Salary",            value: fmtAmt(basicSalary) },
     ...(transport  > 0 ? [{ label: "  Transport Allowance", value: fmtAmt(transport),  indent: true }] : []),
     ...(housing    > 0 ? [{ label: "  Housing Allowance",   value: fmtAmt(housing),    indent: true }] : []),
     ...(otherAllow > 0 ? [{ label: "  Other Allowances",    value: fmtAmt(otherAllow), indent: true }] : []),
+    { label: "Sub Total",               value: fmtAmt(subTotal), italic: true, borderTop: true },
+    { label: isOffSeason ? "Less  :  Off-Season Adjustment" : "Less  :  No Pay Leave", value: noPayLeave > 0 ? fmtAmt(noPayLeave) : "-", italic: true },
+    ...(halfDayDed > 0  ? [{ label: "Less  :  Half Day Deduction",                     value: fmtAmt(halfDayDed),    italic: true }] : []),
+    ...(lateDeduction > 0 ? [{ label: `Less  :  Late Arrival${lateDayLabel}`,           value: fmtAmt(lateDeduction), italic: true }] : []),
+    ...(lunchLateDed > 0  ? [{ label: "Less  :  Lunch Return Late",                     value: fmtAmt(lunchLateDed),  italic: true }] : []),
+    ...(earlyExitDed > 0  ? [{ label: "Less  :  Early Exit / Short Hours",              value: fmtAmt(earlyExitDed),  italic: true }] : []),
+    { label: "Total for EPF / ETF",     value: fmtAmt(totalForEPF), bold: true },
     ...((row.overtimePay || 0) > 0
       ? [{ label: `Add  :  Overtime  (${(row.overtimeHours || 0).toFixed(1)} hrs)`, value: fmtAmt(row.overtimePay || 0), italic: true }]
       : []),
@@ -230,24 +234,17 @@ export default function PayslipPage() {
       : []),
     ...(overtime === 0 ? [{ label: "Add  :  Overtime / Holiday Pay", value: "-", italic: true }] : []),
     ...(lunchInc > 0 ? [{ label: "Add  :  Lunch Incentive", value: fmtAmt(lunchInc), italic: true }] : []),
-    { label: "Total Earnings",          value: fmtAmt(totalEarnings), bold: true, borderTop: true },
-    { label: "Sub Total (Basic + Allow.)", value: fmtAmt(subTotal), italic: true, borderTop: true },
-    { label: isOffSeason ? "Less  :  Off-Season Adjustment" : "Less  :  No Pay Leave", value: noPayLeave > 0 ? fmtAmt(noPayLeave) : "-", italic: true },
-    ...(halfDayDed > 0  ? [{ label: "Less  :  Half Day Deduction",                     value: fmtAmt(halfDayDed),    italic: true }] : []),
-    ...(lateDeduction > 0 ? [{ label: `Less  :  Late Arrival${lateDayLabel}`,           value: fmtAmt(lateDeduction), italic: true }] : []),
-    ...(lunchLateDed > 0  ? [{ label: "Less  :  Lunch Return Late",                     value: fmtAmt(lunchLateDed),  italic: true }] : []),
-    ...(earlyExitDed > 0  ? [{ label: "Less  :  Early Exit / Short Hours",              value: fmtAmt(earlyExitDed),  italic: true }] : []),
-    { label: "Total for EPF / ETF",     value: fmtAmt(totalForEPF), bold: true },
-    { label: isEpfEtfExempt ? "EPF / ETF" : "Less  :  EPF 8% (Employee)", value: isEpfEtfExempt ? "Exempt" : fmtAmt(epf8), italic: true },
-    ...(apit > 0      ? [{ label: "Less  :  APIT (Income Tax)",  value: fmtAmt(apit),     italic: true }] : []),
-    { label: "Balance Pay",             value: fmtTotal(balancePay), bold: true, borderTop: true },
-    ...(loans > 0     ? [{ label: "Less  :  Loans / Advances",   value: fmtAmt(loans),    italic: true }] : []),
-    ...(otherDeds > 0 ? [{ label: "Less  :  Other Deductions",   value: fmtAmt(otherDeds), italic: true }] : []),
-    { label: "NET Salary",              value: fmtTotal(net), bold: true, borderTop: true, borderBottom: true, green: true },
+    { label: "Total Earnings",          value: fmtTotal(totalEarnings), borderTop: true },
+    { label: isEpfEtfExempt ? "EPF / ETF" : "Recoveries  :  EPF 8%", value: isEpfEtfExempt ? "Exempt" : fmtAmt(epf8) },
+    ...(loans > 0     ? [{ label: "  Loans / Advances",   value: fmtAmt(loans),    indent: true }] : []),
+    ...(otherDeds > 0 ? [{ label: "  Other Deductions",   value: fmtAmt(otherDeds), indent: true }] : []),
+    ...(apit > 0      ? [{ label: "  APIT (Income Tax)",  value: fmtAmt(apit),     indent: true }] : []),
+    { label: "Less  :  Total Recoveries", value: fmtAmt(totalRecoveries), italic: true, borderTop: true },
+    { label: "NET Salary",              value: fmtTotal(netSalary), bold: true, borderTop: true, borderBottom: true, green: true },
     { label: "" },
-    { label: "EPF 12% (Employer)",      value: fmtAmt(epf12) },
-    { label: "EPF 8% (Employee)",       value: fmtAmt(epf8) },
-    { label: "ETF 3% (Employer)",       value: fmtAmt(etf3) },
+    { label: "EPF 12%",                 value: fmtAmt(epf12) },
+    { label: "EPF 8%",                  value: fmtAmt(epf8) },
+    { label: "ETF 3%",                  value: fmtAmt(etf3) },
   ];
 
   type FormulaRow = { label: string; formula: string; result: string; highlight?: boolean; section?: boolean; deduction?: boolean };
@@ -477,11 +474,8 @@ export default function PayslipPage() {
               <p style={{ fontSize: "10px", color: "#475569", marginBottom: "3px" }}>
                 <span style={{ fontWeight: "600" }}>Total Earnings</span> = {earnParts.join(" + ")} = <span style={{ fontWeight: "700", color: "#1e3a8a" }}>Rs.{totalEarnings.toLocaleString()}</span>
               </p>
-              <p style={{ fontSize: "10px", color: "#475569", marginBottom: "3px" }}>
-                <span style={{ fontWeight: "600" }}>Balance Pay</span> = Rs.{totalEarnings.toLocaleString()} − EPF 8% Rs.{epf8.toLocaleString()}{dedParts.length > 0 ? ` − Pay Deds Rs.${payDeduction.toLocaleString()}` : ""}{apit > 0 ? ` − APIT Rs.${apit.toLocaleString()}` : ""} = <span style={{ fontWeight: "700", color: "#1e3a8a" }}>Rs.{balancePay.toLocaleString()}</span>
-              </p>
               <p style={{ fontSize: "10px", color: "#475569" }}>
-                <span style={{ fontWeight: "600" }}>NET Salary</span> = Rs.{totalEarnings.toLocaleString()} − EPF 8% Rs.{epf8.toLocaleString()}{apit > 0 ? ` − APIT Rs.${apit.toLocaleString()}` : ""}{otherDeds > 0 ? ` − Other Rs.${otherDeds.toLocaleString()}` : ""}{loans > 0 ? ` − Loans Rs.${loans.toLocaleString()}` : ""} = <span style={{ fontWeight: "700", color: "#15803d" }}>Rs.{net.toLocaleString()}</span>
+                <span style={{ fontWeight: "600" }}>NET Salary</span> = Rs.{totalEarnings.toLocaleString()} − Total Recoveries Rs.{totalRecoveries.toLocaleString()} = <span style={{ fontWeight: "700", color: "#15803d" }}>Rs.{netSalary.toLocaleString()}</span>
               </p>
             </div>
           </div>
