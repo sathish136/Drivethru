@@ -134,23 +134,27 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
   const monthLabel = `${MONTHS[row.month - 1]} ${row.year}`;
   const epfNo = row.employee.epfNumber || row.employee.employeeId;
 
-  /* ── Calculations matching Excel format ── */
-  const allowances = (row.transportAllowance || 0) + (row.housingAllowance || 0) + (row.otherAllowances || 0);
-  const subTotal        = row.basicSalary + allowances;
-  const noPayLeave      = row.absenceDeduction || 0;
-  const lateDeduction   = row.lateDeduction || 0;
-  const lunchLateDed    = row.lunchLateDeduction || 0;
-  /* totalForEPF matches backend: both late deductions already reduce grossSalary before EPF is computed */
-  const totalForEPF     = subTotal - noPayLeave - lateDeduction - lunchLateDed;
-  const overtime        = (row.overtimePay || 0) + (row.holidayOtPay || 0);
-  const totalEarnings   = totalForEPF + overtime;
+  /* ── Calculations matching report columns ── */
+  const basicSalary     = Number(row.basicSalary) || 0;
+  const allowances      = (Number(row.transportAllowance) || 0) + (Number(row.housingAllowance) || 0) + (Number(row.otherAllowances) || 0);
+  const subTotal        = basicSalary + allowances;
+  const noPayLeave      = Number(row.absenceDeduction) || 0;
+  const halfDayDed      = Number((row as any).halfDayDeduction) || 0;
+  const lateDeduction   = Number(row.lateDeduction) || 0;
+  const lunchLateDed    = Number(row.lunchLateDeduction) || 0;
+  const earlyExitDed    = Number((row as any).incompleteDeduction) || 0;
+  const totalForEPF     = subTotal - noPayLeave - halfDayDed - lateDeduction - lunchLateDed - earlyExitDed;
+  const overtime        = (Number(row.overtimePay) || 0) + (Number((row as any).holidayOtPay) || 0);
+  const lunchInc        = Number((row as any).computedLunchIncentive) || 0;
+  /* Total Earnings = Basic + Allowances + OT + Lunch (deductions only affect EPF base, not total earnings) */
+  const totalEarnings   = basicSalary + allowances + overtime + lunchInc;
 
-  const epf8          = row.epfEmployee || 0;
-  const loans         = row.loanDeduction || 0;
-  const otherDeds     = row.otherDeductions || 0;
-  const apit          = row.apit || 0;
+  const epf8          = Number(row.epfEmployee) || 0;
+  const loans         = Number(row.loanDeduction) || 0;
+  const otherDeds     = Number(row.otherDeductions) || 0;
+  const apit          = Number(row.apit) || 0;
   const totalRecoveries = epf8 + loans + otherDeds + apit;
-  const balanceReceived = totalEarnings - totalRecoveries;
+  const netSalary       = totalEarnings - totalRecoveries;
 
   const epf12 = row.epfEmployer || 0;
   const etf3  = row.etfEmployer || 0;
@@ -159,24 +163,28 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
   const lastDay = new Date(row.year, row.month, 0);
   const dateStr = `${String(lastDay.getDate()).padStart(2,"0")}-${String(row.month).padStart(2,"0")}-${row.year}`;
 
-  type SlipRow = { label: string; value?: string; indent?: boolean; bold?: boolean; italic?: boolean; borderTop?: boolean; borderBottom?: boolean; rightAlign?: boolean };
+  type SlipRow = { label: string; value?: string; indent?: boolean; bold?: boolean; italic?: boolean; borderTop?: boolean; borderBottom?: boolean; rightAlign?: boolean; green?: boolean };
+  const fmtTotal = (n: number) => n.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const lateDayLabel = row.lateDays > 0 ? ` (${row.lateDays} day${row.lateDays !== 1 ? "s" : ""})` : "";
   const rows: SlipRow[] = [
-    { label: "Basic Salary",            value: fmtAmt(row.basicSalary) },
-    ...(allowances > 0 ? [{ label: "Allowances", value: fmtAmt(allowances) }] : [{ label: "Holiday Pay", value: "" }]),
+    { label: "Basic Salary",            value: fmtAmt(basicSalary) },
+    ...(allowances > 0 ? [{ label: "Allowances", value: fmtAmt(allowances) }] : []),
     { label: "Sub Total",               value: fmtAmt(subTotal), italic: true, borderTop: true },
     { label: (row.offSeasonPayableHours ?? 0) > 0 ? "Less  :  Off-Season Adj." : "Less  :  No Pay Leave", value: noPayLeave > 0 ? fmtAmt(noPayLeave) : "-", italic: true },
+    ...(halfDayDed   > 0 ? [{ label: "Less  :  Half Day Deduction",          value: fmtAmt(halfDayDed),   italic: true }] : []),
     ...(lateDeduction > 0 ? [{ label: `Less  :  Late Arrival${lateDayLabel}`, value: fmtAmt(lateDeduction), italic: true }] : []),
     ...(lunchLateDed > 0 ? [{ label: "Less  :  Lunch Return Late", value: fmtAmt(lunchLateDed), italic: true }] : []),
+    ...(earlyExitDed > 0 ? [{ label: "Less  :  Early Exit / Short Hours",    value: fmtAmt(earlyExitDed), italic: true }] : []),
     { label: "Total for EPF / ETF",     value: fmtAmt(totalForEPF), bold: true },
     { label: overtime > 0 ? `Add  :  Overtime  (${(row.overtimeHours || 0).toFixed(1)} hrs)` : "Add  :  Overtime", value: overtime > 0 ? fmtAmt(overtime) : "", italic: true },
-    { label: "Total Earnings",          value: fmtAmt(totalEarnings), borderTop: true },
+    { label: "Add  :  Lunch Incentive", value: lunchInc > 0 ? fmtAmt(lunchInc) : "-", italic: true },
+    { label: "Total Earnings",          value: fmtTotal(totalEarnings), borderTop: true },
     { label: "Recoveries  :  EPF 8%",   value: fmtAmt(epf8) },
-    ...(loans > 0       ? [{ label: "Loans",              value: fmtAmt(loans),    indent: true }] : []),
+    ...(loans > 0       ? [{ label: "Loans / Advances",   value: fmtAmt(loans),    indent: true }] : []),
     ...(otherDeds > 0   ? [{ label: "Other Deductions",   value: fmtAmt(otherDeds), indent: true }] : []),
     ...(apit > 0        ? [{ label: "APIT (Income Tax)",  value: fmtAmt(apit),     indent: true }] : []),
-    { label: "Less  :  Total Recoveries", value: fmtAmt(totalRecoveries), italic: true, borderTop: true },
-    { label: "Balance Received",        value: fmtAmt(balanceReceived), bold: true, borderTop: true, borderBottom: true },
+    { label: "Less  :  Total Recoveries", value: fmtTotal(totalRecoveries), italic: true, borderTop: true },
+    { label: "NET Salary",              value: fmtTotal(netSalary), bold: true, borderTop: true, borderBottom: true, green: true },
     { label: "" },
     { label: "EPF 12%",                 value: fmtAmt(epf12) },
     { label: "EPF 8%",                  value: fmtAmt(epf8) },
@@ -273,7 +281,7 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
                     style={{
                       borderTop: r.borderTop ? "2px solid #e2e8f0" : undefined,
                       borderBottom: r.borderBottom ? "2px solid #e2e8f0" : undefined,
-                      background: r.bold && r.borderTop ? "#f0f9ff" : "transparent",
+                      background: r.green ? "#f0fdf4" : r.bold && r.borderTop ? "#f0f9ff" : "transparent",
                     }}
                   >
                     <td style={{
@@ -281,7 +289,7 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
                       paddingLeft: r.indent ? "28px" : "10px",
                       fontStyle: r.italic ? "italic" : "normal",
                       fontWeight: r.bold ? "700" : "400",
-                      color: r.bold ? "#0e2a3d" : "#374151",
+                      color: r.green ? "#15803d" : r.bold ? "#0e2a3d" : "#374151",
                     }}>
                       {r.label}
                     </td>
@@ -290,7 +298,7 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
                       padding: "6px 10px",
                       fontStyle: r.italic ? "italic" : "normal",
                       fontWeight: r.bold ? "700" : "400",
-                      color: r.bold ? "#0e2a3d" : "#374151",
+                      color: r.green ? "#15803d" : r.bold ? "#0e2a3d" : "#374151",
                       whiteSpace: "nowrap",
                     }}>
                       {r.value}
@@ -1534,29 +1542,33 @@ export default function Payroll() {
         };
         const fmtOrDash = (n: number) => n > 0 ? n.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-";
 
+        const fmtTotal = (n: number) => n.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
         function renderPayslipCard(r: PayrollRow, copyLabel: "OFFICE COPY" | "EMPLOYEE COPY") {
-          const transport    = r.transportAllowance || 0;
-          const housing      = r.housingAllowance || 0;
-          const otherAllow   = r.otherAllowances || 0;
+          const transport    = Number(r.transportAllowance) || 0;
+          const housing      = Number(r.housingAllowance) || 0;
+          const otherAllow   = Number(r.otherAllowances) || 0;
           const allowances   = transport + housing + otherAllow;
-          const subTotal     = r.basicSalary + allowances;
-          const noPayLeave   = r.absenceDeduction || 0;
-          const halfDayDed   = (r as any).halfDayDeduction || 0;
-          const lateDed      = r.lateDeduction || 0;
-          const lunchLateDed = r.lunchLateDeduction || 0;
-          const earlyExitDed = (r as any).incompleteDeduction || 0;
+          const basicSalary  = Number(r.basicSalary) || 0;
+          const subTotal     = basicSalary + allowances;
+          const noPayLeave   = Number(r.absenceDeduction) || 0;
+          const halfDayDed   = Number((r as any).halfDayDeduction) || 0;
+          const lateDed      = Number(r.lateDeduction) || 0;
+          const lunchLateDed = Number(r.lunchLateDeduction) || 0;
+          const earlyExitDed = Number((r as any).incompleteDeduction) || 0;
           const totalForEPF  = subTotal - noPayLeave - halfDayDed - lateDed - lunchLateDed - earlyExitDed;
-          const otPay        = r.overtimePay || 0;
-          const holOtPay     = (r as any).holidayOtPay || 0;
+          const otPay        = Number(r.overtimePay) || 0;
+          const holOtPay     = Number((r as any).holidayOtPay) || 0;
           const overtime     = otPay + holOtPay;
-          const lunchInc     = (r as any).lunchIncentive || (r as any).computedLunchIncentive || 0;
-          const totalEarn    = totalForEPF + overtime + lunchInc;
-          const epf8         = r.epfEmployee || 0;
-          const loans        = r.loanDeduction || 0;
-          const otherDeds    = r.otherDeductions || 0;
-          const apit         = r.apit || 0;
+          const lunchInc     = Number((r as any).computedLunchIncentive) || 0;
+          /* Total Earnings = Basic + Allowances + OT + Lunch (deductions only affect EPF base) */
+          const totalEarn    = basicSalary + allowances + overtime + lunchInc;
+          const epf8         = Number(r.epfEmployee) || 0;
+          const loans        = Number(r.loanDeduction) || 0;
+          const otherDeds    = Number(r.otherDeductions) || 0;
+          const apit         = Number(r.apit) || 0;
           const totalRec     = epf8 + loans + otherDeds + apit;
-          const balancePay   = totalEarn - totalRec;
+          const netPay       = totalEarn - totalRec;
           const epf12        = r.epfEmployer || 0;
           const etf3         = r.etfEmployer || 0;
           const epfNo        = r.employee.epfNumber || r.employee.employeeId;
@@ -1568,9 +1580,9 @@ export default function Payroll() {
           const lateDayLabel = r.lateDays > 0 ? ` (${r.lateDays}d)` : "";
           const isOffSeasonSlip = (r.offSeasonPayableHours ?? 0) > 0;
 
-          type SR = { label: string; value?: string; indent?: boolean; bold?: boolean; italic?: boolean; borderTop?: boolean; borderBottom?: boolean };
+          type SR = { label: string; value?: string; indent?: boolean; bold?: boolean; italic?: boolean; borderTop?: boolean; borderBottom?: boolean; green?: boolean };
           const slipRows: SR[] = [
-            { label: "Basic Salary",                     value: fmtAmt(r.basicSalary) },
+            { label: "Basic Salary",                     value: fmtAmt(basicSalary) },
             ...(transport  > 0 ? [{ label: "  Transport Allowance", value: fmtAmt(transport),  indent: true }] : []),
             ...(housing    > 0 ? [{ label: "  Housing Allowance",   value: fmtAmt(housing),    indent: true }] : []),
             ...(otherAllow > 0 ? [{ label: "  Other Allowances",    value: fmtAmt(otherAllow), indent: true }] : []),
@@ -1584,14 +1596,14 @@ export default function Payroll() {
             ...(otPay    > 0 ? [{ label: `Add  :  Overtime  (${(r.overtimeHours || 0) % 1 === 0 ? Math.round(r.overtimeHours || 0) : (r.overtimeHours || 0).toFixed(1)} hrs)`, value: fmtAmt(otPay), italic: true }] : []),
             ...(holOtPay > 0 ? [{ label: `Add  :  Holiday / Off-Day Pay${(r.overtimeHours || 0) > 0 && otPay === 0 ? `  (${(r.overtimeHours || 0).toFixed(1)} hrs)` : ""}`, value: fmtAmt(holOtPay), italic: true }] : []),
             ...(overtime === 0 ? [{ label: "Add  :  Overtime / Holiday Pay", value: "", italic: true }] : []),
-            { label: "Add  :  Lunch Incentive", value: lunchInc > 0 ? fmtAmt(lunchInc) : "-", italic: true },
-            { label: "Total Earnings",                   value: fmtAmt(totalEarn), borderTop: true },
+            { label: "Add  :  Lunch Incentive",          value: lunchInc > 0 ? fmtAmt(lunchInc) : "-", italic: true },
+            { label: "Total Earnings",                   value: fmtTotal(totalEarn), borderTop: true },
             { label: isEpfExempt ? "EPF / ETF" : "Recoveries  :  EPF 8%", value: isEpfExempt ? "Exempt" : fmtOrDash(epf8) },
             ...(loans    > 0 ? [{ label: "Loans / Advances",  value: fmtAmt(loans),    indent: true }] : []),
             ...(otherDeds> 0 ? [{ label: "Other Deductions",  value: fmtAmt(otherDeds),indent: true }] : []),
             ...(apit     > 0 ? [{ label: "APIT (Income Tax)", value: fmtAmt(apit),     indent: true }] : []),
-            { label: "Less  :  Total Recoveries",        value: fmtAmt(totalRec), italic: true, borderTop: true },
-            { label: "Balance Received",                 value: fmtAmt(balancePay), bold: true, borderTop: true, borderBottom: true },
+            { label: "Less  :  Total Recoveries",        value: fmtTotal(totalRec), italic: true, borderTop: true },
+            { label: "NET Salary",                       value: fmtTotal(netPay), bold: true, borderTop: true, borderBottom: true, green: true },
             { label: "" },
             { label: "EPF 12%",                          value: fmtAmt(epf12) },
             { label: "EPF 8%",                           value: fmtAmt(epf8) },
@@ -1658,12 +1670,12 @@ export default function Payroll() {
                       <tr key={i} style={{
                         borderTop: sr.borderTop ? "2px solid #e2e8f0" : undefined,
                         borderBottom: sr.borderBottom ? "2px solid #e2e8f0" : undefined,
-                        background: sr.bold && sr.borderTop ? "#eff6ff" : "transparent",
+                        background: sr.green ? "#f0fdf4" : sr.bold && sr.borderTop ? "#eff6ff" : "transparent",
                       }}>
-                        <td style={{ padding: sr.label ? "4px 7px" : "2px 7px", paddingLeft: sr.indent ? "18px" : "7px", fontStyle: sr.italic ? "italic" : "normal", fontWeight: sr.bold ? "700" : "400", color: sr.bold ? "#1e3a8a" : sr.indent ? "#64748b" : "#374151", fontSize: sr.indent ? "7px" : "8px" }}>
+                        <td style={{ padding: sr.label ? "4px 7px" : "2px 7px", paddingLeft: sr.indent ? "18px" : "7px", fontStyle: sr.italic ? "italic" : "normal", fontWeight: sr.bold ? "700" : "400", color: sr.green ? "#15803d" : sr.bold ? "#1e3a8a" : sr.indent ? "#64748b" : "#374151", fontSize: sr.indent ? "7px" : "8px" }}>
                           {sr.label}
                         </td>
-                        <td style={{ textAlign: "right", padding: "4px 7px", fontStyle: sr.italic ? "italic" : "normal", fontWeight: sr.bold ? "700" : "400", color: sr.bold ? "#1e3a8a" : sr.indent ? "#64748b" : "#374151", whiteSpace: "nowrap", fontSize: sr.indent ? "7px" : "8px" }}>
+                        <td style={{ textAlign: "right", padding: "4px 7px", fontStyle: sr.italic ? "italic" : "normal", fontWeight: sr.bold ? "700" : "400", color: sr.green ? "#15803d" : sr.bold ? "#1e3a8a" : sr.indent ? "#64748b" : "#374151", whiteSpace: "nowrap", fontSize: sr.indent ? "7px" : "8px" }}>
                           {sr.value}
                         </td>
                       </tr>
