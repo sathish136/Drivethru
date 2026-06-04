@@ -124,29 +124,30 @@ export default function PayslipPage() {
   const monthLabel = `${MONTHS[row.month - 1]} ${row.year}`;
   const epfNo = row.employee.epfNumber || row.employee.employeeId;
 
-  const transport    = row.transportAllowance || 0;
-  const housing      = row.housingAllowance || 0;
-  const otherAllow   = row.otherAllowances || 0;
+  const transport    = Number(row.transportAllowance) || 0;
+  const housing      = Number(row.housingAllowance) || 0;
+  const otherAllow   = Number(row.otherAllowances) || 0;
   const allowances   = transport + housing + otherAllow;
-  const basicSalary  = row.basicSalary || 0;
+  const basicSalary  = Number(row.basicSalary) || 0;
   const subTotal     = basicSalary + allowances;
-  const noPayLeave   = row.absenceDeduction || 0;
-  const halfDayDed   = row.halfDayDeduction || 0;
-  const lateDeduction  = row.lateDeduction || 0;
-  const lunchLateDed   = row.lunchLateDeduction || 0;
-  const earlyExitDed   = row.incompleteDeduction || 0;
+  const noPayLeave   = Number(row.absenceDeduction) || 0;
+  const halfDayDed   = Number(row.halfDayDeduction) || 0;
+  const lateDeduction  = Number(row.lateDeduction) || 0;
+  const lunchLateDed   = Number(row.lunchLateDeduction) || 0;
+  const earlyExitDed   = Number(row.incompleteDeduction) || 0;
+  // totalForEPF = EPF contribution base (Basic + Allow − attendance deductions)
   const totalForEPF  = subTotal - noPayLeave - halfDayDed - lateDeduction - lunchLateDed - earlyExitDed;
-  const overtime     = (row.overtimePay || 0) + (row.holidayOtPay || 0);
-  const lunchInc     = row.computedLunchIncentive || 0;
-  // Total Earnings: totalForEPF + OT + Lunch Incentive
-  const totalEarnings = totalForEPF + overtime + lunchInc;
+  const overtime     = (Number(row.overtimePay) || 0) + (Number(row.holidayOtPay) || 0);
+  const lunchInc     = Number(row.computedLunchIncentive) || 0;
+  // Total Earnings = Basic + Allowances + OT + Lunch  (matches report; deductions only affect EPF base)
+  const totalEarnings = basicSalary + allowances + overtime + lunchInc;
 
-  const epf8         = row.epfEmployee || 0;
-  const loans        = row.loanDeduction || row.activeLoanInstallment || 0;
-  const otherDeds    = row.otherDeductions || 0;
-  const apit         = row.apit || 0;
+  const epf8         = Number(row.epfEmployee) || 0;
+  const loans        = Number(row.loanDeduction) || Number(row.activeLoanInstallment) || 0;
+  const otherDeds    = Number(row.otherDeductions) || 0;
+  const apit         = Number(row.apit) || 0;
   const totalRecoveries = epf8 + loans + otherDeds + apit;
-  // NET Salary = what the employee actually receives
+  // NET Salary = Total Earnings − EPF 8% − Loans − APIT  (matches report NET column)
   const netSalary    = totalEarnings - totalRecoveries;
 
   const epf12 = row.epfEmployer || 0;
@@ -319,16 +320,10 @@ export default function PayslipPage() {
   if (loans > 0) formulaRows.push({ label: "Loan / Advance", formula: "Monthly installment from active loan", result: `− Rs.${loans.toLocaleString()}`, deduction: true, highlight: true });
 
   const earnParts: string[] = [];
-  if (row.basicSalary > 0) earnParts.push(`Basic Rs.${row.basicSalary.toLocaleString()}`);
+  if (basicSalary > 0) earnParts.push(`Basic Rs.${basicSalary.toLocaleString()}`);
   if (allowances > 0) earnParts.push(`Allowances Rs.${allowances.toLocaleString()}`);
   if (overtime > 0) earnParts.push(`OT/Holiday Rs.${overtime.toLocaleString()}`);
   if (lunchInc > 0) earnParts.push(`Lunch Inc. Rs.${lunchInc.toLocaleString()}`);
-  const dedParts: string[] = [];
-  if (noPayLeave > 0) dedParts.push(`Absence Rs.${noPayLeave.toLocaleString()}`);
-  if (halfDayDed > 0) dedParts.push(`Half-Day Rs.${halfDayDed.toLocaleString()}`);
-  if (lateDeduction > 0) dedParts.push(`Late Rs.${lateDeduction.toLocaleString()}`);
-  if (lunchLateDed > 0) dedParts.push(`Lunch-Late Rs.${lunchLateDed.toLocaleString()}`);
-  if (earlyExitDed > 0) dedParts.push(`Short-Hrs Rs.${earlyExitDed.toLocaleString()}`);
 
   return (
     <div className="min-h-screen bg-slate-100 py-6 px-4" style={{ fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif" }}>
