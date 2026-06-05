@@ -441,6 +441,22 @@ router.post("/generate", async (req, res) => {
       /* ── Look up HR department rule for this employee ── */
       const empShiftName     = emp.shiftId ? shiftMap.get(emp.shiftId)?.name ?? null : null;
       const rule = findRule(deptRules, emp.department ?? "", empShiftName);
+
+      /* ── Night Watcher: drop "morning tail" records ──────────────────────────
+         Night Watcher shifts run overnight (e.g. 20:00 → 05:00). Some attendance
+         sources create TWO records per shift: one for the evening start date and
+         a second for the next calendar day's morning tail (inTime1 in 00:xx-11:xx).
+         The morning-tail record is already captured in the previous evening's span,
+         so counting it separately inflates present-days and generates phantom OT.
+         Keep only records whose inTime1 is in the evening window (≥ 12:00) or that
+         have no punch at all (legitimate absent rows). */
+      if (rule.nightWatcherPayroll === true) {
+        empAtt = empAtt.filter((a: any) => {
+          if (!a.inTime1) return true;
+          return timeToMins(a.inTime1) >= 12 * 60;
+        });
+      }
+
       const reqHoursPerDay   = (rule.minHours && rule.minHours > 0) ? rule.minHours : DEFAULT_RULE.minHours; // required hrs for full pay
       const otAfterHrsRule   = rule.otAfterHours ?? rule.minHours;     // OT threshold (hours)
       const isOtEligible     = rule.otEligible;
