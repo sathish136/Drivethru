@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { staffIncentives, employees, attendanceRecords, payrollSettings } from "@workspace/db/schema";
+import { staffIncentives, employees, attendanceRecords, payrollSettings, payrollRecords } from "@workspace/db/schema";
 import { eq, and, desc, inArray } from "drizzle-orm";
 
 const router = Router();
@@ -130,6 +130,21 @@ router.put("/:id", async (req, res) => {
   }
 });
 
+/* POST /incentives/bulk-approve — approve multiple incentives at once */
+router.post("/bulk-approve", async (req, res) => {
+  try {
+    const { ids } = req.body as { ids: number[] };
+    if (!ids || ids.length === 0) return res.status(400).json({ error: "No IDs provided" });
+    await db.update(staffIncentives)
+      .set({ status: "approved", updatedAt: new Date() })
+      .where(and(inArray(staffIncentives.id, ids), eq(staffIncentives.status, "pending")));
+    res.json({ success: true, approved: ids.length });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to bulk approve" });
+  }
+});
+
 /* POST /incentives/generate-lunch — auto-generate lunch incentives from attendance */
 router.post("/generate-lunch", async (req, res) => {
   try {
@@ -214,6 +229,11 @@ router.post("/generate-lunch", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
+    const [inc] = await db.select().from(staffIncentives).where(eq(staffIncentives.id, id));
+    if (!inc) return res.status(404).json({ error: "Incentive not found" });
+    if (inc.payrollLinked) {
+      return res.status(409).json({ error: "This incentive is linked to a generated payroll and cannot be deleted." });
+    }
     await db.delete(staffIncentives).where(eq(staffIncentives.id, id));
     res.json({ success: true });
   } catch (err) {

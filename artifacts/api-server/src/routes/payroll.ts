@@ -958,6 +958,16 @@ router.post("/generate", async (req, res) => {
       generated.push(record);
     }
 
+    /* ── Mark consumed approved incentives as payroll-linked ── */
+    const linkedIds = approvedIncentives
+      .filter(i => i.status === "approved")
+      .map(i => i.id);
+    if (linkedIds.length > 0) {
+      await db.update(staffIncentives)
+        .set({ payrollLinked: true, updatedAt: new Date() })
+        .where(inArray(staffIncentives.id, linkedIds));
+    }
+
     if (generated.length > 0) {
       const genEmpIds = generated.map(r => r.employeeId);
       await db.delete(payrollRecords).where(

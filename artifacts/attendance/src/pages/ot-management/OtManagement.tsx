@@ -148,12 +148,17 @@ function DetailPanel({
                     <input
                       type="number" min="0" step="0.5"
                       value={editState!.regHours}
-                      onChange={e => setEditState(s => s ? { ...s, regHours: e.target.value } : s)}
+                      onChange={e => {
+                        const hrs = e.target.value;
+                        const rate = row.basicSalary > 0 ? row.basicSalary / 240 * 1.5 : 0;
+                        const amt = Math.round((parseFloat(hrs) || 0) * rate);
+                        setEditState(s => s ? { ...s, regHours: hrs, regAmt: String(amt) } : s);
+                      }}
                       className="w-full px-2.5 py-1.5 text-sm border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-semibold text-gray-500 block mb-1">Amount (Rs.)</label>
+                    <label className="text-[10px] font-semibold text-gray-500 block mb-1">Amount (Rs.) <span className="text-blue-400 font-normal">— auto from hrs</span></label>
                     <input
                       type="number" min="0" step="1"
                       value={editState!.regAmt}
@@ -203,12 +208,17 @@ function DetailPanel({
                     <input
                       type="number" min="0" step="0.5"
                       value={editState!.holHours}
-                      onChange={e => setEditState(s => s ? { ...s, holHours: e.target.value } : s)}
+                      onChange={e => {
+                        const hrs = e.target.value;
+                        const rate = row.basicSalary > 0 ? row.basicSalary / 240 * 1.5 : 0;
+                        const amt = Math.round((parseFloat(hrs) || 0) * rate);
+                        setEditState(s => s ? { ...s, holHours: hrs, holAmt: String(amt) } : s);
+                      }}
                       className="w-full px-2.5 py-1.5 text-sm border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-semibold text-gray-500 block mb-1">Amount (Rs.)</label>
+                    <label className="text-[10px] font-semibold text-gray-500 block mb-1">Amount (Rs.) <span className="text-orange-400 font-normal">— auto from hrs</span></label>
                     <input
                       type="number" min="0" step="1"
                       value={editState!.holAmt}
@@ -267,7 +277,13 @@ function DetailPanel({
             {/* Total */}
             <div className="text-right shrink-0">
               <div className="text-[10px] text-gray-400">Total OT</div>
-              <div className="text-base font-extrabold text-gray-900">{fmt(row.effectiveTotalOtAmount)}</div>
+              {editing && editState ? (
+                <div className="text-base font-extrabold text-emerald-700">
+                  {fmt((parseFloat(editState.regAmt) || 0) + (parseFloat(editState.holAmt) || 0))}
+                </div>
+              ) : (
+                <div className="text-base font-extrabold text-gray-900">{fmt(row.effectiveTotalOtAmount)}</div>
+              )}
             </div>
 
             {/* Buttons */}

@@ -145,6 +145,7 @@ export const staffIncentives = pgTable("staff_incentives", {
   reason: text("reason"),
   status: text("status").notNull().$type<"pending" | "approved" | "paid">().default("pending"),
   notes: text("notes"),
+  payrollLinked: boolean("payroll_linked").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

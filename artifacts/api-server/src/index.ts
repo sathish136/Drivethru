@@ -51,6 +51,7 @@ async function runStartupMigrations() {
     `CREATE INDEX IF NOT EXISTS idx_loan_emi_ledger_loan_month ON loan_emi_ledger(loan_id, month, year)`,
     `CREATE INDEX IF NOT EXISTS idx_loan_emi_ledger_month_year ON loan_emi_ledger(month, year)`,
     `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS incentives_total real NOT NULL DEFAULT 0`,
+    `ALTER TABLE staff_incentives ADD COLUMN IF NOT EXISTS payroll_linked boolean NOT NULL DEFAULT false`,
   ];
   for (const m of migrations) {
     try {

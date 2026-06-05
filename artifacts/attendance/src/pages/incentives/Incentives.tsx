@@ -40,6 +40,7 @@ interface IncentiveRow {
   reason: string | null;
   status: IncentiveStatus;
   notes: string | null;
+  payrollLinked: boolean;
   createdAt: string;
   employeeId: number;
   employeeCode: string;
@@ -110,6 +111,10 @@ export default function Incentives() {
   const [form, setForm]                 = useState({ ...EMPTY_FORM });
   const [saving, setSaving]             = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<IncentiveRow | null>(null);
+  const [deleteError,   setDeleteError]   = useState<string | null>(null);
+
+  const [selectedIds,    setSelectedIds]    = useState<Set<number>>(new Set());
+  const [bulkApproving,  setBulkApproving]  = useState(false);
 
   const [filterMonth,  setFilterMonth]  = useState("");
   const [filterYear,   setFilterYear]   = useState(String(now.getFullYear()));
@@ -382,9 +387,62 @@ export default function Incentives() {
   }
 
   async function handleDelete(row: IncentiveRow) {
-    await fetch(getApiUrl(`incentives/${row.id}`), { method: "DELETE" });
+    const res = await fetch(getApiUrl(`incentives/${row.id}`), { method: "DELETE" });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setDeleteError(d.error || "Failed to delete incentive");
+      return;
+    }
     setConfirmDelete(null);
+    setDeleteError(null);
     await fetchAll();
+  }
+
+  async function handleBulkApprove() {
+    const pendingIds = [...selectedIds].filter(id => {
+      const row = filtered.find(r => r.id === id);
+      return row && row.status === "pending";
+    });
+    if (pendingIds.length === 0) return;
+    setBulkApproving(true);
+    try {
+      await fetch(getApiUrl("incentives/bulk-approve"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: pendingIds }),
+      });
+      setSelectedIds(new Set());
+      await fetchAll();
+    } finally {
+      setBulkApproving(false);
+    }
+  }
+
+  function toggleSelect(id: number) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  const pendingFiltered = filtered.filter(r => r.status === "pending");
+  const allPendingSelected = pendingFiltered.length > 0 && pendingFiltered.every(r => selectedIds.has(r.id));
+
+  function toggleSelectAllPending() {
+    if (allPendingSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        pendingFiltered.forEach(r => next.delete(r.id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        pendingFiltered.forEach(r => next.add(r.id));
+        return next;
+      });
+    }
   }
 
   async function handleStatusChange(row: IncentiveRow, status: IncentiveStatus) {
@@ -582,9 +640,38 @@ export default function Incentives() {
         ) : (
           <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
+              {/* Bulk action bar */}
+              {selectedIds.size > 0 && (
+                <div className="flex items-center gap-3 px-4 py-2.5 bg-primary/5 border-b border-primary/20">
+                  <span className="text-xs font-semibold text-primary">{selectedIds.size} selected</span>
+                  <button
+                    onClick={handleBulkApprove}
+                    disabled={bulkApproving}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold disabled:opacity-50 transition-colors"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    {bulkApproving ? "Approving…" : `Bulk Approve (${[...selectedIds].filter(id => filtered.find(r => r.id === id)?.status === "pending").length} pending)`}
+                  </button>
+                  <button
+                    onClick={() => setSelectedIds(new Set())}
+                    className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted transition-colors"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
               <table className="min-w-full">
                 <thead>
                   <tr className="bg-muted border-b border-border">
+                    <th className="pl-4 pr-2 py-3 w-8">
+                      <input
+                        type="checkbox"
+                        checked={allPendingSelected}
+                        onChange={toggleSelectAllPending}
+                        title="Select all pending"
+                        className="w-3.5 h-3.5 rounded accent-primary cursor-pointer"
+                      />
+                    </th>
                     {["Employee","Period","Type","Amount","Reason","Status","Actions"].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
                         {h}
@@ -594,7 +681,19 @@ export default function Incentives() {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {filtered.map(row => (
-                    <tr key={row.id} className="hover:bg-muted/40 transition-colors">
+                    <tr key={row.id} className={`hover:bg-muted/40 transition-colors ${selectedIds.has(row.id) ? "bg-primary/5" : ""}`}>
+                      <td className="pl-4 pr-2 py-3">
+                        {row.status === "pending" ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(row.id)}
+                            onChange={() => toggleSelect(row.id)}
+                            className="w-3.5 h-3.5 rounded accent-primary cursor-pointer"
+                          />
+                        ) : (
+                          <span className="w-3.5 h-3.5 block" />
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="font-semibold text-foreground text-sm">{row.employeeName}</div>
                         <div className="text-xs text-muted-foreground mt-0.5">{row.employeeCode} · {row.department}</div>
@@ -612,8 +711,13 @@ export default function Incentives() {
                         <span className="text-sm text-foreground line-clamp-1">{row.reason || <span className="text-muted-foreground">—</span>}</span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <StatusBadge status={row.status} />
+                          {row.payrollLinked && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                              🔗 Payroll Linked
+                            </span>
+                          )}
                           {row.status === "pending" && (
                             <button
                               onClick={() => handleStatusChange(row, "approved")}
@@ -622,7 +726,7 @@ export default function Incentives() {
                               Approve
                             </button>
                           )}
-                          {row.status === "approved" && (
+                          {row.status === "approved" && !row.payrollLinked && (
                             <button
                               onClick={() => handleStatusChange(row, "paid")}
                               className="text-xs text-blue-600 font-medium px-2 py-1 rounded hover:bg-blue-50 transition-colors"
@@ -634,18 +738,24 @@ export default function Incentives() {
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => openEdit(row)}
-                            className="text-xs text-primary font-medium px-2 py-1 rounded hover:bg-primary/10 transition-colors"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => setConfirmDelete(row)}
-                            className="text-xs text-muted-foreground hover:text-foreground font-medium px-2 py-1 rounded hover:bg-muted transition-colors"
-                          >
-                            Delete
-                          </button>
+                          {!row.payrollLinked && (
+                            <button
+                              onClick={() => openEdit(row)}
+                              className="text-xs text-primary font-medium px-2 py-1 rounded hover:bg-primary/10 transition-colors"
+                            >
+                              Edit
+                            </button>
+                          )}
+                          {row.payrollLinked ? (
+                            <span className="text-xs text-slate-400 px-2 py-1 cursor-not-allowed" title="Linked to payroll — cannot delete">🔒 Locked</span>
+                          ) : (
+                            <button
+                              onClick={() => { setConfirmDelete(row); setDeleteError(null); }}
+                              className="text-xs text-muted-foreground hover:text-foreground font-medium px-2 py-1 rounded hover:bg-muted transition-colors"
+                            >
+                              Delete
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -653,6 +763,7 @@ export default function Incentives() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-800 text-white">
+                    <td className="pl-4 pr-2 py-2.5" />
                     <td colSpan={3} className="px-4 py-2.5 text-xs font-bold uppercase tracking-wide">
                       Total — {filtered.length} record{filtered.length !== 1 ? "s" : ""}
                     </td>
@@ -918,7 +1029,7 @@ export default function Incentives() {
                   <p className="text-xs text-muted-foreground">This action cannot be undone</p>
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground mb-6">
+              <p className="text-sm text-muted-foreground mb-4">
                 Delete the{" "}
                 <span className="font-semibold text-foreground">
                   {INCENTIVE_TYPES.find(t => t.value === confirmDelete.type)?.label}
@@ -928,19 +1039,27 @@ export default function Incentives() {
                 for{" "}
                 <span className="font-semibold text-foreground">{confirmDelete.employeeName}</span>?
               </p>
+              {deleteError && (
+                <div className="mb-4 px-3 py-2.5 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2">
+                  <span className="text-red-500 text-base leading-none mt-0.5">🔒</span>
+                  <p className="text-xs text-red-700 font-medium">{deleteError}</p>
+                </div>
+              )}
               <div className="flex justify-end gap-3">
                 <button
-                  onClick={() => setConfirmDelete(null)}
+                  onClick={() => { setConfirmDelete(null); setDeleteError(null); }}
                   className="px-4 py-2 text-sm font-medium text-foreground border border-border rounded-xl hover:bg-muted transition-colors"
                 >
                   Cancel
                 </button>
-                <button
-                  onClick={() => handleDelete(confirmDelete)}
-                  className="px-4 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-xl transition-colors"
-                >
-                  Delete
-                </button>
+                {!deleteError && (
+                  <button
+                    onClick={() => handleDelete(confirmDelete)}
+                    className="px-4 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-xl transition-colors"
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
             </div>
           </div>
