@@ -828,6 +828,123 @@ const SettingsMockup = () => (
   </div>
 );
 
+const OtManagementMockup = () => (
+  <div className="relative bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm text-[10px] select-none p-3">
+    <div className="flex items-center justify-between mb-2">
+      <div className="text-xs font-semibold text-gray-700">OT Management — May 2026</div>
+      <div className="flex gap-1 relative">
+        <M n={1} className="-top-2 -right-2" />
+        <div className="border border-gray-300 rounded px-2 py-0.5 text-[9px] text-gray-500">May 2026 ▾</div>
+        <div className="border border-gray-300 rounded px-2 py-0.5 text-[9px] text-gray-500">All Branches ▾</div>
+      </div>
+    </div>
+    <table className="w-full text-[9px]">
+      <thead><tr className="bg-gray-50 border-b">
+        {["Employee","Reg OT Hrs","Reg OT Amt","Hol OT Hrs","Hol OT Amt","Total OT","Status"].map(h => (
+          <th key={h} className="text-left px-1 py-1 text-gray-500 font-medium">{h}</th>
+        ))}
+      </tr></thead>
+      <tbody>
+        {[
+          { n:2, name:"Nimal S.", rh:"4.50", ra:"2,250", hh:"2.00", ha:"2,000", tot:"4,250", s:"Pending", sc:"bg-amber-100 text-amber-700" },
+          { n:3, name:"Kamala P.", rh:"6.00", ra:"3,000", hh:"0.00", ha:"0", tot:"3,000", s:"Approved", sc:"bg-emerald-100 text-emerald-700" },
+          { n:null, name:"Amal F.", rh:"2.50", ra:"1,250", hh:"4.00", ha:"4,000", tot:"5,250", s:"Paid", sc:"bg-blue-100 text-blue-700" },
+        ].map((r, i) => (
+          <tr key={i} className="border-b border-gray-100 relative">
+            {r.n && <M n={r.n} className="-top-2 -left-1" />}
+            <td className="px-1 py-1 font-medium">{r.name}</td>
+            <td className="px-1 py-1 text-blue-600">{r.rh} h</td>
+            <td className="px-1 py-1">Rs {r.ra}</td>
+            <td className="px-1 py-1 text-purple-600">{r.hh} h</td>
+            <td className="px-1 py-1">Rs {r.ha}</td>
+            <td className="px-1 py-1 font-bold text-gray-800">Rs {r.tot}</td>
+            <td className="px-1 py-1"><span className={`px-1.5 py-0.5 rounded-full text-[8px] font-medium ${r.sc}`}>{r.s}</span></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+    <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-2 text-[9px] text-blue-700">
+      <span className="font-bold">Calc: </span>Reg OT = (Basic ÷ 200) × 1.5 × hours &nbsp;|&nbsp; Holiday OT = (Basic ÷ 200) × 2.0 × hours
+    </div>
+  </div>
+);
+
+const ManualSalaryMockup = () => (
+  <div className="relative bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm text-[10px] select-none p-3">
+    <div className="flex items-center justify-between mb-2">
+      <div className="text-xs font-semibold text-gray-700">Manual Salary Entry</div>
+      <div className="relative"><M n={1} className="-top-2 -right-2" /><div className="bg-emerald-600 text-white rounded px-2 py-0.5 text-[9px]">+ Add Entry</div></div>
+    </div>
+    <div className="border border-gray-200 rounded-lg p-2 space-y-1.5 relative mb-2">
+      <M n={2} className="-top-2 -right-2" />
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <div className="text-[9px] text-gray-500 mb-0.5">Employee</div>
+          <div className="border border-gray-300 rounded px-2 py-1 text-[9px] bg-gray-50">Nimal S. ▾</div>
+        </div>
+        <div>
+          <div className="text-[9px] text-gray-500 mb-0.5">Month / Year</div>
+          <div className="border border-gray-300 rounded px-2 py-1 text-[9px] bg-gray-50">May 2026</div>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-1.5">
+        <div className="bg-green-50 border border-green-200 rounded p-1.5 relative"><M n={3} className="-top-2 -right-2" />
+          <div className="text-[9px] text-gray-500">Basic</div><div className="font-bold text-green-700">45,000</div>
+        </div>
+        <div className="bg-green-50 border border-green-200 rounded p-1.5 relative"><M n={4} className="-top-2 -right-2" />
+          <div className="text-[9px] text-gray-500">Allowances</div><div className="font-bold text-green-700">7,500</div>
+        </div>
+        <div className="bg-red-50 border border-red-200 rounded p-1.5">
+          <div className="text-[9px] text-gray-500">Deductions</div><div className="font-bold text-red-600">4,200</div>
+        </div>
+      </div>
+      <div className="bg-gray-800 rounded p-1.5 flex justify-between items-center relative"><M n={5} className="-top-2 -right-2" />
+        <span className="text-white font-semibold text-[9px]">Net Salary</span>
+        <span className="text-emerald-400 font-bold text-xs">Rs 48,300</span>
+      </div>
+    </div>
+    <div className="text-[9px] text-gray-400 italic">Gross = Basic + Allowances + OT &nbsp;|&nbsp; Net = Gross − EPF − Loans − Deductions</div>
+  </div>
+);
+
+const RawPunchesMockup = () => (
+  <div className="relative bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm text-[10px] select-none p-3">
+    <div className="flex items-center justify-between mb-2">
+      <div className="text-xs font-semibold text-gray-700">Raw Punches</div>
+      <div className="flex gap-1 relative">
+        <M n={1} className="-top-2 -right-2" />
+        <div className="border border-gray-300 rounded px-2 py-0.5 text-[9px] text-gray-500">Date ▾</div>
+        <div className="border border-gray-300 rounded px-2 py-0.5 text-[9px] text-gray-500">Branch ▾</div>
+        <div className="bg-gray-100 text-gray-600 rounded px-2 py-0.5 text-[9px]">Export</div>
+      </div>
+    </div>
+    <table className="w-full text-[9px]">
+      <thead><tr className="bg-gray-50 border-b">
+        {["Employee","Branch","Punches","Total Hrs","OT Hrs","Status"].map(h => (
+          <th key={h} className="text-left px-1 py-1 text-gray-500">{h}</th>
+        ))}
+      </tr></thead>
+      <tbody>
+        {[
+          { n:2, name:"Nimal S.", branch:"Main Office", punches:"08:01 · 13:00 · 14:00 · 17:32", hrs:"9.52 h", ot:"0.03 h", s:"Present", sc:"bg-green-100 text-green-700" },
+          { n:3, name:"Kamala P.", branch:"Main Office", punches:"08:22 · 17:05", hrs:"8.72 h", ot:"0.00 h", s:"Late", sc:"bg-amber-100 text-amber-700" },
+          { n:null, name:"Amal F.", branch:"Kandy", punches:"—", hrs:"0.00 h", ot:"0.00 h", s:"Absent", sc:"bg-red-100 text-red-700" },
+        ].map((r, i) => (
+          <tr key={i} className="border-b border-gray-100 relative">
+            {r.n && <M n={r.n} className="-top-2 -left-1" />}
+            <td className="px-1 py-1 font-medium">{r.name}</td>
+            <td className="px-1 py-1 text-gray-500">{r.branch}</td>
+            <td className="px-1 py-1 text-blue-600 text-[8px]">{r.punches}</td>
+            <td className="px-1 py-1">{r.hrs}</td>
+            <td className="px-1 py-1 text-purple-600">{r.ot}</td>
+            <td className="px-1 py-1"><span className={`px-1.5 py-0.5 rounded-full text-[8px] font-medium ${r.sc}`}>{r.s}</span></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
+
 /* ─────────────────────── DATA ─────────────────────── */
 const MODULES: Module[] = [
   {
@@ -918,6 +1035,23 @@ const MODULES: Module[] = [
     notes: ["All approval actions are logged in Activity Logs for audit purposes."],
   },
   {
+    id: "raw-punches",
+    label: "Raw Punches",
+    icon: Fingerprint,
+    color: "text-cyan-600",
+    bg: "bg-cyan-50 border-cyan-200",
+    group: "Attendance",
+    path: "/attendance/raw-punches",
+    summary: "View all raw biometric punch timestamps per employee per day — the unprocessed source data from your ZKTeco devices.",
+    mockup: <RawPunchesMockup />,
+    steps: [
+      { title: "Filter by date and branch (marker 1)", description: "Select a specific date using the Date picker. Optionally filter by Branch to narrow records to one location. Click Export to download as CSV." },
+      { title: "Read the punch timeline (marker 2)", description: "Each row shows every individual punch timestamp in chronological order. Multiple punches per day are normal — the system picks the earliest as check-in and latest as check-out." },
+      { title: "Check total hours and OT (marker 3)", description: "Total Hrs shows the duration from first to last punch minus the configured lunch break. OT Hrs = Total Hrs minus the standard shift length (e.g., 8.5 h for a 08:00–17:00 shift).", tip: "If an employee has an odd number of punches (e.g., 3 punches), it usually means a missed check-in or check-out — use Approvals to add the missing entry." },
+    ],
+    notes: ["Raw punches come directly from ZKTeco devices via ZK Push (ADMS) or manual import.", "Status color: Green = Present, Amber = Late, Red = Absent, Purple = Leave, Gray = Holiday/Off."],
+  },
+  {
     id: "leave-entry",
     label: "Leave Entry",
     icon: CalendarClock,
@@ -970,7 +1104,16 @@ const MODULES: Module[] = [
       { title: "Generate payslips (marker 5)", description: "Click Generate Payslips to create individual payslip PDFs. Each includes an Office Copy and System Generated copy." },
       { title: "Finalize payroll (marker 6)", description: "Once reviewed, click Finalize to lock payroll for the month. Finalized payroll cannot be changed.", tip: "Always verify overtime hours and no-pay deductions before finalizing. Use the Reports module to cross-check totals." },
     ],
-    notes: ["EPF: Employee 8%, Employer 12%. ETF: Employer 3%.", "APIT (income tax) is auto-calculated based on salary bands.", "Loan recoveries and incentives are automatically included."],
+    notes: [
+      "Gross = Basic + Transport + Lunch + Housing + OT Amount + Incentives + Other Allowances",
+      "Net = Gross − EPF (8%) − Loan Repayment − Late Deduction − Absence Deduction − Other Deductions",
+      "Absence Deduction = (Basic ÷ 26) × Absent Days  [÷ 30 for night watcher / 30-day basis shifts]",
+      "Late Deduction = Late Minutes × Per-minute rate (set in HR Settings, default Rs 15/min)",
+      "EPF Employee = Basic × 8%  |  EPF Employer = Basic × 12%  |  ETF = Basic × 3% (employer only)",
+      "OT Regular = (Basic ÷ 200) × 1.5 × OT hours  |  OT Holiday = (Basic ÷ 200) × 2.0 × OT hours",
+      "APIT (income tax) is auto-calculated based on annual salary bands per IRD Sri Lanka",
+      "Loan recoveries and approved incentives are automatically included",
+    ],
   },
   {
     id: "payroll-settings",
@@ -980,12 +1123,19 @@ const MODULES: Module[] = [
     bg: "bg-cyan-50 border-cyan-200",
     group: "HR Management",
     path: "/payroll-settings",
-    summary: "Configure salary components, allowances, deduction rules, and EPF/ETF rates used in payroll calculations.",
+    summary: "Configure salary components, allowances, OT multipliers, deduction rules, and EPF/ETF rates used in payroll calculations.",
     mockup: <PayrollSettingsMockup />,
     steps: [
-      { title: "Set up allowances (marker 1)", description: "Define recurring additions to salary: Transport, Housing, Meal Allowance, and any others. Edit each by clicking the Edit button next to it." },
-      { title: "Configure deduction rules (marker 2)", description: "Set the rate for late deductions per minute, no-pay per working day, and other recurring deduction categories." },
-      { title: "Verify EPF/ETF rates (marker 3)", description: "Confirm Employee EPF (8%), Employer EPF (12%), and ETF (3%) match current Sri Lanka labour regulations. Update if rates change.", tip: "Changes to Payroll Settings apply from the next payroll cycle only. Consult your HR manager before changing statutory rates." },
+      { title: "Set up allowances (marker 1)", description: "Define recurring additions to salary: Transport, Housing, Meal/Lunch Allowance, and any others. Edit each by clicking the Edit button next to it. These are added to every employee's gross salary." },
+      { title: "Configure OT multipliers", description: "Set separate multipliers for each OT type: Regular OT (default ×1.5), Off-day OT (×2.0), Poya day OT (×2.0), Public holiday OT (×2.0). Formula: (Basic ÷ 200) × multiplier × hours." },
+      { title: "Configure deduction rules (marker 2)", description: "Set the rate for late deductions per minute (default Rs 15/min), no-pay per working day (Basic ÷ 26), and other recurring deduction categories." },
+      { title: "Verify EPF/ETF rates (marker 3)", description: "Confirm Employee EPF (8%), Employer EPF (12%), and ETF (3%) match current Sri Lanka labour regulations. Update if government changes the rates.", tip: "Changes to Payroll Settings apply from the next payroll cycle only. Consult your HR manager before changing statutory rates." },
+      { title: "Housing tiers and off-season mode", description: "Set housing allowance tiers by designation or salary band. Enable Off-Season mode to reduce or pause certain allowances during low-season months." },
+    ],
+    notes: [
+      "Regular OT multiplier: 1.5×  |  Off-day / Poya / Public Holiday OT: 2.0×",
+      "Absence deduction divisor: 26 (regular shift) or 30 (night watcher / 30-day basis)",
+      "EPF/ETF rates: Employee EPF 8%, Employer EPF 12%, ETF 3% — statutory, do not change without legal confirmation",
     ],
   },
   {
@@ -996,13 +1146,20 @@ const MODULES: Module[] = [
     bg: "bg-rose-50 border-rose-200",
     group: "HR Management",
     path: "/hr-settings",
-    summary: "Configure attendance rules: late grace periods, lunch return policies, overtime eligibility, and department-specific rules.",
+    summary: "Configure attendance rules: late grace periods, lunch return policies, overtime eligibility, OT-exempt designations, and department-specific rules.",
     mockup: <HRSettingsMockup />,
     steps: [
-      { title: "Set the grace period (marker 1)", description: "Define how many minutes after shift start an employee can clock in without being marked Late. The default is 15 minutes." },
-      { title: "Configure late deduction rate (marker 2)", description: "Set whether late arrivals result in deductions and define the formula (e.g., Rs 15 per minute beyond grace period)." },
-      { title: "Set up overtime rules (marker 3)", description: "Specify when OT begins — e.g., after 9.5 hours of work, or after a specific clock-out time like 18:30." },
-      { title: "Configure lunch return policy (marker 4)", description: "Enable Lunch Return Late detection. Set the allowed break duration and the deduction rate for returning late from lunch.", tip: "HR Settings changes apply from the next attendance day forward — existing records are not retroactively changed." },
+      { title: "Set the grace period (marker 1)", description: "Define how many minutes after shift start an employee can clock in without being marked Late. Default is 15 minutes. Example: shift starts 08:00, grace = 15 min → employee clocking in at 08:14 is still Present; at 08:16 is Late." },
+      { title: "Configure late deduction rate (marker 2)", description: "Set the per-minute deduction for late arrivals beyond the grace period. Default Rs 15/min. Example: 10 minutes late = Rs 150 deducted from salary." },
+      { title: "Set up overtime rules (marker 3)", description: "Specify when OT begins — e.g., after 9.5 hours worked, or after a specific clock-out time like 17:30. OT hours × (Basic ÷ 200) × 1.5 = Regular OT amount." },
+      { title: "Mark OT-exempt designations", description: "Select designations (e.g., Managers, Directors) that should NOT earn overtime pay. These employees' extra hours are ignored in OT calculations." },
+      { title: "Configure lunch return policy (marker 4)", description: "Enable Lunch Return Late detection. Set the allowed break duration (e.g., 60 min). Returning 15 min late from lunch → 15 min deducted at the late rate.", tip: "HR Settings changes apply from the next attendance day forward — existing records are not retroactively changed." },
+    ],
+    notes: [
+      "Late deduction formula: Late Minutes (beyond grace) × Rs per minute",
+      "OT Grace: OT starts only after punch-out exceeds OT threshold (e.g., 17:30 not 17:01)",
+      "Deduplication: when multiple punches exist for same event, system picks first check-in and last check-out",
+      "Department rules: set different lunch durations or grace periods per department if needed",
     ],
   },
   {
@@ -1013,12 +1170,19 @@ const MODULES: Module[] = [
     bg: "bg-amber-50 border-amber-200",
     group: "HR Management",
     path: "/shifts",
-    summary: "Define and manage work shifts — set shift start/end times, break durations, and assign shifts to employees.",
+    summary: "Define work shifts — Normal (In→Out) and Split shifts (In1→Out1 + In2→Out2). Set shift times, break durations, and OT start times.",
     mockup: <ShiftsMockup />,
     steps: [
-      { title: "View existing shifts (marker 1)", description: "Each card shows the shift name, start/end times, break duration, and whether it is Fixed or Flexible." },
-      { title: "Create a new shift (marker 2)", description: "Click Add Shift. Enter the shift name, start time, end time, and lunch break duration in minutes." },
-      { title: "Choose Fixed vs Flexible", description: "Fixed shifts have a strict start time. Flexible shifts allow a window — useful for roles with varying start times.", tip: "Employees without a shift assigned will not have attendance rules or overtime applied to their records." },
+      { title: "View existing shifts (marker 1)", description: "Each card shows the shift name, start/end times, break duration, and whether it is a Normal or Split shift." },
+      { title: "Create a Normal shift (marker 2)", description: "Click Add Shift. Enter shift name, In1 time (e.g., 08:00), Out1 time (e.g., 17:00), and lunch break (60 min). Total hours = Out1 − In1 − lunch break." },
+      { title: "Create a Split shift", description: "Enable Split Shift mode. Enter two work segments: Segment 1 (In1 → Out1) and Segment 2 (In2 → Out2). Total hours = H1 + H2. Example: 07:00–11:00 + 15:00–19:00 = 8 hours total." },
+      { title: "Set OT start time", description: "Enter the time after which overtime begins (e.g., 17:30). Any punch-out after this time counts as OT. OT hours = punch-out minus OT start time.", tip: "Night Watcher shift: uses a discrete OT table (3/2/1/0 hrs) in the 05:00–08:00 window, paid on a 30-day basis with 15 scheduled shifts per month." },
+    ],
+    notes: [
+      "Normal shift: Total = Out1 − In1 − Lunch break",
+      "Split shift: Total = (Out1 − In1) + (Out2 − In2) — no lunch deduction between segments",
+      "Regular shift defaults: 08:00–17:00, late grace 15 min (until 08:15), OT starts 17:30",
+      "Night Watcher: 30-day payroll basis, 15 scheduled shifts, discrete OT policy",
     ],
   },
   {
@@ -1099,6 +1263,53 @@ const MODULES: Module[] = [
       { title: "Select employee and type (markers 2–3)", description: "Choose the employee and the incentive type: Performance Bonus, Festival Bonus, Attendance Bonus, etc." },
       { title: "Enter amount and payroll month (marker 4)", description: "Enter the incentive amount and specify which month's payroll it should be included in." },
       { title: "Save", description: "Click Save. The incentive will appear as an addition in the employee's payslip for the selected month.", tip: "Incentives are clearly itemized on the payslip, separate from regular salary and allowances." },
+    ],
+  },
+  {
+    id: "ot-management",
+    label: "OT Management",
+    icon: Timer,
+    color: "text-blue-700",
+    bg: "bg-blue-50 border-blue-200",
+    group: "HR Management",
+    path: "/ot-management",
+    summary: "Review, adjust, and approve overtime hours per employee per month before they flow into payroll. Supports regular OT and holiday OT with different rates.",
+    mockup: <OtManagementMockup />,
+    steps: [
+      { title: "Select month and branch (marker 1)", description: "Use the Month and Branch dropdowns to load OT records for the selected period. OT hours are auto-calculated from attendance punches." },
+      { title: "Read auto-calculated OT (marker 2)", description: "Each row shows system-computed Regular OT hours and Holiday OT hours with their rupee amounts. These are calculated automatically based on punch-out times vs shift end." },
+      { title: "Override if needed (marker 3)", description: "Click the edit (pencil) icon on any row to manually override the OT hours. Enter the corrected hours — the system recalculates the amount. Add a note explaining the adjustment." },
+      { title: "Approve OT records", description: "Once reviewed, click Approve on pending rows. Approved OT flows automatically into payroll for that month.", tip: "Bulk approve: click 'Approve All Pending' to approve every row in one click after you've verified the hours." },
+    ],
+    notes: [
+      "Regular OT rate = (Basic Salary ÷ 200) × 1.5 × OT hours",
+      "Holiday OT rate = (Basic Salary ÷ 200) × 2.0 × OT hours",
+      "Poya Day OT rate = (Basic Salary ÷ 200) × 2.0 × OT hours",
+      "Status flow: Pending → Approved → Paid (paid is set when payroll is finalized)",
+      "OT-exempt designations set in HR Settings are skipped automatically",
+    ],
+  },
+  {
+    id: "manual-salary",
+    label: "Manual Salary",
+    icon: Banknote,
+    color: "text-emerald-700",
+    bg: "bg-emerald-50 border-emerald-200",
+    group: "HR Management",
+    path: "/manual-salary",
+    summary: "Manually enter or override a complete salary record for any employee and month — useful for special cases, part-month workers, or corrections outside the automated payroll run.",
+    mockup: <ManualSalaryMockup />,
+    steps: [
+      { title: "Click Add Entry (marker 1)", description: "Press Add Entry to open the manual salary form. Select the employee and the month/year this entry applies to." },
+      { title: "Fill in the salary components (markers 2–4)", description: "Enter Basic Salary, and add allowances: Transport, Lunch, Housing, Other. Then enter deductions: EPF (employee 8%), Loan repayments, Absence deductions, Other." },
+      { title: "Review the auto-computed totals (marker 5)", description: "The form shows Gross Salary = Basic + Allowances + OT. Net Salary = Gross − EPF − Loans − Absence deduction − Other deductions." },
+      { title: "Set status and save", description: "Set status to Draft to save for review, or Finalized to lock it. Mark Paid after the employee has received payment.", tip: "Use Manual Salary for probation staff, contract workers, or any employee whose pay doesn't fit the standard payroll rules." },
+    ],
+    notes: [
+      "Gross Salary = Basic + Transport + Lunch + Housing + OT Amount + Other Allowances",
+      "Net Salary = Gross − EPF (8%) − ETF (3% employer, not deducted) − Loan Deduction − Absence Deduction − Other Deductions",
+      "Absence Deduction = (Basic ÷ 26) × Absent Days  (or ÷ 30 for night watcher shift)",
+      "Manual entries appear on the employee's payslip like a regular payroll entry",
     ],
   },
   {

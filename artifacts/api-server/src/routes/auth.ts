@@ -10,17 +10,11 @@ const router = Router();
 router.post("/login", async (req, res) => {
   try {
     const { username, password } = req.body;
-    console.log("[AUTH DEBUG] body:", JSON.stringify(req.body), "username:", username, "password:", password);
     if (!username || !password) {
       res.status(400).json({ message: "Username and password required", success: false });
       return;
     }
     const [user] = await db.select().from(systemUsers).where(eq(systemUsers.username, username));
-    console.log("[AUTH DEBUG] user found:", !!user, "isActive:", user?.isActive);
-    if (user) {
-      const hash = hashPassword(password);
-      console.log("[AUTH DEBUG] computed hash:", hash, "stored hash:", user.passwordHash, "match:", user.passwordHash === hash);
-    }
     if (!user || !user.isActive) {
       await logActivity({
         username: username || "unknown",

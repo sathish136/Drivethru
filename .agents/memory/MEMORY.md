@@ -1,0 +1,1 @@
+- [Dual Database Setup](dual-database.md) — APP_DATABASE_URL (external) is primary; psql $DATABASE_URL hits wrong local DB. Always use $APP_DATABASE_URL for real data.
