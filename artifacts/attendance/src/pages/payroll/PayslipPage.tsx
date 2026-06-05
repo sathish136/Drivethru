@@ -157,7 +157,7 @@ export default function PayslipPage() {
 
   const reqHrs     = row.reqHoursPerDay || 0;
   const isNightWatcher = row.workingDays === 15;
-  const isOffSeason    = (row.offSeasonPayableHours ?? 0) > 0 || row.absenceDeduction > 0 && (row.lateDeduction === 0 && row.halfDayDeduction === 0 && row.incompleteDeduction === 0 && row.absentDays === 0);
+  const isOffSeason    = (row.offSeasonPayableHours ?? 0) > 0;
   const dailyRate  = isNightWatcher
     ? row.basicSalary / 30
     : (row.workingDays > 0 ? row.basicSalary / row.workingDays : 0);

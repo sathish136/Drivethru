@@ -693,9 +693,9 @@ router.post("/generate", async (req, res) => {
 
       /* ── Absence deduction ─────────────────────────────── */
       /* EPF-exempt employees: no absence deduction (always paid full basic).
-         NW: handled via nwLeaveDeduction. Off-season: hours-based. */
-      const absenceDeduction = (isNightWatcherPayroll || isEpfEtfExempt) ? 0
-        : isOffSeason ? Math.max(0, Math.round(basicSalary - offSeasonEarnedBasic))
+         NW: handled via nwLeaveDeduction.
+         Off-season: full salary paid regardless of attendance — no deduction. */
+      const absenceDeduction = (isNightWatcherPayroll || isEpfEtfExempt || isOffSeason) ? 0
         : Math.round(dailyRate * absentDays);
 
       /* ── Half-day deduction ────────────────────────────── */
