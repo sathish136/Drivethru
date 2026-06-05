@@ -15,10 +15,121 @@ const KITCHEN_WEEKLY = JSON.stringify([
 
 async function runStartupMigrations() {
   const migrations = [
-    `ALTER TABLE payroll_settings ADD COLUMN IF NOT EXISTS off_season_months text NOT NULL DEFAULT '[5,6,7,8,9]'`,
-    `ALTER TABLE payroll_settings ADD COLUMN IF NOT EXISTS lunch_incentive_per_day real NOT NULL DEFAULT 125`,
-    `ALTER TABLE shifts ADD COLUMN IF NOT EXISTS weekly_schedule text`,
-    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS off_season_payable_hours real NOT NULL DEFAULT 0`,
+    /* ── Fix sequences not linked to id columns (from pg_dump restore without defaults) ── */
+    `DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='activity_logs' AND column_name='id' AND column_default IS NOT NULL) THEN
+        ALTER TABLE activity_logs ALTER COLUMN id SET DEFAULT nextval('activity_logs_id_seq');
+      END IF;
+    END $$`,
+    `DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='branches') THEN
+        BEGIN ALTER TABLE branches ALTER COLUMN id SET DEFAULT nextval('branches_id_seq'); EXCEPTION WHEN OTHERS THEN NULL; END;
+        BEGIN ALTER TABLE employees ALTER COLUMN id SET DEFAULT nextval('employees_id_seq'); EXCEPTION WHEN OTHERS THEN NULL; END;
+        BEGIN ALTER TABLE attendance_records ALTER COLUMN id SET DEFAULT nextval('attendance_records_id_seq'); EXCEPTION WHEN OTHERS THEN NULL; END;
+        BEGIN ALTER TABLE biometric_devices ALTER COLUMN id SET DEFAULT nextval('biometric_devices_id_seq'); EXCEPTION WHEN OTHERS THEN NULL; END;
+        BEGIN ALTER TABLE biometric_logs ALTER COLUMN id SET DEFAULT nextval('biometric_logs_id_seq'); EXCEPTION WHEN OTHERS THEN NULL; END;
+        BEGIN ALTER TABLE holidays ALTER COLUMN id SET DEFAULT nextval('holidays_id_seq'); EXCEPTION WHEN OTHERS THEN NULL; END;
+        BEGIN ALTER TABLE departments ALTER COLUMN id SET DEFAULT nextval('departments_id_seq'); EXCEPTION WHEN OTHERS THEN NULL; END;
+        BEGIN ALTER TABLE hr_settings ALTER COLUMN id SET DEFAULT nextval('hr_settings_id_seq'); EXCEPTION WHEN OTHERS THEN NULL; END;
+      END IF;
+    END $$`,
+    /* ── New tables ── */
+    `CREATE TABLE IF NOT EXISTS weekoff_schedules (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      off_days TEXT NOT NULL DEFAULT '[]',
+      half_days TEXT NOT NULL DEFAULT '[]',
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS salary_structures (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'LKR',
+      status TEXT NOT NULL DEFAULT 'active',
+      earnings TEXT NOT NULL DEFAULT '[]',
+      deductions TEXT NOT NULL DEFAULT '[]',
+      variable_pay TEXT NOT NULL DEFAULT '[]',
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS staff_loans (
+      id SERIAL PRIMARY KEY,
+      employee_id INTEGER NOT NULL REFERENCES employees(id),
+      type TEXT NOT NULL DEFAULT 'loan',
+      total_amount REAL NOT NULL,
+      monthly_installment REAL NOT NULL,
+      start_month INTEGER NOT NULL,
+      start_year INTEGER NOT NULL,
+      paid_amount REAL NOT NULL DEFAULT 0,
+      remaining_balance REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      description TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS staff_incentives (
+      id SERIAL PRIMARY KEY,
+      employee_id INTEGER NOT NULL REFERENCES employees(id),
+      month INTEGER NOT NULL,
+      year INTEGER NOT NULL,
+      type TEXT NOT NULL DEFAULT 'other',
+      amount REAL NOT NULL,
+      reason TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      notes TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS leave_balances (
+      id SERIAL PRIMARY KEY,
+      employee_id INTEGER NOT NULL REFERENCES employees(id),
+      year INTEGER NOT NULL,
+      annual_leave_balance REAL NOT NULL DEFAULT 0,
+      casual_leave_balance REAL NOT NULL DEFAULT 0,
+      annual_leave_used REAL NOT NULL DEFAULT 0,
+      casual_leave_used REAL NOT NULL DEFAULT 0,
+      last_accrual_date DATE,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS employee_salary_assignments (
+      id SERIAL PRIMARY KEY,
+      employee_id INTEGER NOT NULL REFERENCES employees(id),
+      salary_structure_id INTEGER NOT NULL REFERENCES salary_structures(id),
+      basic_amount REAL NOT NULL DEFAULT 0,
+      effective_date DATE NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS manual_salary_entries (
+      id SERIAL PRIMARY KEY,
+      employee_id INTEGER NOT NULL REFERENCES employees(id),
+      branch_id INTEGER NOT NULL REFERENCES branches(id),
+      month INTEGER NOT NULL,
+      year INTEGER NOT NULL,
+      present_days REAL NOT NULL DEFAULT 0,
+      absent_days REAL NOT NULL DEFAULT 0,
+      ot_hours REAL NOT NULL DEFAULT 0,
+      ot_amount REAL NOT NULL DEFAULT 0,
+      basic_salary REAL NOT NULL DEFAULT 0,
+      transport_allowance REAL NOT NULL DEFAULT 0,
+      lunch_allowance REAL NOT NULL DEFAULT 0,
+      housing_allowance REAL NOT NULL DEFAULT 0,
+      other_allowances REAL NOT NULL DEFAULT 0,
+      epf_deduction REAL NOT NULL DEFAULT 0,
+      loan_deduction REAL NOT NULL DEFAULT 0,
+      absence_deduction REAL NOT NULL DEFAULT 0,
+      other_deductions REAL NOT NULL DEFAULT 0,
+      gross_salary REAL NOT NULL DEFAULT 0,
+      net_salary REAL NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'draft',
+      notes TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
     `CREATE TABLE IF NOT EXISTS ot_adjustments (
       id SERIAL PRIMARY KEY,
       employee_id INTEGER NOT NULL REFERENCES employees(id),
@@ -48,6 +159,32 @@ async function runStartupMigrations() {
       note TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )`,
+    /* ── New columns on existing tables ── */
+    `ALTER TABLE payroll_settings ADD COLUMN IF NOT EXISTS off_season_months text NOT NULL DEFAULT '[5,6,7,8,9]'`,
+    `ALTER TABLE payroll_settings ADD COLUMN IF NOT EXISTS lunch_incentive_per_day real NOT NULL DEFAULT 125`,
+    `ALTER TABLE payroll_settings ADD COLUMN IF NOT EXISTS employee_overrides text NOT NULL DEFAULT '{}'`,
+    `ALTER TABLE payroll_settings ADD COLUMN IF NOT EXISTS apit_overrides text NOT NULL DEFAULT '{}'`,
+    `ALTER TABLE payroll_settings ADD COLUMN IF NOT EXISTS epf_etf_exempt_ids text NOT NULL DEFAULT '[]'`,
+    `ALTER TABLE shifts ADD COLUMN IF NOT EXISTS weekly_schedule text`,
+    `ALTER TABLE employees ADD COLUMN IF NOT EXISTS weekoff_schedule_id integer`,
+    `ALTER TABLE employees ADD COLUMN IF NOT EXISTS remarks text`,
+    `ALTER TABLE employees ADD COLUMN IF NOT EXISTS company_id integer`,
+    `ALTER TABLE branches ADD COLUMN IF NOT EXISTS company_id integer`,
+    `ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS approval_status text`,
+    `ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS approved_by integer`,
+    `ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS approval_note text`,
+    `ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS remarks text`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS off_season_payable_hours real NOT NULL DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS half_day_deduction real NOT NULL DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS incomplete_deduction real NOT NULL DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS loan_deduction real NOT NULL DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS holiday_ot_pay real NOT NULL DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS lunch_late_deduction real NOT NULL DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS req_hours_per_day real DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS late_minutes real DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS lunch_late_minutes real DEFAULT 0`,
+    `ALTER TABLE payroll_records ADD COLUMN IF NOT EXISTS incomplete_minutes real DEFAULT 0`,
+    /* ── Indexes ── */
     `CREATE INDEX IF NOT EXISTS idx_loan_emi_ledger_loan_month ON loan_emi_ledger(loan_id, month, year)`,
     `CREATE INDEX IF NOT EXISTS idx_loan_emi_ledger_month_year ON loan_emi_ledger(month, year)`,
   ];
