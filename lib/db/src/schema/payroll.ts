@@ -46,6 +46,7 @@ export const payrollRecords = pgTable("payroll_records", {
   lunchLateMinutes: real("lunch_late_minutes").default(0),
   incompleteMinutes: real("incomplete_minutes").default(0),
   offSeasonPayableHours: real("off_season_payable_hours").notNull().default(0),
+  incentivesTotal: real("incentives_total").notNull().default(0),
   loanDeduction: real("loan_deduction").notNull().default(0),
   totalDeductions: real("total_deductions").notNull().default(0),
 

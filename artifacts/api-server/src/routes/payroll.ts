@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import {
   payrollRecords, employees, attendanceRecords, payrollSettings,
   salaryStructures, employeeSalaryAssignments, holidays, shifts, staffLoans,
-  weekoffSchedules, biometricLogs, loanEmiLedger, otAdjustments,
+  weekoffSchedules, biometricLogs, loanEmiLedger, otAdjustments, staffIncentives,
 } from "@workspace/db/schema";
 import { eq, and, inArray, gte, lte, sql } from "drizzle-orm";
 import {
@@ -410,6 +410,18 @@ router.post("/generate", async (req, res) => {
       .where(and(eq(otAdjustments.year, year), eq(otAdjustments.month, month), inArray(otAdjustments.employeeId, empIds)));
     const otAdjMap = new Map<number, typeof otAdjs[0]>();
     for (const adj of otAdjs) otAdjMap.set(adj.employeeId, adj);
+
+    /* ── Load approved incentives for this month/year ── */
+    const approvedIncentives = await db.select().from(staffIncentives)
+      .where(and(
+        eq(staffIncentives.month, month),
+        eq(staffIncentives.year, year),
+        inArray(staffIncentives.employeeId, empIds)
+      ));
+    const incentivesByEmployee = new Map<number, number>();
+    for (const inc of approvedIncentives.filter(i => i.status === "approved")) {
+      incentivesByEmployee.set(inc.employeeId, (incentivesByEmployee.get(inc.employeeId) ?? 0) + inc.amount);
+    }
 
     await db.delete(payrollRecords).where(
       and(
@@ -820,15 +832,17 @@ router.post("/generate", async (req, res) => {
                         : isOtEligible   ? regularOtPay
                         : 0;
 
+      const incentivesTotal = Math.round(incentivesByEmployee.get(emp.id) ?? 0);
+
       let grossSalary: number;
 
       if (isNightWatcherPayroll) {
-        /* ── NIGHT WATCHER gross: salary after deduction + OT − late deduction ── */
-        grossSalary = Math.round(nwSalaryAfterDeduction + overtimePay + holidayOtPay + offDayOtPay - lateDeduction);
+        /* ── NIGHT WATCHER gross: salary after deduction + OT − late deduction + approved incentives ── */
+        grossSalary = Math.round(nwSalaryAfterDeduction + overtimePay + holidayOtPay + offDayOtPay - lateDeduction + incentivesTotal);
       } else {
         grossSalary = Math.round(
           basicSalary + transportAllowance + lunchIncentive + housingAllowance + otherAllowances
-          + overtimePay + holidayOtPay + offDayOtPay
+          + overtimePay + holidayOtPay + offDayOtPay + incentivesTotal
           - absenceDeduction - lateDeduction - lunchLateDeduction - halfDayDeduction - incompleteDeduction
         );
       }
@@ -937,6 +951,7 @@ router.post("/generate", async (req, res) => {
         lunchLateMinutes,
         incompleteMinutes: totalIncompleteMinutes,
         offSeasonPayableHours: offSeasonPayableHrs,
+        incentivesTotal,
         status: "draft" as const,
         generatedAt: new Date(),
       };

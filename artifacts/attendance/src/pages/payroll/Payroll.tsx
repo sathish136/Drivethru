@@ -60,6 +60,7 @@ interface PayrollRow {
   totalDeductions: number;
   netSalary: number;
   offSeasonPayableHours?: number | null;
+  incentivesTotal?: number;
   status: PayStatus;
   generatedAt: string;
   approvedAt?: string;
@@ -146,8 +147,9 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
   const totalForEPF     = subTotal - noPayLeave - halfDayDed - lateDeduction - lunchLateDed - earlyExitDed;
   const overtime        = (Number(row.overtimePay) || 0) + (Number((row as any).holidayOtPay) || 0);
   const lunchInc        = Number((row as any).computedLunchIncentive) || 0;
-  /* Total Earnings = Basic + Allowances + OT + Lunch (deductions only affect EPF base, not total earnings) */
-  const totalEarnings   = basicSalary + allowances + overtime + lunchInc;
+  const incentivesTotal = Number((row as any).incentivesTotal) || 0;
+  /* Total Earnings = Basic + Allowances + OT + Lunch + Incentives (deductions only affect EPF base, not total earnings) */
+  const totalEarnings   = basicSalary + allowances + overtime + lunchInc + incentivesTotal;
 
   const epf8          = Number(row.epfEmployee) || 0;
   const loans         = Number(row.loanDeduction) || 0;
@@ -178,6 +180,7 @@ function PayslipModal({ row, onClose }: { row: PayrollRow; onClose: () => void }
     { label: "Total for EPF / ETF",     value: fmtAmt(totalForEPF), bold: true },
     { label: overtime > 0 ? `Add  :  Overtime  (${(row.overtimeHours || 0).toFixed(1)} hrs)` : "Add  :  Overtime", value: overtime > 0 ? fmtAmt(overtime) : "", italic: true },
     { label: "Add  :  Lunch Incentive", value: lunchInc > 0 ? fmtAmt(lunchInc) : "-", italic: true },
+    ...(incentivesTotal > 0 ? [{ label: "Add  :  Incentive Bonuses", value: fmtAmt(incentivesTotal), italic: true }] : []),
     { label: "Total Earnings",          value: fmtTotal(totalEarnings), borderTop: true },
     { label: "Recoveries  :  EPF 8%",   value: fmtAmt(epf8) },
     ...(loans > 0       ? [{ label: "Loans / Advances",   value: fmtAmt(loans),    indent: true }] : []),
@@ -1561,8 +1564,9 @@ export default function Payroll() {
           const holOtPay     = Number((r as any).holidayOtPay) || 0;
           const overtime     = otPay + holOtPay;
           const lunchInc     = Number((r as any).computedLunchIncentive) || 0;
-          /* Total Earnings = Basic + Allowances + OT + Lunch (deductions only affect EPF base) */
-          const totalEarn    = basicSalary + allowances + overtime + lunchInc;
+          const incTotal     = Number((r as any).incentivesTotal) || 0;
+          /* Total Earnings = Basic + Allowances + OT + Lunch + Incentives (deductions only affect EPF base) */
+          const totalEarn    = basicSalary + allowances + overtime + lunchInc + incTotal;
           const epf8         = Number(r.epfEmployee) || 0;
           const loans        = Number(r.loanDeduction) || 0;
           const otherDeds    = Number(r.otherDeductions) || 0;
@@ -1597,6 +1601,7 @@ export default function Payroll() {
             ...(holOtPay > 0 ? [{ label: `Add  :  Holiday / Off-Day Pay${(r.overtimeHours || 0) > 0 && otPay === 0 ? `  (${(r.overtimeHours || 0).toFixed(1)} hrs)` : ""}`, value: fmtAmt(holOtPay), italic: true }] : []),
             ...(overtime === 0 ? [{ label: "Add  :  Overtime / Holiday Pay", value: "", italic: true }] : []),
             { label: "Add  :  Lunch Incentive",          value: lunchInc > 0 ? fmtAmt(lunchInc) : "-", italic: true },
+            ...(incTotal > 0 ? [{ label: "Add  :  Incentive Bonuses", value: fmtAmt(incTotal), italic: true }] : []),
             { label: "Total Earnings",                   value: fmtTotal(totalEarn), borderTop: true },
             { label: isEpfExempt ? "EPF / ETF" : "Recoveries  :  EPF 8%", value: isEpfExempt ? "Exempt" : fmtOrDash(epf8) },
             ...(loans    > 0 ? [{ label: "Loans / Advances",  value: fmtAmt(loans),    indent: true }] : []),
