@@ -121,7 +121,7 @@ router.get("/", async (req, res) => {
     res.json(result.map(r => {
       const computedLunchIncentive = r.payroll.lunchIncentive && r.payroll.lunchIncentive > 0
         ? 0
-        : Math.round(lunchPerDay * ((r.payroll.presentDays || 0) + ((r.payroll as any).halfDays || 0) * 0.5));
+        : Math.round(lunchPerDay * ((r.payroll.presentDays || 0) + ((r.payroll as any).halfDays || 0)));
       return { ...r.payroll, employee: r.emp, computedLunchIncentive };
     }));
   } catch (e) {
@@ -1065,7 +1065,7 @@ router.get("/:id", async (req, res) => {
     const lunchPerDay = psRow?.lunchIncentivePerDay ?? 125;
     const computedLunch = r.payroll.lunchIncentive && r.payroll.lunchIncentive > 0
       ? 0
-      : Math.round(lunchPerDay * ((r.payroll.presentDays || 0) + (r.payroll.halfDays || 0) * 0.5));
+      : Math.round(lunchPerDay * ((r.payroll.presentDays || 0) + (r.payroll.halfDays || 0)));
 
     res.json({ ...r.payroll, employee: r.emp, activeLoanInstallment: liveInstallment, computedLunchIncentive: computedLunch });
   } catch (e) {
