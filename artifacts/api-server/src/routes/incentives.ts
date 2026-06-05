@@ -193,12 +193,15 @@ router.post("/generate-lunch", async (req, res) => {
     const toInsert: Array<typeof staffIncentives.$inferInsert> = [];
     for (const emp of allEmps) {
       const recs = attByEmp.get(emp.id) ?? [];
-      const eligibleDays = recs.filter(a =>
-        a.status === "present" || a.status === "late" ||
-        a.status === "half_day" ||
-        /* single punch: inTime1 exists but no outTime1, and not holiday/leave/off */
-        (a.inTime1 && !a.outTime1 && a.status !== "holiday" && a.status !== "leave" && a.status !== "off_day")
-      ).length;
+      const eligibleDays = recs.reduce((sum, a) => {
+        if (a.status === "half_day") return sum + 0.5;
+        if (
+          a.status === "present" || a.status === "late" ||
+          /* single punch: inTime1 exists but no outTime1, and not holiday/leave/off */
+          (a.inTime1 && !a.outTime1 && a.status !== "holiday" && a.status !== "leave" && a.status !== "off_day")
+        ) return sum + 1;
+        return sum;
+      }, 0);
 
       if (eligibleDays === 0) continue;
 
