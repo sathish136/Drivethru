@@ -1,21 +1,5 @@
 [
   {
-    "id": "91413dfe-a016-4fac-91ec-889b77ae1a7c",
-    "timestamp": "2026-06-05T12:53:08.797Z",
-    "type": "restore",
-    "trigger": "Restore — db-full-backup-2026-06-05.sql",
-    "sizeKb": 320,
-    "status": "success"
-  },
-  {
-    "id": "64e3ba43-8c85-40de-b377-04a410493775",
-    "timestamp": "2026-06-05T12:42:09.759Z",
-    "type": "restore",
-    "trigger": "Restore — db-full-backup-2026-06-05.sql",
-    "sizeKb": 320,
-    "status": "success"
-  },
-  {
     "id": "9af71373-56e5-446a-a8b1-06487d042cd3",
     "timestamp": "2026-06-03T08:30:03.567Z",
     "type": "scheduled",
