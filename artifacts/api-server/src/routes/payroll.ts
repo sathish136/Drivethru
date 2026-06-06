@@ -118,9 +118,27 @@ router.get("/", async (req, res) => {
     if (branchId) result = result.filter(r => r.payroll.branchId === parseInt(branchId));
     if (status) result = result.filter(r => r.payroll.status === status);
 
+    /* Fetch approved lunch incentives for this month/year so salary report reflects manual edits */
+    const empIds = result.map(r => r.emp.id);
+    const approvedLunchIncentives = empIds.length > 0
+      ? await db.select().from(staffIncentives).where(
+          and(
+            eq(staffIncentives.month, parseInt(month)),
+            eq(staffIncentives.year, parseInt(year)),
+            eq(staffIncentives.type, "lunch"),
+            eq(staffIncentives.status, "approved"),
+            inArray(staffIncentives.employeeId, empIds)
+          )
+        )
+      : [];
+    const approvedLunchMap = new Map<number, number>();
+    for (const inc of approvedLunchIncentives) {
+      approvedLunchMap.set(inc.employeeId, (approvedLunchMap.get(inc.employeeId) ?? 0) + inc.amount);
+    }
+
     res.json(result.map(r => {
-      const computedLunchIncentive = r.payroll.lunchIncentive && r.payroll.lunchIncentive > 0
-        ? 0
+      const computedLunchIncentive = approvedLunchMap.has(r.emp.id)
+        ? approvedLunchMap.get(r.emp.id)!
         : Math.round(lunchPerDay * ((r.payroll.presentDays || 0) + ((r.payroll as any).halfDays || 0)));
       return { ...r.payroll, employee: r.emp, computedLunchIncentive };
     }));
@@ -1060,11 +1078,23 @@ router.get("/:id", async (req, res) => {
       return sum + Math.min(loan.monthlyInstallment, loan.remainingBalance);
     }, 0));
 
-    /* Compute live lunch incentive if the stored record has none (e.g. generated before the fix) */
-    const [psRow] = await db.select().from(payrollSettings);
+    /* Compute live lunch incentive — prefer approved incentive from incentives page if one exists */
+    const [psRow, approvedLunchRows] = await Promise.all([
+      db.select().from(payrollSettings).then(rows => rows[0]),
+      db.select().from(staffIncentives).where(
+        and(
+          eq(staffIncentives.employeeId, r.emp.id),
+          eq(staffIncentives.month, r.payroll.month),
+          eq(staffIncentives.year, r.payroll.year),
+          eq(staffIncentives.type, "lunch"),
+          eq(staffIncentives.status, "approved")
+        )
+      ),
+    ]);
     const lunchPerDay = psRow?.lunchIncentivePerDay ?? 125;
-    const computedLunch = r.payroll.lunchIncentive && r.payroll.lunchIncentive > 0
-      ? 0
+    const approvedLunchTotal = approvedLunchRows.reduce((s, i) => s + i.amount, 0);
+    const computedLunch = approvedLunchTotal > 0
+      ? approvedLunchTotal
       : Math.round(lunchPerDay * ((r.payroll.presentDays || 0) + (r.payroll.halfDays || 0)));
 
     res.json({ ...r.payroll, employee: r.emp, activeLoanInstallment: liveInstallment, computedLunchIncentive: computedLunch });
