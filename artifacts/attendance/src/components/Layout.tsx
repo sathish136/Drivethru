@@ -50,43 +50,51 @@ type NavGroup = { label: string; items: NavItem[] };
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Overview",
-    items: [{ href: "/", label: "Dashboard", icon: LayoutGrid }],
+    items: [
+      { href: "/", label: "Dashboard", icon: LayoutGrid },
+    ],
   },
   {
     label: "Attendance",
     items: [
-      { href: "/attendance/today",      label: "Today's Attendance", icon: ClipboardList   },
-      { href: "/attendance/monthly",    label: "Monthly Sheet",      icon: CalendarCheck   },
-      { href: "/attendance/approvals",    label: "Approvals",          icon: ClipboardCheck  },
-      { href: "/attendance/leave-entry",  label: "Leave Entry",        icon: CalendarClock   },
-      { href: "/attendance/raw-punches",  label: "Raw Punches",        icon: DatabaseZap     },
+      { href: "/attendance/today",       label: "Today's Attendance", icon: ClipboardList  },
+      { href: "/attendance/monthly",     label: "Monthly Sheet",      icon: CalendarCheck  },
+      { href: "/attendance/approvals",   label: "Approvals",          icon: ClipboardCheck },
+      { href: "/attendance/leave-entry", label: "Leave Entry",        icon: CalendarClock  },
+      { href: "/attendance/raw-punches", label: "Raw Punches",        icon: DatabaseZap    },
     ],
   },
   {
-    label: "HR Management",
+    label: "Employees",
     items: [
-      { href: "/employees",        label: "Employees",        icon: UserRound   },
+      { href: "/employees",      label: "Employees",        icon: UserRound     },
+      { href: "/leave-balances", label: "Leave Balances",   icon: CalendarClock },
+      { href: "/loans",          label: "Loans & Advances", icon: Banknote      },
+    ],
+  },
+  {
+    label: "Payroll",
+    items: [
       { href: "/payroll",          label: "Payroll",          icon: Wallet      },
+      { href: "/incentives",       label: "Incentives",       icon: Gift        },
+      { href: "/ot-management",    label: "OT Management",    icon: Clock       },
+      { href: "/manual-salary",    label: "Manual Salary",    icon: Calculator  },
       { href: "/payroll-settings", label: "Payroll Settings", icon: Sliders     },
-
-      { href: "/holidays",         label: "Holidays",         icon: CalendarDays  },
-      { href: "/weekoffs",         label: "Week Offs",        icon: CalendarOff   },
-      { href: "/leave-balances",   label: "Leave Balances",   icon: CalendarClock },
-      { href: "/loans",            label: "Loans & Advances", icon: Banknote      },
-      { href: "/incentives",       label: "Incentives",       icon: Gift          },
-      { href: "/ot-management",    label: "OT Management",    icon: Clock         },
-      { href: "/manual-salary",    label: "Manual Salary",    icon: Calculator    },
     ],
   },
   {
     label: "Organization",
     items: [
-      { href: "/branches", label: "Branches", icon: MapPinned },
+      { href: "/branches",  label: "Branches",  icon: MapPinned    },
+      { href: "/holidays",  label: "Holidays",  icon: CalendarDays },
+      { href: "/weekoffs",  label: "Week Offs", icon: CalendarOff  },
     ],
   },
   {
-    label: "Analytics",
-    items: [{ href: "/reports", label: "Reports", icon: BarChart3 }],
+    label: "Reports",
+    items: [
+      { href: "/reports", label: "Reports", icon: BarChart3 },
+    ],
   },
   {
     label: "System",
@@ -95,12 +103,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/users",         label: "User Management", icon: ShieldCheck },
       { href: "/activity-logs", label: "Activity Logs",   icon: ListChecks  },
       { href: "/settings",      label: "Settings",        icon: Cog         },
-    ],
-  },
-  {
-    label: "Help",
-    items: [
-      { href: "/tutorial", label: "User Guide", icon: BookOpen },
+      { href: "/tutorial",      label: "User Guide",      icon: BookOpen    },
     ],
   },
 ];
@@ -440,18 +443,21 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Navigation — scrolls independently */}
         <nav className={cn(
-          "flex-1 py-4 overflow-y-auto overflow-x-hidden min-h-0",
-          collapsed ? "px-2 space-y-1" : "px-3 space-y-5"
+          "flex-1 py-3 overflow-y-auto overflow-x-hidden min-h-0",
+          collapsed ? "px-2 space-y-1" : "px-3 space-y-4"
         )}>
-          {NAV_GROUPS.map((group) => (
+          {NAV_GROUPS.map((group, gi) => (
             <div key={group.label}>
               {!collapsed && (
-                <p className={cn("px-2 mb-1.5 text-[9px] font-bold uppercase tracking-widest select-none", s("text-white/35", "text-gray-400"))}>
-                  {group.label}
-                </p>
+                <div className={cn("flex items-center gap-2 px-2 mb-1.5", gi > 0 && "pt-1")}>
+                  <span className={cn("text-[9px] font-extrabold uppercase tracking-[0.12em] select-none", s("text-white/40", "text-gray-400"))}>
+                    {group.label}
+                  </span>
+                  <div className={cn("flex-1 h-px", s("bg-white/10", "bg-gray-200"))} />
+                </div>
               )}
 
-              {collapsed && (
+              {collapsed && gi > 0 && (
                 <div className={cn("my-2 border-t", s("border-white/10", "border-gray-200"))} />
               )}
 
