@@ -1,0 +1,97 @@
+uploads = []
+
+[[generated]]
+id = "oTDz09Bi9rHM4VdAIXnwc"
+uri = "file://screenshots/marketing/01-login.png"
+type = "image"
+title = "login page marketing"
+
+[[generated]]
+id = "idCgV-ZIhbjI5v_EXNZGh"
+uri = "file://screenshots/marketing/02-dashboard.png"
+type = "image"
+title = "dashboard marketing"
+
+[[generated]]
+id = "AyaewnvXyL8FHjVu6XCEt"
+uri = "file://screenshots/marketing/03-attendance.png"
+type = "image"
+title = "attendance tracking marketing"
+
+[[generated]]
+id = "_NOJHdDL7sYm8UZYBGVZe"
+uri = "file://screenshots/marketing/04-monthly-sheet.png"
+type = "image"
+title = "monthly attendance sheet"
+
+[[generated]]
+id = "aMWjj_LGjTNe17Cy7gOV_"
+uri = "file://screenshots/marketing/05-employees.png"
+type = "image"
+title = "employee management marketing"
+
+[[generated]]
+id = "Mek25XnynX52m8QMBw-1d"
+uri = "file://screenshots/marketing/06-payroll.png"
+type = "image"
+title = "payroll report marketing"
+
+[[generated]]
+id = "-kQWpNUY7jDTfwHz9k2W1"
+uri = "file://screenshots/marketing/07-reports.png"
+type = "image"
+title = "reports analytics marketing"
+
+[[generated]]
+id = "kN40JTtTNak-XC0bpfcuc"
+uri = "file://screenshots/marketing/00-banner.png"
+type = "image"
+title = "main marketing banner"
+
+[[outputs]]
+id = "WZrIPRdzpbNmuUMJi1aAN"
+uri = "file://screenshots/marketing/00-banner.png"
+type = "image"
+title = "🏷️ Main Marketing Banner"
+
+[[outputs]]
+id = "_ZAlgtQTF0QNjs1agrD6I"
+uri = "file://screenshots/marketing/01-login.png"
+type = "image"
+title = "🔐 Login Page"
+
+[[outputs]]
+id = "tZPY6MaaMRdKhaKXIGMN0"
+uri = "file://screenshots/marketing/02-dashboard.png"
+type = "image"
+title = "📊 Dashboard"
+
+[[outputs]]
+id = "d5RcXzahDkboraDjGg27n"
+uri = "file://screenshots/marketing/03-attendance.png"
+type = "image"
+title = "⏱️ Today's Attendance"
+
+[[outputs]]
+id = "wdD0L9EUke1AoV-6QW5y3"
+uri = "file://screenshots/marketing/04-monthly-sheet.png"
+type = "image"
+title = "📅 Monthly Attendance Sheet"
+
+[[outputs]]
+id = "cWde2WaVFZXfu6TfH7k4w"
+uri = "file://screenshots/marketing/05-employees.png"
+type = "image"
+title = "👥 Employee Management"
+
+[[outputs]]
+id = "4ufVoNv4pMLhmXLO69-8B"
+uri = "file://screenshots/marketing/06-payroll.png"
+type = "image"
+title = "💰 Payroll / Salary Report"
+
+[[outputs]]
+id = "ee8KlR0sD2GVk_dOLJpiC"
+uri = "file://screenshots/marketing/07-reports.png"
+type = "image"
+title = "📈 Reports & Analytics"
